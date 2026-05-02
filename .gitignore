@@ -1,0 +1,79 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+.python-version
+
+# Testing
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+.hypothesis/
+
+# Type checkers
+.mypy_cache/
+.pyre/
+.pytype/
+.ruff_cache/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Editor backups
+*.bak
+*.tmp
+
+# OS
+Thumbs.db
+
+# Lattice runtime data — sessions are private until explicitly published
+sessions/
+*.session.json
+*.session.json.lock
+
+# Local development scratch
+scratch/
+notes.local.md
+TODO.local.md
+
+# Secrets — defense in depth, no secrets should ever live in this repo
+.env
+.env.*
+*.pem
+*.key
+secrets/
