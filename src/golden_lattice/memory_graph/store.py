@@ -66,9 +66,9 @@ class SessionAlreadyExistsError(ValueError):
 class JsonFileSessionStore:
     """One JSON file per Session, named by session_id, in a single directory.
 
-    Write-once: save raises if the file already exists. Sessions are append-only;
-    rewriting them is a different operation that callers must do explicitly (delete
-    then save), and the default discipline refuses silent overwrites.
+    Write-once: save raises if the file already exists. Rewriting a session is an
+    explicit delete-then-save sequence, never a silent overwrite. The chronicle
+    remembers; the store does not silently forget.
     """
 
     SUFFIX = ".session.json"

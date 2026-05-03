@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from golden_lattice.memory_graph.base import ModelId, Phase, claim_id_for
+from golden_lattice.memory_graph.base import FocusTag, ModelId, Phase, claim_id_for
 from golden_lattice.memory_graph.metrics import (
     EDGE_CASE_DIMENSION,
     STRUCTURAL_PATTERN_DIMENSION,
@@ -46,6 +46,8 @@ def _independent_response(model: ModelId, prompt_hash: str, claims: tuple[Claim,
         model_id=model,
         prompt_hash=prompt_hash,
         response="response text",
+        focus_tag=FocusTag.CORRECTNESS,
+        confidence=0.7,
         claims=claims,
         generation_started_at=NOW,
         generation_completed_at=NOW,
@@ -304,6 +306,15 @@ def test_skew_even_distribution_is_one():
         frozenset({ModelId.SONNET, ModelId.HAIKU}): 5,
     }
     assert compute_consensus_pair_skew(dist) == 1.0
+
+
+def test_skew_returns_inf_when_min_count_is_zero():
+    """Defensive: dict literally containing a 0 count returns inf."""
+    dist = {
+        frozenset({ModelId.OPUS, ModelId.SONNET}): 5,
+        frozenset({ModelId.OPUS, ModelId.HAIKU}): 0,
+    }
+    assert compute_consensus_pair_skew(dist) == float("inf")
 
 
 def test_skew_dominant_pair_exceeds_one():

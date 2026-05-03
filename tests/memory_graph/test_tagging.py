@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 import pytest
 from pydantic import ValidationError
 
-from golden_lattice.memory_graph.base import ModelId, Phase, claim_id_for
+from golden_lattice.memory_graph.base import FocusTag, ModelId, Phase, claim_id_for
 from golden_lattice.memory_graph.schema import (
     Claim,
     IndependentResponse,
@@ -38,6 +38,8 @@ def _independent_response(model: ModelId, prompt_hash: str, claims: tuple[Claim,
         model_id=model,
         prompt_hash=prompt_hash,
         response="response text",
+        focus_tag=FocusTag.CORRECTNESS,
+        confidence=0.7,
         claims=claims,
         generation_started_at=NOW,
         generation_completed_at=NOW,
@@ -106,6 +108,43 @@ def test_phase2_tagging_default_vocabulary_version_is_pinned():
     assert tagging.vocabulary_version == TAG_VOCABULARY_VERSION
 
 
+def test_claim_tags_rejects_duplicate_edge_case_values():
+    with pytest.raises(ValidationError, match="duplicate edge_case_tags"):
+        ClaimTags(
+            claim_id="abc",
+            edge_case_tags=(EdgeCaseTag.BOUNDARY_CONDITION, EdgeCaseTag.BOUNDARY_CONDITION),
+        )
+
+
+def test_claim_tags_rejects_duplicate_structural_pattern_values():
+    with pytest.raises(ValidationError, match="duplicate structural_pattern_tags"):
+        ClaimTags(
+            claim_id="abc",
+            structural_pattern_tags=(
+                StructuralPatternTag.FRAMING_CHOICE,
+                StructuralPatternTag.FRAMING_CHOICE,
+            ),
+        )
+
+
+def test_session_rejects_mixed_vocabulary_versions():
+    _, claims = _triad_session()
+    sonnet_id = claims[ModelId.SONNET].claim_id
+    haiku_id = claims[ModelId.HAIKU].claim_id
+    t1 = Phase2Tagging(
+        tagger_model=ModelId.OPUS,
+        vocabulary_version="v0.1",
+        peer_tags=(ClaimTags(claim_id=sonnet_id),),
+    )
+    t2 = Phase2Tagging(
+        tagger_model=ModelId.SONNET,
+        vocabulary_version="v0.2-experimental",
+        peer_tags=(ClaimTags(claim_id=haiku_id),),
+    )
+    with pytest.raises(ValidationError, match="same vocabulary_version"):
+        _triad_session(phase_2_taggings=(t1, t2))
+
+
 # --- ConsensusTag structural rules ----------------------------------------
 
 
@@ -130,10 +169,10 @@ def test_consensus_tag_rejects_duplicate_voters():
 
 
 def test_consensus_tag_rejects_invalid_dimension():
-    with pytest.raises(ValidationError, match="dimension must be"):
+    with pytest.raises(ValidationError):
         ConsensusTag(
             claim_id="abc",
-            dimension="vibes",
+            dimension="vibes",  # type: ignore[arg-type]
             tag_value="anything",
             consensus_voters=(ModelId.OPUS, ModelId.SONNET),
         )

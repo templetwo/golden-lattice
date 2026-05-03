@@ -18,6 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from golden_lattice.memory_graph.base import (
     PARITY_THRESHOLD,
+    FocusTag,
     ModelId,
     Phase,
     claim_id_for,
@@ -26,6 +27,7 @@ from golden_lattice.memory_graph.tagging import Phase2Tagging
 
 __all__ = [
     "PARITY_THRESHOLD",
+    "FocusTag",
     "ModelId",
     "Phase",
     "claim_id_for",
@@ -89,6 +91,8 @@ class IndependentResponse(BaseModel):
     model_id: ModelId
     prompt_hash: str
     response: str
+    focus_tag: FocusTag
+    confidence: float
     claims: tuple[Claim, ...]
     self_reflection_artifacts: tuple[SelfReflectionArtifact, ...] = ()
     generation_started_at: datetime
@@ -113,6 +117,15 @@ class IndependentResponse(BaseModel):
                 raise ValueError(
                     "Self-reflection artifacts must come from the same model."
                 )
+        return self
+
+    @model_validator(mode="after")
+    def _confidence_in_unit_interval(self) -> "IndependentResponse":
+        if not 0.0 <= self.confidence <= 1.0:
+            raise ValueError(
+                f"confidence {self.confidence} is outside [0, 1]. "
+                "Phase 1 confidence is a self-report, not a synthesis weight."
+            )
         return self
 
 
@@ -358,8 +371,10 @@ class Session(BaseModel):
         invited = set(self.models_invited)
         seen_taggers: set[ModelId] = set()
         all_claims_by_id = {c.claim_id: c for c in self.all_claims()}
+        vocabulary_versions: set[str] = set()
 
         for tagging in self.phase_2_taggings:
+            vocabulary_versions.add(tagging.vocabulary_version)
             if tagging.tagger_model not in invited:
                 raise ValueError(
                     f"Phase2Tagging from {tagging.tagger_model.value} but that model "
@@ -397,6 +412,34 @@ class Session(BaseModel):
                         f"Claim {ct.claim_id} authored by {claim.source_model.value} "
                         f"appears in self_tags of {tagging.tagger_model.value}. "
                         "self_tags is for the tagger's own claims only."
+                    )
+
+        if len(vocabulary_versions) > 1:
+            raise ValueError(
+                "Phase 2 taggings in a single session must all use the same "
+                f"vocabulary_version. Found: {sorted(vocabulary_versions)}. "
+                "Mixed versions corrupt consensus computation."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _cross_readings_resolve_claim_ids(self) -> "Session":
+        if not self.phase_2:
+            return self
+        all_claim_ids = {c.claim_id for c in self.all_claims()}
+        for cr in self.phase_2:
+            for ref in cr.agreements:
+                if ref.claim_id not in all_claim_ids:
+                    raise ValueError(
+                        f"CrossReading from {cr.reader_model.value} agrees with "
+                        f"unknown claim_id {ref.claim_id}. Agreements must resolve."
+                    )
+            for d in cr.disagreements:
+                if d.target_claim_id not in all_claim_ids:
+                    raise ValueError(
+                        f"CrossReading from {cr.reader_model.value} disagrees with "
+                        f"unknown target_claim_id {d.target_claim_id}. "
+                        "Disagreements must resolve."
                     )
         return self
 

@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from golden_lattice.memory_graph.base import ModelId, Phase, claim_id_for
+from golden_lattice.memory_graph.base import FocusTag, ModelId, Phase, claim_id_for
 from golden_lattice.memory_graph.metrics import compute_consensus_pair_skew
 from golden_lattice.memory_graph.schema import (
     Claim,
@@ -44,6 +44,8 @@ def _independent_response(model: ModelId, prompt_hash: str, claims: tuple[Claim,
         model_id=model,
         prompt_hash=prompt_hash,
         response="response text",
+        focus_tag=FocusTag.CORRECTNESS,
+        confidence=0.7,
         claims=claims,
         generation_started_at=NOW,
         generation_completed_at=NOW,
@@ -199,6 +201,10 @@ def test_parity_history_threshold_passes_through(tmp_path: Path):
     history = store.parity_history(threshold=0.18)
     assert history[0][1] is not None
     assert history[0][1].parity_threshold == 0.18
+
+
+def test_aggregate_empty_history_returns_empty_dict():
+    assert aggregate_alignment_pair_history(()) == {}
 
 
 def test_alignment_pair_history_aggregates_skew(tmp_path: Path):

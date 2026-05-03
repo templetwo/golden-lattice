@@ -8,10 +8,12 @@ from pydantic import ValidationError
 from golden_lattice.memory_graph.schema import (
     PARITY_THRESHOLD,
     Claim,
+    ClaimRef,
     ClaimTraceEntry,
     CrossReading,
     DialogueTurn,
     Disagreement,
+    FocusTag,
     IndependentResponse,
     ModelId,
     Phase,
@@ -39,6 +41,8 @@ def _independent_response(model: ModelId, prompt_hash: str, claims: tuple[Claim,
         model_id=model,
         prompt_hash=prompt_hash,
         response="response text",
+        focus_tag=FocusTag.CORRECTNESS,
+        confidence=0.7,
         claims=claims,
         generation_started_at=NOW,
         generation_completed_at=NOW,
@@ -242,6 +246,158 @@ def test_synthesis_must_trace_every_phase_1_claim():
     )
     with pytest.raises(ValidationError, match="Irreducibility preservation violated"):
         _build_minimal_session(phase_4=incomplete_synthesis)
+
+
+def test_confidence_must_be_in_unit_interval():
+    opus_claim = _phase1_claim(ModelId.OPUS, "x")
+    with pytest.raises(ValidationError, match="outside"):
+        IndependentResponse(
+            model_id=ModelId.OPUS,
+            prompt_hash="h",
+            response="r",
+            focus_tag=FocusTag.CORRECTNESS,
+            confidence=1.5,
+            claims=(opus_claim,),
+            generation_started_at=NOW,
+            generation_completed_at=NOW,
+        )
+
+
+def test_focus_tag_must_be_from_closed_vocabulary():
+    opus_claim = _phase1_claim(ModelId.OPUS, "x")
+    with pytest.raises(ValidationError):
+        IndependentResponse(
+            model_id=ModelId.OPUS,
+            prompt_hash="h",
+            response="r",
+            focus_tag="vibes",  # type: ignore[arg-type]
+            confidence=0.5,
+            claims=(opus_claim,),
+            generation_started_at=NOW,
+            generation_completed_at=NOW,
+        )
+
+
+def test_session_rejects_cross_reading_with_unknown_agreement():
+    opus_claim = _phase1_claim(ModelId.OPUS, "opus alpha")
+    sonnet_claim = _phase1_claim(ModelId.SONNET, "sonnet alpha")
+    bad_cr = CrossReading(
+        reader_model=ModelId.OPUS,
+        target_model=ModelId.SONNET,
+        agreements=(ClaimRef(claim_id="ghost"),),
+    )
+    with pytest.raises(ValidationError, match="agrees with unknown claim_id"):
+        Session(
+            session_id="cr-ghost",
+            prompt="p",
+            prompt_hash="h",
+            models_invited=(ModelId.OPUS, ModelId.SONNET),
+            phase_1={
+                ModelId.OPUS: _independent_response(ModelId.OPUS, "h", (opus_claim,)),
+                ModelId.SONNET: _independent_response(ModelId.SONNET, "h", (sonnet_claim,)),
+            },
+            phase_2=(bad_cr,),
+        )
+
+
+def test_session_rejects_cross_reading_with_unknown_disagreement_target():
+    opus_claim = _phase1_claim(ModelId.OPUS, "opus alpha")
+    sonnet_claim = _phase1_claim(ModelId.SONNET, "sonnet alpha")
+    bad_cr = CrossReading(
+        reader_model=ModelId.OPUS,
+        target_model=ModelId.SONNET,
+        disagreements=(Disagreement(target_claim_id="ghost", reason="i disagree"),),
+    )
+    with pytest.raises(ValidationError, match="disagrees with unknown target_claim_id"):
+        Session(
+            session_id="cr-ghost-d",
+            prompt="p",
+            prompt_hash="h",
+            models_invited=(ModelId.OPUS, ModelId.SONNET),
+            phase_1={
+                ModelId.OPUS: _independent_response(ModelId.OPUS, "h", (opus_claim,)),
+                ModelId.SONNET: _independent_response(ModelId.SONNET, "h", (sonnet_claim,)),
+            },
+            phase_2=(bad_cr,),
+        )
+
+
+def test_session_accepts_cross_reading_with_resolved_claim_ids():
+    opus_claim = _phase1_claim(ModelId.OPUS, "opus alpha")
+    sonnet_claim = _phase1_claim(ModelId.SONNET, "sonnet alpha")
+    cr = CrossReading(
+        reader_model=ModelId.OPUS,
+        target_model=ModelId.SONNET,
+        agreements=(ClaimRef(claim_id=sonnet_claim.claim_id),),
+        disagreements=(Disagreement(target_claim_id=sonnet_claim.claim_id, reason="r"),),
+    )
+    session = Session(
+        session_id="cr-ok",
+        prompt="p",
+        prompt_hash="h",
+        models_invited=(ModelId.OPUS, ModelId.SONNET),
+        phase_1={
+            ModelId.OPUS: _independent_response(ModelId.OPUS, "h", (opus_claim,)),
+            ModelId.SONNET: _independent_response(ModelId.SONNET, "h", (sonnet_claim,)),
+        },
+        phase_2=(cr,),
+    )
+    assert len(session.phase_2) == 1
+
+
+def test_session_resolves_cross_reading_against_phase_2_missing_claims():
+    """A cross-reading can reference Phase 2 missing claims surfaced by another reader."""
+    opus_claim = _phase1_claim(ModelId.OPUS, "opus alpha")
+    sonnet_claim = _phase1_claim(ModelId.SONNET, "sonnet alpha")
+    missing_text = "thing both missed"
+    missing_claim = Claim(
+        claim_id=claim_id_for(ModelId.SONNET, Phase.CROSS_READING, missing_text),
+        source_model=ModelId.SONNET,
+        source_phase=Phase.CROSS_READING,
+        text=missing_text,
+    )
+    cr_sonnet_reads_opus = CrossReading(
+        reader_model=ModelId.SONNET,
+        target_model=ModelId.OPUS,
+        missing=(missing_claim,),
+    )
+    cr_opus_agrees_with_missing = CrossReading(
+        reader_model=ModelId.OPUS,
+        target_model=ModelId.SONNET,
+        agreements=(ClaimRef(claim_id=missing_claim.claim_id),),
+    )
+    session = Session(
+        session_id="cr-resolve-p2",
+        prompt="p",
+        prompt_hash="h",
+        models_invited=(ModelId.OPUS, ModelId.SONNET),
+        phase_1={
+            ModelId.OPUS: _independent_response(ModelId.OPUS, "h", (opus_claim,)),
+            ModelId.SONNET: _independent_response(ModelId.SONNET, "h", (sonnet_claim,)),
+        },
+        phase_2=(cr_sonnet_reads_opus, cr_opus_agrees_with_missing),
+    )
+    assert len(session.phase_2) == 2
+    assert len(session.all_claims()) == 3  # 2 phase 1 + 1 phase 2 missing
+
+
+def test_dialogue_mixed_channels_each_capped_independently():
+    """3 critique + 3 augment + 3 converge from one model is allowed; 4 on any single channel fails."""
+    speaker = ModelId.OPUS
+    base_turns = []
+    for channel in ("critique", "augment", "converge"):
+        for i in range(3):
+            base_turns.append(
+                DialogueTurn(
+                    turn_id=f"{channel}_{i}",
+                    speaker_model=speaker,
+                    channel=channel,  # type: ignore[arg-type]
+                    target_claim_id="some_id",
+                    content=f"{channel} {i}",
+                )
+            )
+    session = _build_minimal_session(phase_3=tuple(base_turns))
+    assert len(session.phase_3) == 9
 
 
 def test_synthesis_with_complete_trace_is_allowed():

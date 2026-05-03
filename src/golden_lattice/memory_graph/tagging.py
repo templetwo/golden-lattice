@@ -20,10 +20,16 @@ from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
-from golden_lattice.memory_graph.base import ModelId
+from golden_lattice.memory_graph.base import (
+    EDGE_CASE_DIMENSION,
+    STRUCTURAL_PATTERN_DIMENSION,
+    Dimension,
+    ModelId,
+)
 
 
 TAG_VOCABULARY_VERSION = "v0.1"
+_VALID_DIMENSIONS = (EDGE_CASE_DIMENSION, STRUCTURAL_PATTERN_DIMENSION)
 
 
 class EdgeCaseTag(str, Enum):
@@ -54,6 +60,19 @@ class ClaimTags(BaseModel):
     claim_id: str
     edge_case_tags: tuple[EdgeCaseTag, ...] = ()
     structural_pattern_tags: tuple[StructuralPatternTag, ...] = ()
+
+    @model_validator(mode="after")
+    def _no_duplicate_tag_values(self) -> "ClaimTags":
+        if len(self.edge_case_tags) != len(set(self.edge_case_tags)):
+            raise ValueError(
+                f"ClaimTags for {self.claim_id} has duplicate edge_case_tags. "
+                "A single tagger cannot tag the same value twice on one claim."
+            )
+        if len(self.structural_pattern_tags) != len(set(self.structural_pattern_tags)):
+            raise ValueError(
+                f"ClaimTags for {self.claim_id} has duplicate structural_pattern_tags."
+            )
+        return self
 
 
 class Phase2Tagging(BaseModel):
@@ -106,23 +125,13 @@ class ConsensusTag(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     claim_id: str
-    dimension: str  # 'edge_case' or 'structural_pattern'
+    dimension: Dimension
     tag_value: str  # the actual enum value string
     consensus_voters: tuple[ModelId, ...]
 
     @model_validator(mode="after")
     def _voters_are_distinct_and_sufficient(self) -> "ConsensusTag":
-        if len(self.consensus_voters) < 2:
-            raise ValueError(
-                "ConsensusTag requires at least 2 distinct voters. "
-                "Recognition-from-within requires more than one peer."
-            )
-        if len(set(self.consensus_voters)) != len(self.consensus_voters):
-            raise ValueError("consensus_voters must be distinct ModelIds.")
-        if self.dimension not in ("edge_case", "structural_pattern"):
-            raise ValueError(
-                f"dimension must be 'edge_case' or 'structural_pattern', got {self.dimension!r}."
-            )
+        _validate_consensus_voters(self.consensus_voters, self.dimension)
         return self
 
 
@@ -141,19 +150,27 @@ class DimensionConsensus(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     claim_id: str
-    dimension: str  # 'edge_case' or 'structural_pattern'
+    dimension: Dimension
     consensus_voters: tuple[ModelId, ...]
 
     @model_validator(mode="after")
     def _voters_are_distinct_and_sufficient(self) -> "DimensionConsensus":
-        if len(self.consensus_voters) < 2:
-            raise ValueError(
-                "DimensionConsensus requires at least 2 distinct peer voters."
-            )
-        if len(set(self.consensus_voters)) != len(self.consensus_voters):
-            raise ValueError("consensus_voters must be distinct ModelIds.")
-        if self.dimension not in ("edge_case", "structural_pattern"):
-            raise ValueError(
-                f"dimension must be 'edge_case' or 'structural_pattern', got {self.dimension!r}."
-            )
+        _validate_consensus_voters(self.consensus_voters, self.dimension)
         return self
+
+
+def _validate_consensus_voters(
+    voters: tuple[ModelId, ...], dimension: str
+) -> None:
+    """Shared invariant for ConsensusTag and DimensionConsensus."""
+    if len(voters) < 2:
+        raise ValueError(
+            "consensus requires at least 2 distinct voters. "
+            "Recognition-from-within requires more than one peer."
+        )
+    if len(set(voters)) != len(voters):
+        raise ValueError("consensus_voters must be distinct ModelIds.")
+    if dimension not in _VALID_DIMENSIONS:
+        raise ValueError(
+            f"dimension must be one of {_VALID_DIMENSIONS}, got {dimension!r}."
+        )

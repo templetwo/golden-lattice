@@ -15,7 +15,13 @@ from __future__ import annotations
 from collections import Counter
 from typing import Optional
 
-from golden_lattice.memory_graph.base import PARITY_THRESHOLD, ModelId
+from golden_lattice.memory_graph.base import (
+    EDGE_CASE_DIMENSION,
+    PARITY_THRESHOLD,
+    STRUCTURAL_PATTERN_DIMENSION,
+    Dimension,
+    ModelId,
+)
 from golden_lattice.memory_graph.schema import Claim, Session, SessionMetrics
 from golden_lattice.memory_graph.tagging import (
     ClaimTags,
@@ -24,10 +30,6 @@ from golden_lattice.memory_graph.tagging import (
     EdgeCaseTag,
     StructuralPatternTag,
 )
-
-
-EDGE_CASE_DIMENSION = "edge_case"
-STRUCTURAL_PATTERN_DIMENSION = "structural_pattern"
 
 
 def _claims_by_id(session: Session) -> dict[str, Claim]:
@@ -132,7 +134,7 @@ def compute_parity_shares(
 
     dim_consensus = compute_dimension_consensus(session)
 
-    def _share_by_dimension(dimension: str) -> dict[ModelId, float]:
+    def _share_by_dimension(dimension: Dimension) -> dict[ModelId, float]:
         events = [dc for dc in dim_consensus if dc.dimension == dimension]
         if not events:
             return {m: 0.0 for m in invited}
@@ -160,8 +162,6 @@ def compute_consensus_pair_distribution(session: Session) -> dict[frozenset[Mode
     consensus = compute_consensus_tags(session)
     counter: Counter[frozenset[ModelId]] = Counter()
     for ct in consensus:
-        # For pairs, frozenset of the voter set; for triple-agreement, the full set.
-        # The skew metric considers any cardinality.
         counter[frozenset(ct.consensus_voters)] += 1
     return dict(counter)
 

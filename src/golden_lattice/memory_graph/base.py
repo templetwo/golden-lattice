@@ -7,9 +7,14 @@ from __future__ import annotations
 
 import hashlib
 from enum import Enum
+from typing import Literal
 
 
 PARITY_THRESHOLD = 0.15
+
+EDGE_CASE_DIMENSION = "edge_case"
+STRUCTURAL_PATTERN_DIMENSION = "structural_pattern"
+Dimension = Literal["edge_case", "structural_pattern"]
 
 
 class ModelId(str, Enum):
@@ -23,6 +28,15 @@ class Phase(int, Enum):
     CROSS_READING = 2
     DIALOGUE = 3
     SYNTHESIS = 4
+
+
+class FocusTag(str, Enum):
+    CORRECTNESS = "correctness"
+    CLARITY = "clarity"
+    SPEED = "speed"
+    NOVELTY = "novelty"
+    ROBUSTNESS = "robustness"
+    ELEGANCE = "elegance"
 
 
 def claim_id_for(source_model: ModelId, source_phase: Phase, text: str) -> str:
