@@ -166,30 +166,32 @@ def test_session_builds_when_well_formed():
     assert len(session.all_claims()) == 2
 
 
-def test_dialogue_channel_cap_is_enforced():
+def _critique_turn(i: int, speaker: ModelId, target: ModelId, claim_id: str) -> DialogueTurn:
+    return DialogueTurn(
+        turn_id=f"crit_{speaker.value}_{target.value}_{i}",
+        speaker_model=speaker,
+        channel="critique",
+        target_model=target,
+        target_claim_ids=(claim_id,),
+        content=f"critique {i}",
+    )
+
+
+def test_dialogue_critique_per_peer_cap_refuses_four_against_one_peer():
+    # _build_minimal_session has opus_claim and sonnet_claim.
+    sonnet_claim = _phase1_claim(ModelId.SONNET, "sonnet claim")
     turns = tuple(
-        DialogueTurn(
-            turn_id=f"t{i}",
-            speaker_model=ModelId.OPUS,
-            channel="critique",
-            target_claim_id="some_id",
-            content=f"turn {i}",
-        )
+        _critique_turn(i, ModelId.OPUS, ModelId.SONNET, sonnet_claim.claim_id)
         for i in range(4)
     )
-    with pytest.raises(ValidationError, match="Phase 3 hard cap exceeded"):
+    with pytest.raises(ValidationError, match="critique cap exceeded"):
         _build_minimal_session(phase_3=turns)
 
 
-def test_dialogue_three_per_channel_is_allowed():
+def test_dialogue_critique_three_against_one_peer_allowed():
+    sonnet_claim = _phase1_claim(ModelId.SONNET, "sonnet claim")
     turns = tuple(
-        DialogueTurn(
-            turn_id=f"t{i}",
-            speaker_model=ModelId.OPUS,
-            channel="critique",
-            target_claim_id="some_id",
-            content=f"turn {i}",
-        )
+        _critique_turn(i, ModelId.OPUS, ModelId.SONNET, sonnet_claim.claim_id)
         for i in range(3)
     )
     session = _build_minimal_session(phase_3=turns)
@@ -453,22 +455,270 @@ def test_session_resolves_cross_reading_against_phase_2_missing_claims():
 
 
 def test_dialogue_mixed_channels_each_capped_independently():
-    """3 critique + 3 augment + 3 converge from one model is allowed; 4 on any single channel fails."""
+    """3 critique (vs Sonnet) + 3 augment + 3 converge from Opus is allowed."""
+    sonnet_claim = _phase1_claim(ModelId.SONNET, "sonnet claim")
     speaker = ModelId.OPUS
-    base_turns = []
-    for channel in ("critique", "augment", "converge"):
-        for i in range(3):
-            base_turns.append(
-                DialogueTurn(
-                    turn_id=f"{channel}_{i}",
-                    speaker_model=speaker,
-                    channel=channel,  # type: ignore[arg-type]
-                    target_claim_id="some_id",
-                    content=f"{channel} {i}",
-                )
+    base_turns: list[DialogueTurn] = []
+    for i in range(3):
+        base_turns.append(
+            _critique_turn(i, speaker, ModelId.SONNET, sonnet_claim.claim_id)
+        )
+    for i in range(3):
+        base_turns.append(
+            DialogueTurn(
+                turn_id=f"aug_{i}",
+                speaker_model=speaker,
+                channel="augment",
+                content=f"augment {i}",
             )
+        )
+    for i in range(3):
+        base_turns.append(
+            DialogueTurn(
+                turn_id=f"con_{i}",
+                speaker_model=speaker,
+                channel="converge",
+                content=f"converge {i}",
+            )
+        )
     session = _build_minimal_session(phase_3=tuple(base_turns))
     assert len(session.phase_3) == 9
+
+
+def test_dialogue_critique_six_against_two_peers_allowed():
+    """Per-spec: critique cap is per-peer. 3 vs Sonnet + 3 vs Haiku from Opus = 6 total, allowed."""
+    # Triadic session needed for two distinct critique targets.
+    opus_claim = _phase1_claim(ModelId.OPUS, "opus claim")
+    sonnet_claim = _phase1_claim(ModelId.SONNET, "sonnet claim")
+    haiku_claim = _phase1_claim(ModelId.HAIKU, "haiku claim")
+    turns: list[DialogueTurn] = []
+    for i in range(3):
+        turns.append(_critique_turn(i, ModelId.OPUS, ModelId.SONNET, sonnet_claim.claim_id))
+    for i in range(3):
+        turns.append(_critique_turn(i, ModelId.OPUS, ModelId.HAIKU, haiku_claim.claim_id))
+    session = Session(
+        session_id="triad-critique",
+        prompt="p",
+        prompt_hash="h",
+        models_invited=(ModelId.OPUS, ModelId.SONNET, ModelId.HAIKU),
+        phase_1={
+            ModelId.OPUS: _independent_response(ModelId.OPUS, "h", (opus_claim,)),
+            ModelId.SONNET: _independent_response(ModelId.SONNET, "h", (sonnet_claim,)),
+            ModelId.HAIKU: _independent_response(ModelId.HAIKU, "h", (haiku_claim,)),
+        },
+        phase_3=tuple(turns),
+    )
+    assert len(session.phase_3) == 6
+
+
+def test_critique_without_target_model_refused():
+    """Empty target_claim_ids isolates the critique-specific check from the
+    'target_claim_ids without target_model' general coherence check."""
+    with pytest.raises(ValidationError, match="critique channel requires target_model"):
+        DialogueTurn(
+            turn_id="t1",
+            speaker_model=ModelId.OPUS,
+            channel="critique",
+            target_claim_ids=(),
+            content="c",
+        )
+
+
+def test_critique_with_empty_target_claim_ids_refused():
+    with pytest.raises(ValidationError, match="critique channel requires non-empty target_claim_ids"):
+        DialogueTurn(
+            turn_id="t1",
+            speaker_model=ModelId.OPUS,
+            channel="critique",
+            target_model=ModelId.SONNET,
+            target_claim_ids=(),
+            content="c",
+        )
+
+
+def test_target_model_equals_speaker_refused():
+    with pytest.raises(ValidationError, match="cannot be its own target_model"):
+        DialogueTurn(
+            turn_id="t1",
+            speaker_model=ModelId.OPUS,
+            channel="augment",
+            target_model=ModelId.OPUS,
+            content="c",
+        )
+
+
+def test_target_claim_ids_without_target_model_refused():
+    with pytest.raises(ValidationError, match="cannot be specified without target_model"):
+        DialogueTurn(
+            turn_id="t1",
+            speaker_model=ModelId.OPUS,
+            channel="augment",
+            target_claim_ids=("some_id",),
+            content="c",
+        )
+
+
+def test_dialogue_target_claim_ids_must_resolve():
+    sonnet_claim = _phase1_claim(ModelId.SONNET, "sonnet claim")
+    bad_turn = DialogueTurn(
+        turn_id="t1",
+        speaker_model=ModelId.OPUS,
+        channel="critique",
+        target_model=ModelId.SONNET,
+        target_claim_ids=("ghost",),
+        content="c",
+    )
+    with pytest.raises(ValidationError, match="unknown target_claim_id"):
+        _build_minimal_session(phase_3=(bad_turn,))
+
+
+def test_augment_with_target_model_and_empty_claim_ids_allowed():
+    """Augment can name a peer (general statement about their position) without specific claim refs."""
+    turn = DialogueTurn(
+        turn_id="t1",
+        speaker_model=ModelId.OPUS,
+        channel="augment",
+        target_model=ModelId.SONNET,
+        target_claim_ids=(),
+        content="sonnet's framing needs more on X",
+    )
+    session = _build_minimal_session(phase_3=(turn,))
+    assert len(session.phase_3) == 1
+
+
+def test_augment_aggregate_cap_three_all_targeting_one_peer_allowed():
+    """Augment cap is aggregate: 3 augments all targeting Sonnet from Opus is allowed."""
+    turns = tuple(
+        DialogueTurn(
+            turn_id=f"aug_{i}",
+            speaker_model=ModelId.OPUS,
+            channel="augment",
+            target_model=ModelId.SONNET,
+            content=f"augment {i}",
+        )
+        for i in range(3)
+    )
+    session = _build_minimal_session(phase_3=turns)
+    assert len(session.phase_3) == 3
+
+
+def test_augment_aggregate_cap_three_mixed_targets_allowed():
+    """3 augments with mixed targets (Sonnet, Sonnet, None) is allowed under the aggregate cap."""
+    turns = (
+        DialogueTurn(
+            turn_id="aug_0",
+            speaker_model=ModelId.OPUS,
+            channel="augment",
+            target_model=ModelId.SONNET,
+            content="a0",
+        ),
+        DialogueTurn(
+            turn_id="aug_1",
+            speaker_model=ModelId.OPUS,
+            channel="augment",
+            content="a1",
+        ),
+        DialogueTurn(
+            turn_id="aug_2",
+            speaker_model=ModelId.OPUS,
+            channel="augment",
+            target_model=ModelId.SONNET,
+            content="a2",
+        ),
+    )
+    session = _build_minimal_session(phase_3=turns)
+    assert len(session.phase_3) == 3
+
+
+def test_augment_four_aggregate_refused_regardless_of_target_distribution():
+    """Augment cap is aggregate. 4 turns from Opus across mixed targets must be refused."""
+    turns = (
+        DialogueTurn(
+            turn_id="aug_0",
+            speaker_model=ModelId.OPUS,
+            channel="augment",
+            target_model=ModelId.SONNET,
+            content="a0",
+        ),
+        DialogueTurn(
+            turn_id="aug_1",
+            speaker_model=ModelId.OPUS,
+            channel="augment",
+            content="a1",
+        ),
+        DialogueTurn(
+            turn_id="aug_2",
+            speaker_model=ModelId.OPUS,
+            channel="augment",
+            target_model=ModelId.SONNET,
+            content="a2",
+        ),
+        DialogueTurn(
+            turn_id="aug_3",
+            speaker_model=ModelId.OPUS,
+            channel="augment",
+            content="a3",
+        ),
+    )
+    with pytest.raises(ValidationError, match="augment cap exceeded"):
+        _build_minimal_session(phase_3=turns)
+
+
+def test_converge_aggregate_cap_three_all_targeting_one_peer_allowed():
+    turns = tuple(
+        DialogueTurn(
+            turn_id=f"con_{i}",
+            speaker_model=ModelId.OPUS,
+            channel="converge",
+            target_model=ModelId.SONNET,
+            content=f"converge {i}",
+        )
+        for i in range(3)
+    )
+    session = _build_minimal_session(phase_3=turns)
+    assert len(session.phase_3) == 3
+
+
+def test_converge_aggregate_cap_three_mixed_targets_allowed():
+    turns = (
+        DialogueTurn(
+            turn_id="con_0",
+            speaker_model=ModelId.OPUS,
+            channel="converge",
+            target_model=ModelId.SONNET,
+            content="c0",
+        ),
+        DialogueTurn(
+            turn_id="con_1",
+            speaker_model=ModelId.OPUS,
+            channel="converge",
+            content="c1",
+        ),
+        DialogueTurn(
+            turn_id="con_2",
+            speaker_model=ModelId.OPUS,
+            channel="converge",
+            target_model=ModelId.SONNET,
+            content="c2",
+        ),
+    )
+    session = _build_minimal_session(phase_3=turns)
+    assert len(session.phase_3) == 3
+
+
+def test_converge_four_aggregate_refused_regardless_of_target_distribution():
+    turns = tuple(
+        DialogueTurn(
+            turn_id=f"con_{i}",
+            speaker_model=ModelId.OPUS,
+            channel="converge",
+            target_model=ModelId.SONNET if i % 2 == 0 else None,
+            content=f"c{i}",
+        )
+        for i in range(4)
+    )
+    with pytest.raises(ValidationError, match="converge cap exceeded"):
+        _build_minimal_session(phase_3=turns)
 
 
 def test_synthesis_with_complete_trace_is_allowed():

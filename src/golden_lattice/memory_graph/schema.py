@@ -216,13 +216,59 @@ DIALOGUE_CHANNEL_CAP = 3
 
 
 class DialogueTurn(BaseModel):
+    """A single dialogue point in Phase 3.
+
+    Channel rules (per ARCHITECTURE.md §5):
+      - critique: target_model required (must differ from speaker_model);
+        target_claim_ids must be non-empty. Capped at 3 per (speaker, target)
+        pair — a model may critique up to 3 claims per peer.
+      - augment: target_model optional. May target a specific peer's position
+        (with or without claim refs) or be an aggregate addition. Capped at 3
+        per speaker, regardless of target distribution.
+      - converge: target_model optional. May name peers whose alignment is
+        being acknowledged or be a general alignment statement. Capped at 3
+        per speaker, regardless of target distribution.
+
+    target_claim_ids without target_model is refused — referencing claim_ids
+    requires naming whose claims they are. The Session validator separately
+    confirms target_claim_ids resolve to real claims in the session graph.
+    """
+
     model_config = ConfigDict(frozen=True)
 
     turn_id: str
     speaker_model: ModelId
     channel: DialogueChannel
-    target_claim_id: str
+    target_model: Optional[ModelId] = None
+    target_claim_ids: tuple[str, ...] = ()
     content: str
+
+    @model_validator(mode="after")
+    def _channel_target_consistency(self) -> "DialogueTurn":
+        if self.target_model is self.speaker_model:
+            raise ValueError(
+                f"speaker_model {self.speaker_model.value} cannot be its own "
+                "target_model. Phase 3 dialogue is cross-model addressing."
+            )
+        if self.target_claim_ids and self.target_model is None:
+            raise ValueError(
+                "target_claim_ids cannot be specified without target_model. "
+                "Naming claim_ids requires naming whose claims they are."
+            )
+        if self.channel == "critique":
+            if self.target_model is None:
+                raise ValueError(
+                    "critique channel requires target_model — critique "
+                    "addresses a specific peer's claims."
+                )
+            if not self.target_claim_ids:
+                raise ValueError(
+                    "critique channel requires non-empty target_claim_ids — "
+                    "critique is specific to claims, not general."
+                )
+        if not self.content.strip():
+            raise ValueError("DialogueTurn content must be non-empty.")
+        return self
 
 
 ClaimDisposition = Literal["present", "modified", "omitted"]
@@ -371,16 +417,66 @@ class Session(BaseModel):
 
     @model_validator(mode="after")
     def _dialogue_channel_caps(self) -> "Session":
-        counts: dict[tuple[ModelId, str], int] = {}
+        """Enforce per-spec caps (ARCHITECTURE.md §5):
+
+        - critique: 3 per (speaker, target_model) pair — per-peer.
+        - augment:  3 per speaker — aggregate. target_model is informational,
+                    not cap-relevant. Inventing a per-peer sub-cap on augment
+                    would be substrate-stricter-than-spec.
+        - converge: 3 per speaker — aggregate. Same reasoning as augment.
+        """
+        critique_counts: dict[tuple[ModelId, ModelId], int] = {}
+        augment_counts: dict[ModelId, int] = {}
+        converge_counts: dict[ModelId, int] = {}
         for turn in self.phase_3:
-            key = (turn.speaker_model, turn.channel)
-            counts[key] = counts.get(key, 0) + 1
-            if counts[key] > DIALOGUE_CHANNEL_CAP:
-                raise ValueError(
-                    f"Phase 3 hard cap exceeded: {turn.speaker_model.value} has more than "
-                    f"{DIALOGUE_CHANNEL_CAP} turns on channel '{turn.channel}'. "
-                    "Hard caps prevent quantitative collapse."
+            if turn.channel == "critique":
+                # target_model is guaranteed non-None for critique by
+                # DialogueTurn._channel_target_consistency.
+                assert turn.target_model is not None
+                key = (turn.speaker_model, turn.target_model)
+                critique_counts[key] = critique_counts.get(key, 0) + 1
+                if critique_counts[key] > DIALOGUE_CHANNEL_CAP:
+                    raise ValueError(
+                        f"Phase 3 critique cap exceeded: {turn.speaker_model.value} "
+                        f"has more than {DIALOGUE_CHANNEL_CAP} critique turns "
+                        f"targeting {turn.target_model.value}. "
+                        "Per-peer caps prevent quantitative collapse against any one peer."
+                    )
+            elif turn.channel == "augment":
+                augment_counts[turn.speaker_model] = (
+                    augment_counts.get(turn.speaker_model, 0) + 1
                 )
+                if augment_counts[turn.speaker_model] > DIALOGUE_CHANNEL_CAP:
+                    raise ValueError(
+                        f"Phase 3 augment cap exceeded: {turn.speaker_model.value} "
+                        f"has more than {DIALOGUE_CHANNEL_CAP} augment turns. "
+                        "Aggregate cap regardless of target distribution."
+                    )
+            else:  # converge
+                converge_counts[turn.speaker_model] = (
+                    converge_counts.get(turn.speaker_model, 0) + 1
+                )
+                if converge_counts[turn.speaker_model] > DIALOGUE_CHANNEL_CAP:
+                    raise ValueError(
+                        f"Phase 3 converge cap exceeded: {turn.speaker_model.value} "
+                        f"has more than {DIALOGUE_CHANNEL_CAP} converge turns. "
+                        "Aggregate cap regardless of target distribution."
+                    )
+        return self
+
+    @model_validator(mode="after")
+    def _dialogue_targets_resolve_claim_ids(self) -> "Session":
+        if not self.phase_3:
+            return self
+        all_claim_ids = {c.claim_id for c in self.all_claims()}
+        for turn in self.phase_3:
+            for cid in turn.target_claim_ids:
+                if cid not in all_claim_ids:
+                    raise ValueError(
+                        f"DialogueTurn from {turn.speaker_model.value} on channel "
+                        f"'{turn.channel}' references unknown target_claim_id {cid!r}. "
+                        "Dialogue targets must resolve to real claims."
+                    )
         return self
 
     @model_validator(mode="after")
