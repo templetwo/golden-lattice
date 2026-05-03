@@ -17,6 +17,7 @@ from golden_lattice.memory_graph.schema import (
     IndependentResponse,
     ModelId,
     Phase,
+    SelfReflectionArtifact,
     Session,
     SessionMetrics,
     SynthesisArtifact,
@@ -246,6 +247,76 @@ def test_synthesis_must_trace_every_phase_1_claim():
     )
     with pytest.raises(ValidationError, match="Irreducibility preservation violated"):
         _build_minimal_session(phase_4=incomplete_synthesis)
+
+
+def test_self_reflection_strongest_must_differ_from_weakest():
+    with pytest.raises(ValidationError, match="must differ"):
+        SelfReflectionArtifact(
+            model_id=ModelId.OPUS,
+            generated_at=NOW,
+            strongest_claim_id="abc",
+            weakest_claim_id="abc",
+            tag_justification="because reasons",
+        )
+
+
+def test_self_reflection_requires_non_empty_justification():
+    with pytest.raises(ValidationError, match="non-empty"):
+        SelfReflectionArtifact(
+            model_id=ModelId.OPUS,
+            generated_at=NOW,
+            strongest_claim_id="abc",
+            weakest_claim_id="def",
+            tag_justification="   ",
+        )
+
+
+def test_independent_response_rejects_self_reflection_referencing_unknown_claim():
+    own_claim = _phase1_claim(ModelId.OPUS, "alpha")
+    bad_reflection = SelfReflectionArtifact(
+        model_id=ModelId.OPUS,
+        generated_at=NOW,
+        strongest_claim_id=own_claim.claim_id,
+        weakest_claim_id="ghost",
+        tag_justification="i picked correctness because of X",
+    )
+    with pytest.raises(ValidationError, match="weakest_claim_id"):
+        IndependentResponse(
+            model_id=ModelId.OPUS,
+            prompt_hash="h",
+            response="r",
+            focus_tag=FocusTag.CORRECTNESS,
+            confidence=0.7,
+            claims=(own_claim,),
+            self_reflection_artifacts=(bad_reflection,),
+            generation_started_at=NOW,
+            generation_completed_at=NOW,
+        )
+
+
+def test_independent_response_accepts_well_formed_self_reflection():
+    claim_a = _phase1_claim(ModelId.OPUS, "alpha")
+    claim_b = _phase1_claim(ModelId.OPUS, "beta")
+    reflection = SelfReflectionArtifact(
+        model_id=ModelId.OPUS,
+        generated_at=NOW,
+        strongest_claim_id=claim_a.claim_id,
+        weakest_claim_id=claim_b.claim_id,
+        tag_justification="alpha is the strongest because X; beta is weaker because Y",
+    )
+    resp = IndependentResponse(
+        model_id=ModelId.OPUS,
+        prompt_hash="h",
+        response="r",
+        focus_tag=FocusTag.CORRECTNESS,
+        confidence=0.7,
+        claims=(claim_a, claim_b),
+        self_reflection_artifacts=(reflection,),
+        generation_started_at=NOW,
+        generation_completed_at=NOW,
+    )
+    assert len(resp.self_reflection_artifacts) == 1
+    assert resp.self_reflection_artifacts[0].strongest_claim_id == claim_a.claim_id
 
 
 def test_confidence_must_be_in_unit_interval():

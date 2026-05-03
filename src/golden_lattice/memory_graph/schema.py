@@ -32,9 +32,9 @@ __all__ = [
     "Phase",
     "claim_id_for",
     "Claim",
+    "ClaimRef",
     "SelfReflectionArtifact",
     "IndependentResponse",
-    "ClaimRef",
     "Disagreement",
     "CrossReading",
     "DialogueTurn",
@@ -78,11 +78,37 @@ class Claim(BaseModel):
 
 
 class SelfReflectionArtifact(BaseModel):
+    """Structured reflection produced during Phase 1 idle latency, before Phase 2 begins.
+
+    Per ARCHITECTURE.md §5.1: a structured object naming the model's own strongest
+    and weakest Phase 1 claims, plus a justification of the focus_tag chosen. This is
+    preparation for Phase 2 cross-reading, NOT refinement of Phase 1.
+
+    strongest_claim_id and weakest_claim_id must reference claims this same model
+    authored — a model cannot reflect on a peer's claim as its own strongest. That
+    would be authority-gradient leakage at the self-reflection layer.
+    """
+
     model_config = ConfigDict(frozen=True)
 
     model_id: ModelId
     generated_at: datetime
-    content: str
+    strongest_claim_id: str
+    weakest_claim_id: str
+    tag_justification: str
+
+    @model_validator(mode="after")
+    def _claim_ids_must_differ(self) -> "SelfReflectionArtifact":
+        if self.strongest_claim_id == self.weakest_claim_id:
+            raise ValueError(
+                "strongest_claim_id and weakest_claim_id must differ. "
+                "Self-reflection requires distinguishing among one's own claims."
+            )
+        if not self.tag_justification.strip():
+            raise ValueError(
+                "tag_justification must be a non-empty string."
+            )
+        return self
 
 
 class IndependentResponse(BaseModel):
@@ -101,6 +127,7 @@ class IndependentResponse(BaseModel):
 
     @model_validator(mode="after")
     def _check_claim_provenance(self) -> "IndependentResponse":
+        own_claim_ids = {c.claim_id for c in self.claims}
         for claim in self.claims:
             if claim.source_model is not self.model_id:
                 raise ValueError(
@@ -116,6 +143,17 @@ class IndependentResponse(BaseModel):
             if artifact.model_id is not self.model_id:
                 raise ValueError(
                     "Self-reflection artifacts must come from the same model."
+                )
+            if artifact.strongest_claim_id not in own_claim_ids:
+                raise ValueError(
+                    f"Self-reflection strongest_claim_id {artifact.strongest_claim_id} "
+                    f"does not match any claim authored by {self.model_id}. "
+                    "A model can only reflect on its own claims."
+                )
+            if artifact.weakest_claim_id not in own_claim_ids:
+                raise ValueError(
+                    f"Self-reflection weakest_claim_id {artifact.weakest_claim_id} "
+                    f"does not match any claim authored by {self.model_id}."
                 )
         return self
 

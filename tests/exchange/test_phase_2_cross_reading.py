@@ -258,6 +258,23 @@ def test_parse_phase_2_tagging_happy_path():
     assert tagging.self_tags[0].structural_pattern_tags == (StructuralPatternTag.FRAMING_CHOICE,)
 
 
+def test_parse_phase_2_tagging_skips_resolution_when_valid_ids_none():
+    """Symmetric with cross-reading parser: when valid_claim_ids is None, defer resolution to schema."""
+    tool_input = {
+        "peer_tags": [
+            {"claim_id": "ghost_id", "edge_case_tags": [], "structural_pattern_tags": []}
+        ],
+        "self_tags": [],
+    }
+    # Should not raise — resolution is opt-in at the wire layer
+    tagging = parse_phase_2_tagging_tool_use(
+        tool_input,
+        expected_tagger=ModelId.OPUS,
+        valid_claim_ids=None,
+    )
+    assert tagging.peer_tags[0].claim_id == "ghost_id"
+
+
 def test_parse_phase_2_tagging_rejects_unknown_claim_id():
     tool_input = {
         "peer_tags": [

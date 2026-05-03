@@ -388,13 +388,16 @@ def parse_phase_2_tagging_tool_use(
     tool_input: dict[str, Any],
     *,
     expected_tagger: ModelId,
-    valid_claim_ids: set[str],
+    valid_claim_ids: Optional[set[str]] = None,
 ) -> Phase2Tagging:
     """Parse a phase_2_tagging tool input into a Phase2Tagging.
 
-    Refuses unknown claim_ids at the wire boundary. The schema layer will further
-    refuse own-claim-in-peer-tags and peer-claim-in-self-tags when this Phase2Tagging
-    is folded into a Session.
+    If valid_claim_ids is provided, claim_ids are resolved at the wire boundary.
+    If None, resolution is deferred to the schema's Session-level validator
+    (still refused, just later). Symmetric with parse_cross_reading_tool_use.
+
+    The schema layer will further refuse own-claim-in-peer-tags and
+    peer-claim-in-self-tags when this Phase2Tagging is folded into a Session.
     """
     if not isinstance(tool_input, dict):
         raise WireParseError(f"tool_input must be a dict, got {type(tool_input).__name__}")
@@ -407,12 +410,13 @@ def parse_phase_2_tagging_tool_use(
     peer_tags = _build_claim_tags(peer_raw)
     self_tags = _build_claim_tags(self_raw)
 
-    for ct in peer_tags + self_tags:
-        if ct.claim_id not in valid_claim_ids:
-            raise WireParseError(
-                f"tagging references unknown claim_id {ct.claim_id!r}. "
-                "Tags must resolve to real claims from Phase 1 or Phase 2 missing."
-            )
+    if valid_claim_ids is not None:
+        for ct in peer_tags + self_tags:
+            if ct.claim_id not in valid_claim_ids:
+                raise WireParseError(
+                    f"tagging references unknown claim_id {ct.claim_id!r}. "
+                    "Tags must resolve to real claims from Phase 1 or Phase 2 missing."
+                )
 
     return Phase2Tagging(
         tagger_model=expected_tagger,
@@ -454,4 +458,5 @@ class Phase2WireClient(Protocol):
         original_prompt: str,
         own_claims: tuple[Claim, ...],
         peer_claims: tuple[Claim, ...],
+        valid_claim_ids: Optional[set[str]] = None,
     ) -> Phase2Tagging: ...
