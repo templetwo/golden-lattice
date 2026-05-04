@@ -24,6 +24,7 @@ from golden_lattice.synthesis.claim_trace import (
     OMISSION_REASON_PREFIXES,
     build_claim_trace,
 )
+from golden_lattice.synthesis.disagreement import compute_surfaced_disagreements
 from golden_lattice.synthesis.elevation import compute_elevations
 from golden_lattice.synthesis.engine import (
     SynthesisInputError,
@@ -35,5 +36,6 @@ __all__ = [
     "SynthesisInputError",
     "build_claim_trace",
     "compute_elevations",
+    "compute_surfaced_disagreements",
     "validate_session_for_synthesis",
 ]
