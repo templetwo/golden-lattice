@@ -29,6 +29,7 @@ from golden_lattice.synthesis.disagreement import compute_surfaced_disagreements
 from golden_lattice.synthesis.elevation import compute_elevations
 from golden_lattice.synthesis.engine import (
     SynthesisInputError,
+    synthesize,
     validate_session_for_synthesis,
 )
 
@@ -39,5 +40,6 @@ __all__ = [
     "compute_elevations",
     "compute_surfaced_disagreements",
     "render_output",
+    "synthesize",
     "validate_session_for_synthesis",
 ]

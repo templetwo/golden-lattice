@@ -588,9 +588,18 @@ def test_render_output_does_not_mutate_session():
 
 
 def test_full_pipeline_produces_substrate_valid_synthesis_artifact_per_mode():
-    """Closure: render_output for each mode produces a string that, when folded
-    into a SynthesisArtifact alongside the other rules' outputs, yields a
-    substrate-valid Session."""
+    """CLOSURE TEST — architecturally significant.
+
+    The synthesis engine's four rules + four output modes compose into
+    substrate-valid Sessions. Failure here indicates COMPOSITIONAL DRIFT,
+    not a unit-level bug. Debug at the integration boundary, not the
+    rule-level boundary, when this fails.
+
+    This is the first end-to-end closure assertion across the synthesis
+    engine: until this test, each rule was tested in isolation against the
+    substrate's individual refusals. This one verifies the rules compose
+    into a substrate-valid whole.
+    """
     from golden_lattice.memory_graph.base import SynthesisRule
     from golden_lattice.memory_graph.schema import SynthesisArtifact
 
