@@ -70,6 +70,12 @@ class OutputMode(str, Enum):
     TRANSCRIPT = "transcript"
 
 
+# Default output mode per ARCHITECTURE.md §7. Single source of truth — both
+# SynthesisArtifact.output_mode field default and synthesize() parameter default
+# reference this constant. Spec revision happens in one place.
+DEFAULT_OUTPUT_MODE: OutputMode = OutputMode.ANNOTATED
+
+
 def claim_id_for(source_model: ModelId, source_phase: Phase, text: str) -> str:
     payload = f"{source_model.value}|{source_phase.value}|{text}".encode("utf-8")
     return hashlib.sha256(payload).hexdigest()[:16]

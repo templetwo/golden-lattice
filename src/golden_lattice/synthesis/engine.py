@@ -12,7 +12,11 @@ inputs, no authority gradient at any layer. See ARCHITECTURE.md §5.4.
 
 from __future__ import annotations
 
-from golden_lattice.memory_graph.base import OutputMode, SynthesisRule
+from golden_lattice.memory_graph.base import (
+    DEFAULT_OUTPUT_MODE,
+    OutputMode,
+    SynthesisRule,
+)
 from golden_lattice.memory_graph.schema import Session, SynthesisArtifact
 from golden_lattice.synthesis.attribution import render_output
 from golden_lattice.synthesis.claim_trace import build_claim_trace
@@ -55,7 +59,7 @@ def validate_session_for_synthesis(session: Session) -> None:
 def synthesize(
     session: Session,
     *,
-    mode: OutputMode = OutputMode.ANNOTATED,
+    mode: OutputMode = DEFAULT_OUTPUT_MODE,
     confidence_threshold: float,
 ) -> SynthesisArtifact:
     """Compose Phase 4 synthesis from a Session's Phase 1-3 artifacts.

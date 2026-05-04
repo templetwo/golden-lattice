@@ -17,6 +17,7 @@ from typing import Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from golden_lattice.memory_graph.base import (
+    DEFAULT_OUTPUT_MODE,
     PARITY_THRESHOLD,
     FocusTag,
     ModelId,
@@ -381,7 +382,7 @@ class SynthesisArtifact(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     output: str
-    output_mode: OutputMode = OutputMode.ANNOTATED
+    output_mode: OutputMode = DEFAULT_OUTPUT_MODE
     claim_trace: tuple[ClaimTraceEntry, ...]
     synthesis_rules_applied: tuple[SynthesisRule, ...]
     elevations: tuple[Elevation, ...] = ()

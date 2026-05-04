@@ -18,6 +18,7 @@ from datetime import datetime, timezone
 import pytest
 
 from golden_lattice.memory_graph.base import (
+    DEFAULT_OUTPUT_MODE,
     FocusTag,
     ModelId,
     OutputMode,
@@ -127,12 +128,31 @@ def test_synthesize_returns_synthesis_artifact_with_all_four_rules_applied():
 
 def test_synthesize_default_mode_is_annotated():
     """Per ARCHITECTURE.md §7: 'Default: annotated. The annotation is the proof
-    we did not flatten.'"""
+    we did not flatten.' synthesize() and SynthesisArtifact both reference the
+    same DEFAULT_OUTPUT_MODE constant in base.py — single source of truth."""
     session = _full_triadic_session()
     artifact = synthesize(session, confidence_threshold=0.7)
     assert artifact.output_mode is OutputMode.ANNOTATED
+    assert artifact.output_mode is DEFAULT_OUTPUT_MODE
     # Annotated output contains attribution markers.
     assert "[O]" in artifact.output
+
+
+def test_default_output_mode_is_single_source_of_truth():
+    """Both SynthesisArtifact.output_mode default and synthesize() default
+    reference DEFAULT_OUTPUT_MODE from base.py. Spec revision happens in
+    one place; no silent drift between substrate and engine."""
+    # SynthesisArtifact's default field value matches the constant.
+    artifact = SynthesisArtifact(
+        output="o",
+        claim_trace=(),
+        synthesis_rules_applied=(SynthesisRule.IRREDUCIBILITY_PRESERVATION,),
+    )
+    assert artifact.output_mode is DEFAULT_OUTPUT_MODE
+    # synthesize() with no mode argument also matches the constant.
+    session = _full_triadic_session()
+    synth = synthesize(session, confidence_threshold=0.7)
+    assert synth.output_mode is DEFAULT_OUTPUT_MODE
 
 
 def test_synthesize_returns_artifact_not_session():
