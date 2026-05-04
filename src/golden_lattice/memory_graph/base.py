@@ -39,6 +39,20 @@ class FocusTag(str, Enum):
     ELEGANCE = "elegance"
 
 
+class SynthesisRule(str, Enum):
+    """The four named Phase 4 synthesis rules per ARCHITECTURE.md §5.4.
+
+    Closed vocabulary so a SynthesisArtifact's synthesis_rules_applied tuple
+    cannot drift into free-form claims. Each rule the engine applies must be
+    declared from this set.
+    """
+
+    IRREDUCIBILITY_PRESERVATION = "irreducibility_preservation"
+    AGREEMENT_ELEVATION = "agreement_elevation"
+    DISAGREEMENT_SURFACING = "disagreement_surfacing"
+    ATTRIBUTION_PRESERVATION = "attribution_preservation"
+
+
 def claim_id_for(source_model: ModelId, source_phase: Phase, text: str) -> str:
     payload = f"{source_model.value}|{source_phase.value}|{text}".encode("utf-8")
     return hashlib.sha256(payload).hexdigest()[:16]

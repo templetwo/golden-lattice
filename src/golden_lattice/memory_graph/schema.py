@@ -21,6 +21,7 @@ from golden_lattice.memory_graph.base import (
     FocusTag,
     ModelId,
     Phase,
+    SynthesisRule,
     claim_id_for,
 )
 from golden_lattice.memory_graph.tagging import Phase2Tagging
@@ -30,6 +31,7 @@ __all__ = [
     "FocusTag",
     "ModelId",
     "Phase",
+    "SynthesisRule",
     "claim_id_for",
     "Claim",
     "ClaimRef",
@@ -39,6 +41,8 @@ __all__ = [
     "CrossReading",
     "DialogueTurn",
     "ClaimTraceEntry",
+    "Elevation",
+    "SurfacedDisagreement",
     "SynthesisArtifact",
     "SessionMetrics",
     "Session",
@@ -301,12 +305,84 @@ class ClaimTraceEntry(BaseModel):
         return self
 
 
+class Elevation(BaseModel):
+    """A Phase 4 elevation — content elevated due to cross-model agreement.
+
+    Per ARCHITECTURE.md §5.4: cross-model agreement appearing in 2+ converge
+    channels is elevated. The substrate enforces both 'at least 2 converge
+    turns cited' and (at the Session level) 'those turns come from at least
+    2 distinct speakers' — a single model cannot self-elevate via two of
+    its own converge turns. That would be authority-gradient via self-
+    amplification, refused by invariant 1.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    claim_ids: tuple[str, ...]
+    converge_turn_ids: tuple[str, ...]
+
+    @model_validator(mode="after")
+    def _well_formed(self) -> "Elevation":
+        if not self.claim_ids:
+            raise ValueError("Elevation must cite at least one claim_id.")
+        if len(self.converge_turn_ids) < 2:
+            raise ValueError(
+                "Elevation requires at least 2 converge_turn_ids per ARCHITECTURE.md §5.4 "
+                "('appearing in 2+ converge channels')."
+            )
+        if len(set(self.converge_turn_ids)) != len(self.converge_turn_ids):
+            raise ValueError("converge_turn_ids must be distinct.")
+        return self
+
+
+class SurfacedDisagreement(BaseModel):
+    """A Phase 4 surfaced disagreement — productive conflict not hidden in synthesis.
+
+    Per ARCHITECTURE.md §5.4: productive disagreement (high-confidence conflict)
+    is surfaced, not hidden. 'High-confidence' is engine judgment using Phase 1
+    confidence values from IndependentResponse — schema cannot enforce the
+    confidence threshold without coupling layers; that's load-bearing convention
+    in the synthesis engine.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    claim_ids: tuple[str, ...]
+    note: str
+
+    @model_validator(mode="after")
+    def _well_formed(self) -> "SurfacedDisagreement":
+        if len(self.claim_ids) < 2:
+            raise ValueError(
+                "SurfacedDisagreement requires at least 2 claim_ids — "
+                "a disagreement is between claims."
+            )
+        if not self.note.strip():
+            raise ValueError("SurfacedDisagreement.note must be non-empty.")
+        return self
+
+
 class SynthesisArtifact(BaseModel):
+    """Phase 4 synthesis output. Rule-based, not model-based.
+
+    This artifact has no model_id by design. Synthesis is rule-based, not
+    model-based — adding attribution would create authority gradient and
+    violate invariant 1. See ARCHITECTURE.md §5.4.
+
+    Per-segment attribution for the four output modes (unified, layered,
+    annotated, transcript) is currently convention enforced by engine code
+    against the opaque output: str. Attribution may be lifted into structure
+    as a future amendment if/when any output mode requires lossy transformation
+    from the current shape.
+    """
+
     model_config = ConfigDict(frozen=True)
 
     output: str
     claim_trace: tuple[ClaimTraceEntry, ...]
-    synthesis_rules_applied: tuple[str, ...]
+    synthesis_rules_applied: tuple[SynthesisRule, ...]
+    elevations: tuple[Elevation, ...] = ()
+    surfaced_disagreements: tuple[SurfacedDisagreement, ...] = ()
 
 
 class SessionMetrics(BaseModel):
@@ -496,6 +572,53 @@ class Session(BaseModel):
                 f"have no entry in claim_trace. Missing: {sorted(untraced)}. "
                 "Every distinct claim must be present, modified, or omitted-with-reason."
             )
+        return self
+
+    @model_validator(mode="after")
+    def _synthesis_elevations_well_formed(self) -> "Session":
+        if self.phase_4 is None or not self.phase_4.elevations:
+            return self
+        all_claim_ids = {c.claim_id for c in self.all_claims()}
+        converge_turns_by_id: dict[str, DialogueTurn] = {
+            turn.turn_id: turn
+            for turn in self.phase_3
+            if turn.channel == "converge"
+        }
+        for elev in self.phase_4.elevations:
+            for cid in elev.claim_ids:
+                if cid not in all_claim_ids:
+                    raise ValueError(
+                        f"Elevation cites unknown claim_id {cid!r}."
+                    )
+            cited_speakers: set[ModelId] = set()
+            for tid in elev.converge_turn_ids:
+                turn = converge_turns_by_id.get(tid)
+                if turn is None:
+                    raise ValueError(
+                        f"Elevation cites turn_id {tid!r} which is not a "
+                        f"Phase 3 turn with channel='converge'."
+                    )
+                cited_speakers.add(turn.speaker_model)
+            if len(cited_speakers) < 2:
+                raise ValueError(
+                    "Elevation requires converge turns from at least 2 distinct "
+                    "speaker_models per ARCHITECTURE.md §5.4 (cross-model agreement). "
+                    "Self-elevation via one model's own converge turns would violate "
+                    "invariant 1 (no authority gradient)."
+                )
+        return self
+
+    @model_validator(mode="after")
+    def _synthesis_surfaced_disagreements_resolve_claim_ids(self) -> "Session":
+        if self.phase_4 is None or not self.phase_4.surfaced_disagreements:
+            return self
+        all_claim_ids = {c.claim_id for c in self.all_claims()}
+        for sd in self.phase_4.surfaced_disagreements:
+            for cid in sd.claim_ids:
+                if cid not in all_claim_ids:
+                    raise ValueError(
+                        f"SurfacedDisagreement cites unknown claim_id {cid!r}."
+                    )
         return self
 
     @model_validator(mode="after")

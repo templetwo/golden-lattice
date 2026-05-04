@@ -13,6 +13,7 @@ from golden_lattice.memory_graph.schema import (
     CrossReading,
     DialogueTurn,
     Disagreement,
+    Elevation,
     FocusTag,
     IndependentResponse,
     ModelId,
@@ -20,7 +21,9 @@ from golden_lattice.memory_graph.schema import (
     SelfReflectionArtifact,
     Session,
     SessionMetrics,
+    SurfacedDisagreement,
     SynthesisArtifact,
+    SynthesisRule,
     claim_id_for,
 )
 
@@ -245,7 +248,7 @@ def test_synthesis_must_trace_every_phase_1_claim():
     incomplete_synthesis = SynthesisArtifact(
         output="final",
         claim_trace=(),
-        synthesis_rules_applied=("rule_a",),
+        synthesis_rules_applied=(SynthesisRule.IRREDUCIBILITY_PRESERVATION,),
     )
     with pytest.raises(ValidationError, match="Irreducibility preservation violated"):
         _build_minimal_session(phase_4=incomplete_synthesis)
@@ -734,11 +737,225 @@ def test_synthesis_with_complete_trace_is_allowed():
                 modified_text="sonnet claim, sharpened",
             ),
         ),
-        synthesis_rules_applied=("rule_a",),
+        synthesis_rules_applied=(SynthesisRule.IRREDUCIBILITY_PRESERVATION,),
     )
     session = _build_minimal_session(phase_4=synthesis)
     assert session.phase_4 is not None
     assert len(session.phase_4.claim_trace) == 2
+
+
+def test_synthesis_rules_applied_rejects_unknown_rule():
+    with pytest.raises(ValidationError):
+        SynthesisArtifact(
+            output="final",
+            claim_trace=(),
+            synthesis_rules_applied=("invented_rule",),  # type: ignore[arg-type]
+        )
+
+
+# --- Elevation -----------------------------------------------------------
+
+
+def test_elevation_requires_at_least_two_converge_turn_ids():
+    with pytest.raises(ValidationError, match="at least 2 converge_turn_ids"):
+        Elevation(claim_ids=("c1",), converge_turn_ids=("t1",))
+
+
+def test_elevation_requires_non_empty_claim_ids():
+    with pytest.raises(ValidationError, match="at least one claim_id"):
+        Elevation(claim_ids=(), converge_turn_ids=("t1", "t2"))
+
+
+def test_elevation_rejects_duplicate_converge_turn_ids():
+    with pytest.raises(ValidationError, match="must be distinct"):
+        Elevation(claim_ids=("c1",), converge_turn_ids=("t1", "t1"))
+
+
+def test_session_rejects_elevation_with_unknown_claim_id():
+    opus_claim = _phase1_claim(ModelId.OPUS, "opus claim")
+    sonnet_claim = _phase1_claim(ModelId.SONNET, "sonnet claim")
+    converge_a = DialogueTurn(
+        turn_id="conv_a",
+        speaker_model=ModelId.OPUS,
+        channel="converge",
+        content="aligned",
+    )
+    converge_b = DialogueTurn(
+        turn_id="conv_b",
+        speaker_model=ModelId.SONNET,
+        channel="converge",
+        content="aligned",
+    )
+    bad_elev = Elevation(claim_ids=("ghost",), converge_turn_ids=("conv_a", "conv_b"))
+    synthesis = SynthesisArtifact(
+        output="o",
+        claim_trace=(
+            ClaimTraceEntry(claim_id=opus_claim.claim_id, disposition="present"),
+            ClaimTraceEntry(claim_id=sonnet_claim.claim_id, disposition="present"),
+        ),
+        synthesis_rules_applied=(SynthesisRule.AGREEMENT_ELEVATION,),
+        elevations=(bad_elev,),
+    )
+    with pytest.raises(ValidationError, match="Elevation cites unknown claim_id"):
+        _build_minimal_session(phase_3=(converge_a, converge_b), phase_4=synthesis)
+
+
+def test_session_rejects_elevation_citing_non_converge_turn():
+    opus_claim = _phase1_claim(ModelId.OPUS, "opus claim")
+    sonnet_claim = _phase1_claim(ModelId.SONNET, "sonnet claim")
+    converge_turn = DialogueTurn(
+        turn_id="conv_a",
+        speaker_model=ModelId.OPUS,
+        channel="converge",
+        content="aligned",
+    )
+    augment_turn = DialogueTurn(
+        turn_id="aug_a",
+        speaker_model=ModelId.SONNET,
+        channel="augment",
+        content="adding",
+    )
+    bad_elev = Elevation(
+        claim_ids=(opus_claim.claim_id,),
+        converge_turn_ids=("conv_a", "aug_a"),
+    )
+    synthesis = SynthesisArtifact(
+        output="o",
+        claim_trace=(
+            ClaimTraceEntry(claim_id=opus_claim.claim_id, disposition="present"),
+            ClaimTraceEntry(claim_id=sonnet_claim.claim_id, disposition="present"),
+        ),
+        synthesis_rules_applied=(SynthesisRule.AGREEMENT_ELEVATION,),
+        elevations=(bad_elev,),
+    )
+    with pytest.raises(ValidationError, match="not a Phase 3 turn with channel='converge'"):
+        _build_minimal_session(phase_3=(converge_turn, augment_turn), phase_4=synthesis)
+
+
+def test_session_rejects_elevation_with_only_one_distinct_speaker():
+    """Self-elevation refusal: 2 converge turns from one speaker do NOT constitute
+    cross-model agreement. Invariant 1 (no authority gradient) at the synthesis layer."""
+    opus_claim = _phase1_claim(ModelId.OPUS, "opus claim")
+    sonnet_claim = _phase1_claim(ModelId.SONNET, "sonnet claim")
+    opus_conv_a = DialogueTurn(
+        turn_id="opus_conv_a",
+        speaker_model=ModelId.OPUS,
+        channel="converge",
+        content="i agree",
+    )
+    opus_conv_b = DialogueTurn(
+        turn_id="opus_conv_b",
+        speaker_model=ModelId.OPUS,
+        channel="converge",
+        content="and again",
+    )
+    bad_elev = Elevation(
+        claim_ids=(opus_claim.claim_id,),
+        converge_turn_ids=("opus_conv_a", "opus_conv_b"),
+    )
+    synthesis = SynthesisArtifact(
+        output="o",
+        claim_trace=(
+            ClaimTraceEntry(claim_id=opus_claim.claim_id, disposition="present"),
+            ClaimTraceEntry(claim_id=sonnet_claim.claim_id, disposition="present"),
+        ),
+        synthesis_rules_applied=(SynthesisRule.AGREEMENT_ELEVATION,),
+        elevations=(bad_elev,),
+    )
+    with pytest.raises(ValidationError, match="at least 2 distinct"):
+        _build_minimal_session(phase_3=(opus_conv_a, opus_conv_b), phase_4=synthesis)
+
+
+def test_session_accepts_well_formed_elevation_with_two_distinct_speakers():
+    opus_claim = _phase1_claim(ModelId.OPUS, "opus claim")
+    sonnet_claim = _phase1_claim(ModelId.SONNET, "sonnet claim")
+    converge_opus = DialogueTurn(
+        turn_id="conv_opus",
+        speaker_model=ModelId.OPUS,
+        channel="converge",
+        content="aligned",
+    )
+    converge_sonnet = DialogueTurn(
+        turn_id="conv_sonnet",
+        speaker_model=ModelId.SONNET,
+        channel="converge",
+        content="aligned",
+    )
+    elev = Elevation(
+        claim_ids=(opus_claim.claim_id,),
+        converge_turn_ids=("conv_opus", "conv_sonnet"),
+    )
+    synthesis = SynthesisArtifact(
+        output="o",
+        claim_trace=(
+            ClaimTraceEntry(claim_id=opus_claim.claim_id, disposition="present"),
+            ClaimTraceEntry(claim_id=sonnet_claim.claim_id, disposition="present"),
+        ),
+        synthesis_rules_applied=(
+            SynthesisRule.IRREDUCIBILITY_PRESERVATION,
+            SynthesisRule.AGREEMENT_ELEVATION,
+        ),
+        elevations=(elev,),
+    )
+    session = _build_minimal_session(
+        phase_3=(converge_opus, converge_sonnet), phase_4=synthesis
+    )
+    assert session.phase_4 is not None
+    assert len(session.phase_4.elevations) == 1
+
+
+# --- SurfacedDisagreement ------------------------------------------------
+
+
+def test_surfaced_disagreement_requires_at_least_two_claim_ids():
+    with pytest.raises(ValidationError, match="at least 2 claim_ids"):
+        SurfacedDisagreement(claim_ids=("c1",), note="conflict")
+
+
+def test_surfaced_disagreement_requires_non_empty_note():
+    with pytest.raises(ValidationError, match="note must be non-empty"):
+        SurfacedDisagreement(claim_ids=("c1", "c2"), note="   ")
+
+
+def test_session_rejects_surfaced_disagreement_citing_unknown_claim_id():
+    opus_claim = _phase1_claim(ModelId.OPUS, "opus claim")
+    sonnet_claim = _phase1_claim(ModelId.SONNET, "sonnet claim")
+    bad_sd = SurfacedDisagreement(
+        claim_ids=(opus_claim.claim_id, "ghost"),
+        note="conflict on framing",
+    )
+    synthesis = SynthesisArtifact(
+        output="o",
+        claim_trace=(
+            ClaimTraceEntry(claim_id=opus_claim.claim_id, disposition="present"),
+            ClaimTraceEntry(claim_id=sonnet_claim.claim_id, disposition="present"),
+        ),
+        synthesis_rules_applied=(SynthesisRule.DISAGREEMENT_SURFACING,),
+        surfaced_disagreements=(bad_sd,),
+    )
+    with pytest.raises(ValidationError, match="SurfacedDisagreement cites unknown claim_id"):
+        _build_minimal_session(phase_4=synthesis)
+
+
+def test_session_accepts_well_formed_surfaced_disagreement():
+    opus_claim = _phase1_claim(ModelId.OPUS, "opus claim")
+    sonnet_claim = _phase1_claim(ModelId.SONNET, "sonnet claim")
+    sd = SurfacedDisagreement(
+        claim_ids=(opus_claim.claim_id, sonnet_claim.claim_id),
+        note="opus and sonnet diverge on the LRU vs LFU question",
+    )
+    synthesis = SynthesisArtifact(
+        output="o",
+        claim_trace=(
+            ClaimTraceEntry(claim_id=opus_claim.claim_id, disposition="present"),
+            ClaimTraceEntry(claim_id=sonnet_claim.claim_id, disposition="present"),
+        ),
+        synthesis_rules_applied=(SynthesisRule.DISAGREEMENT_SURFACING,),
+        surfaced_disagreements=(sd,),
+    )
+    session = _build_minimal_session(phase_4=synthesis)
+    assert session.phase_4 is not None
+    assert len(session.phase_4.surfaced_disagreements) == 1
 
 
 # --- SessionMetrics -------------------------------------------------------

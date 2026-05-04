@@ -91,7 +91,7 @@ Models cannot use channels outside this set. The constraint is the feature.
 
 Synthesis is **rule-based, not model-based**. Running synthesis through a fourth model call would create authority gradient and break invariant 1. Rules:
 
-- Every distinct insight from Phase 1 is preserved or has a logged reason for omission (irreducibility preservation)
+- Every distinct Phase 1 claim (per the peer-utility test in the Phase 1 prompt) is preserved or has a logged reason for omission (irreducibility preservation)
 - Cross-model agreement (appearing in 2+ converge channels) is elevated
 - Productive disagreement (high-confidence conflict) is surfaced, not hidden
 - Output preserves attribution by default; user can request unified mode
