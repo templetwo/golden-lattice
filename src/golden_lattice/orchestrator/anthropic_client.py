@@ -25,6 +25,7 @@ from golden_lattice.exchange.phase_1_independent import (
     self_reflection_tool_schema,
 )
 from golden_lattice.exchange.phase_2_cross_reading import (
+    WireParseError,
     build_cross_reading_prompt,
     build_phase_2_tagging_prompt,
     cross_reading_tool_schema,
@@ -108,13 +109,18 @@ class AnthropicClient:
             ) from exc
         completed = datetime.now(timezone.utc)
         tool_input = _extract_tool_input(response, tool["name"])
-        return parse_phase_1_response_tool_use(
-            tool_input,
-            expected_model=model_id,
-            prompt_hash=prompt_hash,
-            generation_started_at=started,
-            generation_completed_at=completed,
-        )
+        try:
+            return parse_phase_1_response_tool_use(
+                tool_input,
+                expected_model=model_id,
+                prompt_hash=prompt_hash,
+                generation_started_at=started,
+                generation_completed_at=completed,
+            )
+        except WireParseError as exc:
+            raise WireParseError(
+                f"[model={model_id.value}, phase=phase_1] {exc}"
+            ) from exc
 
     async def submit_self_reflection(
         self,
@@ -141,12 +147,17 @@ class AnthropicClient:
             ) from exc
         tool_input = _extract_tool_input(response, tool["name"])
         own_claim_ids = {c.claim_id for c in phase_1_response.claims}
-        return parse_self_reflection_tool_use(
-            tool_input,
-            expected_model=model_id,
-            own_claim_ids=own_claim_ids,
-            generated_at=datetime.now(timezone.utc),
-        )
+        try:
+            return parse_self_reflection_tool_use(
+                tool_input,
+                expected_model=model_id,
+                own_claim_ids=own_claim_ids,
+                generated_at=datetime.now(timezone.utc),
+            )
+        except WireParseError as exc:
+            raise WireParseError(
+                f"[model={model_id.value}, phase=self_reflection] {exc}"
+            ) from exc
 
     # --- Phase 2 ---------------------------------------------------------
 
@@ -184,12 +195,18 @@ class AnthropicClient:
                 model=reader_model, phase="phase_2_cross_reading", underlying=exc
             ) from exc
         tool_input = _extract_tool_input(response, tool["name"])
-        return parse_cross_reading_tool_use(
-            tool_input,
-            expected_reader=reader_model,
-            expected_target=target_model,
-            valid_claim_ids=valid_claim_ids,
-        )
+        try:
+            return parse_cross_reading_tool_use(
+                tool_input,
+                expected_reader=reader_model,
+                expected_target=target_model,
+                valid_claim_ids=valid_claim_ids,
+            )
+        except WireParseError as exc:
+            raise WireParseError(
+                f"[reader={reader_model.value}, target={target_model.value}, "
+                f"phase=phase_2_cross_reading] {exc}"
+            ) from exc
 
     async def submit_phase_2_tagging(
         self,
@@ -221,11 +238,20 @@ class AnthropicClient:
                 model=tagger_model, phase="phase_2_tagging", underlying=exc
             ) from exc
         tool_input = _extract_tool_input(response, tool["name"])
-        return parse_phase_2_tagging_tool_use(
-            tool_input,
-            expected_tagger=tagger_model,
-            valid_claim_ids=valid_claim_ids,
-        )
+        try:
+            return parse_phase_2_tagging_tool_use(
+                tool_input,
+                expected_tagger=tagger_model,
+                valid_claim_ids=valid_claim_ids,
+            )
+        except WireParseError as exc:
+            # Re-raise with tagger_model context so failure analysis preserves
+            # which model produced the malformed emission. Without this wrap,
+            # the WireParseError surfaces from the parser without model
+            # attribution and the diagnostic data is lost.
+            raise WireParseError(
+                f"[tagger={tagger_model.value}, phase=phase_2_tagging] {exc}"
+            ) from exc
 
     # --- Phase 3 ---------------------------------------------------------
 
@@ -259,12 +285,17 @@ class AnthropicClient:
                 model=speaker_model, phase="phase_3", underlying=exc
             ) from exc
         tool_input = _extract_tool_input(response, tool["name"])
-        return parse_phase_3_dialogue_tool_use(
-            tool_input,
-            expected_speaker=speaker_model,
-            valid_claim_ids=valid_claim_ids,
-            turn_id_prefix=f"{speaker_model.value}_p3_",
-        )
+        try:
+            return parse_phase_3_dialogue_tool_use(
+                tool_input,
+                expected_speaker=speaker_model,
+                valid_claim_ids=valid_claim_ids,
+                turn_id_prefix=f"{speaker_model.value}_p3_",
+            )
+        except WireParseError as exc:
+            raise WireParseError(
+                f"[speaker={speaker_model.value}, phase=phase_3] {exc}"
+            ) from exc
 
 
 def _extract_tool_input(response: Any, tool_name: str) -> dict[str, Any]:

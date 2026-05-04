@@ -30,15 +30,18 @@ from golden_lattice.orchestrator import (
 )
 
 
-# Reflexive default — asks the lattice to audit itself. We have unique
-# calibration on this question from two days of building the substrate;
-# any output is interpretable against the patterns we already named.
+# Non-reflexive default for diagnostic purposes. The previous reflexive
+# default ("what failure modes would the substrate NOT catch?") triggered
+# wire-layer translation collapse on two consecutive runs (EdgeCaseTag
+# values misrouted into structural_pattern_tags). Switching to a
+# non-reflexive architectural question controls for prompt-reflexivity
+# as a variable: if this runs cleanly, the conflation was reflexive-
+# prompt-specific; if it fails the same way, the architecture has a
+# vocabulary problem that lives below the prompt revision layer.
 # Override at the command line if you want a different prompt.
 DEFAULT_PROMPT = (
-    "What are the most likely failure modes of Golden Lattice v0 — the "
-    "architecture as built — that the substrate's structural refusals would "
-    "NOT catch? Consider both technical failure modes and architectural "
-    "blind spots."
+    "What's the right default eviction policy for a session cache, and "
+    "why? Consider correctness, performance, and operator surprise."
 )
 
 
