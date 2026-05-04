@@ -89,6 +89,28 @@ def test_cross_reading_prompt_includes_self_reflection_when_provided():
     assert "strongest claim is X" in user
 
 
+def test_phase_2_tagging_prompt_uses_content_vs_form_routing_criterion():
+    """Empirically-driven revision: the first live run produced a translation
+    collapse where 'adversarial_input' (an EdgeCaseTag value) was emitted as
+    a structural_pattern_tag. The fix routes via content-vs-form: edge cases
+    concern what the claim is about; structural patterns concern how the claim
+    is organizing thought. A future contributor weakening this routing should
+    fail this test."""
+    own = (_phase1_claim(ModelId.HAIKU, "haiku alpha"),)
+    peer = (_phase1_claim(ModelId.OPUS, "opus alpha"),)
+    system, _ = build_phase_2_tagging_prompt(
+        tagger_model=ModelId.HAIKU,
+        original_prompt="p",
+        own_claims=own,
+        peer_claims=peer,
+    )
+    assert "claim content" in system
+    assert "claim form" in system
+    assert "what the claim is about" in system
+    assert "how the claim is organizing" in system
+    assert "Tag according to what the claim is, not how it sounds" in system
+
+
 def test_phase_2_tagging_prompt_lists_vocabularies_and_pins_version():
     own = (_phase1_claim(ModelId.HAIKU, "haiku alpha"),)
     peer = (_phase1_claim(ModelId.OPUS, "opus alpha"),)
