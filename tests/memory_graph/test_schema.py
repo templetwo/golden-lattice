@@ -17,6 +17,7 @@ from golden_lattice.memory_graph.schema import (
     FocusTag,
     IndependentResponse,
     ModelId,
+    OutputMode,
     Phase,
     SelfReflectionArtifact,
     Session,
@@ -742,6 +743,36 @@ def test_synthesis_with_complete_trace_is_allowed():
     session = _build_minimal_session(phase_4=synthesis)
     assert session.phase_4 is not None
     assert len(session.phase_4.claim_trace) == 2
+
+
+def test_synthesis_artifact_default_output_mode_is_annotated():
+    """Default mirrors ARCHITECTURE.md §7: 'Default: annotated. The annotation is the proof we did not flatten.'"""
+    art = SynthesisArtifact(
+        output="o",
+        claim_trace=(),
+        synthesis_rules_applied=(SynthesisRule.IRREDUCIBILITY_PRESERVATION,),
+    )
+    assert art.output_mode is OutputMode.ANNOTATED
+
+
+def test_synthesis_artifact_explicit_output_mode_preserved():
+    art = SynthesisArtifact(
+        output="o",
+        output_mode=OutputMode.UNIFIED,
+        claim_trace=(),
+        synthesis_rules_applied=(SynthesisRule.IRREDUCIBILITY_PRESERVATION,),
+    )
+    assert art.output_mode is OutputMode.UNIFIED
+
+
+def test_output_mode_rejects_unknown_value():
+    with pytest.raises(ValidationError):
+        SynthesisArtifact(
+            output="o",
+            output_mode="vibes",  # type: ignore[arg-type]
+            claim_trace=(),
+            synthesis_rules_applied=(SynthesisRule.IRREDUCIBILITY_PRESERVATION,),
+        )
 
 
 def test_synthesis_rules_applied_rejects_unknown_rule():

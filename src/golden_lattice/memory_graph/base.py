@@ -53,6 +53,23 @@ class SynthesisRule(str, Enum):
     ATTRIBUTION_PRESERVATION = "attribution_preservation"
 
 
+class OutputMode(str, Enum):
+    """Phase 4 output modes per ARCHITECTURE.md §7.
+
+    - unified: single voice, attribution stripped.
+    - layered: per-model sections.
+    - annotated: synthesis with inline [O], [S], [H] attribution. Default.
+    - transcript: full Phase 1-3 dialogue verbatim, no synthesis.
+
+    The annotation is the proof we did not flatten.
+    """
+
+    UNIFIED = "unified"
+    LAYERED = "layered"
+    ANNOTATED = "annotated"
+    TRANSCRIPT = "transcript"
+
+
 def claim_id_for(source_model: ModelId, source_phase: Phase, text: str) -> str:
     payload = f"{source_model.value}|{source_phase.value}|{text}".encode("utf-8")
     return hashlib.sha256(payload).hexdigest()[:16]

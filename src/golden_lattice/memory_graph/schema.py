@@ -20,6 +20,7 @@ from golden_lattice.memory_graph.base import (
     PARITY_THRESHOLD,
     FocusTag,
     ModelId,
+    OutputMode,
     Phase,
     SynthesisRule,
     claim_id_for,
@@ -30,6 +31,7 @@ __all__ = [
     "PARITY_THRESHOLD",
     "FocusTag",
     "ModelId",
+    "OutputMode",
     "Phase",
     "SynthesisRule",
     "claim_id_for",
@@ -379,6 +381,7 @@ class SynthesisArtifact(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     output: str
+    output_mode: OutputMode = OutputMode.ANNOTATED
     claim_trace: tuple[ClaimTraceEntry, ...]
     synthesis_rules_applied: tuple[SynthesisRule, ...]
     elevations: tuple[Elevation, ...] = ()
