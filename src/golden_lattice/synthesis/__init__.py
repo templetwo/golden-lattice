@@ -10,6 +10,14 @@ Future:
   - compute_surfaced_disagreements   — Rule 3 (disagreement surfacing)
   - render_output                    — Rule 4 (output mode rendering)
   - synthesize                       — engine composition entry point
+
+STAGING NOTE.
+Rules currently compose independently. v0 synthesis is correct but
+conservative — disposition decisions in Rule 1 do not yet consume
+elevation or disagreement results from Rules 2 and 3. v1 introduces
+feedback between rules once all four are operational. Independent rules
+first, composition second. The chronicle has the reasoning at hypothesis
+layer.
 """
 
 from golden_lattice.synthesis.claim_trace import (

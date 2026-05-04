@@ -27,6 +27,7 @@ from golden_lattice.memory_graph.schema import (
     Claim,
     ClaimRef,
     CrossReading,
+    Disagreement,
     IndependentResponse,
     SelfReflectionArtifact,
     Session,
@@ -191,6 +192,46 @@ def test_low_confidence_isolated_does_not_omit_when_peer_corroborates():
     assert by_id[o2.claim_id].disposition == "present"
 
 
+def test_low_confidence_isolated_does_not_omit_when_peer_disagrees():
+    """Engagement-as-corroboration: a peer that disagreed with the claim
+    is still engaging with it. Disagreement is what the Lattice exists to
+    surface; treating it as equivalent to silence would let alignment-collapse
+    patterns inflate omission rates against the consistently-dissented-with peer."""
+    o1 = _claim(ModelId.OPUS, "opus strong")
+    o2 = _claim(ModelId.OPUS, "opus weak")
+    reflection = SelfReflectionArtifact(
+        model_id=ModelId.OPUS,
+        generated_at=NOW,
+        strongest_claim_id=o1.claim_id,
+        weakest_claim_id=o2.claim_id,
+        tag_justification="j",
+    )
+    s1 = _claim(ModelId.SONNET, "sonnet a")
+    # Sonnet reads Opus and *disagrees* with claim o2 (no agreement).
+    sonnet_reads_opus = CrossReading(
+        reader_model=ModelId.SONNET,
+        target_model=ModelId.OPUS,
+        agreements=(ClaimRef(claim_id=o1.claim_id),),
+        disagreements=(
+            Disagreement(target_claim_id=o2.claim_id, reason="i think this is wrong"),
+        ),
+    )
+    session = _build_dyad_session(
+        (o1, o2),
+        (s1,),
+        opus_response_kwargs={
+            "confidence": 0.4,
+            "self_reflection_artifacts": (reflection,),
+        },
+        phase_2=(sonnet_reads_opus,),
+    )
+    trace = build_claim_trace(session)
+    by_id = {e.claim_id: e for e in trace}
+    # o2 was self-flagged weakest, but Sonnet engaged with it via disagreement.
+    # Engagement is corroboration — claim stays present, not omitted.
+    assert by_id[o2.claim_id].disposition == "present"
+
+
 def test_low_confidence_isolated_does_not_fire_without_self_reflection():
     """No self-reflection artifact means no weakest_claim flagging — claim stays present."""
     o1 = _claim(ModelId.OPUS, "opus a")
@@ -341,10 +382,10 @@ def test_build_claim_trace_does_not_mutate_session():
 # --- Trace-as-irreducibility-preservation property ------------------------
 
 
-def test_trace_satisfies_substrate_irreducibility_validator():
-    """The positive case for the substrate's negative refusal: a trace produced
-    by build_claim_trace, when folded into a Session as Phase 4, passes the
-    _synthesis_traces_every_phase_1_claim validator."""
+def test_trace_passes_substrate_irreducibility_refusal_when_folded_into_session():
+    """Closure test: trace flows through into a substrate-validated SynthesisArtifact
+    and a complete Session containing it. Positive case for the substrate's negative
+    refusal at _synthesis_traces_every_phase_1_claim. End-to-end."""
     from golden_lattice.memory_graph.base import SynthesisRule
     from golden_lattice.memory_graph.schema import SynthesisArtifact
 
@@ -366,3 +407,59 @@ def test_trace_satisfies_substrate_irreducibility_validator():
         phase_4=synthesis,
     )
     assert full_session.phase_4 is synthesis
+    # Trace is preserved through Session construction.
+    assert full_session.phase_4.claim_trace == trace
+    # Every Phase 1 claim has a trace entry in the folded session.
+    phase_1_claim_ids = {
+        c.claim_id for r in full_session.phase_1.values() for c in r.claims
+    }
+    traced_ids = {e.claim_id for e in full_session.phase_4.claim_trace}
+    assert phase_1_claim_ids == traced_ids
+
+
+def test_trace_with_omissions_passes_substrate_irreducibility_refusal_when_folded():
+    """Partial-omission variant of the closure test: trace with a mix of present
+    and omitted dispositions still satisfies the substrate's totality requirement."""
+    from golden_lattice.memory_graph.base import SynthesisRule
+    from golden_lattice.memory_graph.schema import SynthesisArtifact
+
+    o1 = _claim(ModelId.OPUS, "strong")
+    o2 = _claim(ModelId.OPUS, "weak")
+    reflection = SelfReflectionArtifact(
+        model_id=ModelId.OPUS,
+        generated_at=NOW,
+        strongest_claim_id=o1.claim_id,
+        weakest_claim_id=o2.claim_id,
+        tag_justification="j",
+    )
+    s1 = _claim(ModelId.SONNET, "sonnet a")
+    session = _build_dyad_session(
+        (o1, o2),
+        (s1,),
+        opus_response_kwargs={
+            "confidence": 0.3,
+            "self_reflection_artifacts": (reflection,),
+        },
+    )
+    trace = build_claim_trace(session)
+    # Mixed dispositions: o1 present, o2 omitted, s1 present.
+    dispositions = {e.claim_id: e.disposition for e in trace}
+    assert dispositions[o1.claim_id] == "present"
+    assert dispositions[o2.claim_id] == "omitted"
+    assert dispositions[s1.claim_id] == "present"
+
+    synthesis = SynthesisArtifact(
+        output="o",
+        claim_trace=trace,
+        synthesis_rules_applied=(SynthesisRule.IRREDUCIBILITY_PRESERVATION,),
+    )
+    full_session = Session(
+        session_id=session.session_id,
+        prompt=session.prompt,
+        prompt_hash=session.prompt_hash,
+        models_invited=session.models_invited,
+        phase_1=session.phase_1,
+        phase_4=synthesis,
+    )
+    # Mixed-disposition trace still satisfies substrate's totality validator.
+    assert full_session.phase_4.claim_trace == trace

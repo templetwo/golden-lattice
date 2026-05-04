@@ -41,6 +41,22 @@ Open thread on the chronicle (2026-05-03): should the omission_reason
 vocabulary be lifted from engine convention to substrate enum? Defer until
 the v0 vocabulary stabilizes against real session data.
 
+V0 STAGING — what's deliberately deferred:
+
+The heuristic considers Phase 2 cross-reading engagement (both agreements
+AND disagreements as corroboration of relevance). Phase 3 critique-target
+signals are NOT yet consumed; a claim critiqued in Phase 3 is also being
+engaged with, but Rule 1 v0 does not look at phase_3. v1 will expand once
+Rules 2 (elevation) and 3 (disagreement-surfacing) produce outputs that
+feed back into disposition decisions. Rule 1 in isolation deliberately
+stays conservative — independent rules first, composition second.
+
+Engagement-as-corroboration: a claim is "isolated" iff no peer references
+it in EITHER agreements OR disagreements during Phase 2. Disagreement is
+engagement; treating disagreement as equivalent to silence would collapse
+two structurally different signals into one and risk Pattern 5 (alignment
+collapse) sneaking in via the omission heuristic.
+
 Shape A factoring: build_claim_trace is a planning function. It decides
 dispositions but does not produce prose. Prose generation is Rule 4's
 concern (attribution.py). Each disposition decision is a structured artifact
@@ -80,6 +96,11 @@ def build_claim_trace(session: Session) -> tuple[ClaimTraceEntry, ...]:
     insertion order.
     """
     entries: list[ClaimTraceEntry] = []
+    # Sort by model.value for deterministic trace ordering. dict.keys()
+    # iteration is insertion-preserving in Python 3.7+, but Session
+    # construction order is caller-dependent and would make trace ordering
+    # coupled to caller behavior. Sorting decouples trace ordering from
+    # construction order.
     sorted_models = sorted(session.phase_1.keys(), key=lambda m: m.value)
     for model in sorted_models:
         response = session.phase_1[model]
@@ -106,7 +127,13 @@ def build_claim_trace(session: Session) -> tuple[ClaimTraceEntry, ...]:
 
 def _is_low_confidence_isolated(session: Session, claim_id: str) -> bool:
     """True iff the claim is the author's self-flagged weakest AND no peer
-    corroborated it via CrossReading agreement."""
+    engaged with it via CrossReading agreement OR disagreement.
+
+    Engagement-as-corroboration: a peer that disagreed with the claim is also
+    corroborating its relevance. Treating disagreement as silence would let
+    alignment-collapse patterns silently inflate omission rates against the
+    consistently-dissented-with peer.
+    """
     # Find author by scanning phase_1 responses.
     author = None
     for model, response in session.phase_1.items():
@@ -127,11 +154,15 @@ def _is_low_confidence_isolated(session: Session, claim_id: str) -> bool:
     if not flagged_weakest:
         return False
 
-    # Peer corroboration: any CrossReading whose target_model == author and
-    # whose agreements contain this claim_id counts as corroboration.
+    # Peer engagement: any CrossReading whose target_model == author and
+    # whose agreements OR disagreements reference this claim_id corroborates
+    # the claim's relevance.
     for cr in session.phase_2:
         if cr.target_model is author:
             for ref in cr.agreements:
                 if ref.claim_id == claim_id:
-                    return False  # corroborated; not isolated.
+                    return False  # agreed-with; not isolated.
+            for d in cr.disagreements:
+                if d.target_claim_id == claim_id:
+                    return False  # disagreed-with is still engaged; not isolated.
     return True
