@@ -20,6 +20,7 @@ first, composition second. The chronicle has the reasoning at hypothesis
 layer.
 """
 
+from golden_lattice.synthesis.attribution import render_output
 from golden_lattice.synthesis.claim_trace import (
     OMISSION_REASON_PREFIXES,
     build_claim_trace,
@@ -37,5 +38,6 @@ __all__ = [
     "build_claim_trace",
     "compute_elevations",
     "compute_surfaced_disagreements",
+    "render_output",
     "validate_session_for_synthesis",
 ]
