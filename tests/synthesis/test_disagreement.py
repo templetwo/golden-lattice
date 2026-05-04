@@ -419,6 +419,21 @@ def test_surfaced_disagreements_flow_through_substrate_validators_when_folded_in
 # --- v0 staging-artifact test --------------------------------------------
 
 
+def test_phase_1_confidence_for_claim_raises_on_non_phase_1_claim():
+    """Defensive helper: confidence semantics for Phase 2 missing claims are an
+    open v1 architectural decision. v0 raises NotImplementedError so the
+    deferral is structural, not implicit."""
+    from golden_lattice.synthesis.disagreement import _phase_1_confidence_for_claim
+
+    claims = _triad_claims()
+    session = _triad_session_with(claims)
+    # Real Phase 1 claim: returns confidence.
+    assert _phase_1_confidence_for_claim(session, claims[ModelId.OPUS][0].claim_id) == 0.8
+    # Unknown claim_id (could be a Phase 2 missing claim or just a ghost): raises.
+    with pytest.raises(NotImplementedError, match="open v1 architectural"):
+        _phase_1_confidence_for_claim(session, "not_a_phase_1_claim_id")
+
+
 def test_v0_staging_artifact_claim_in_disagreement_may_also_be_omitted_or_elevated():
     """Documented v0 inconsistency: a claim involved in a SurfacedDisagreement
     is not yet visible to Rule 1 (could still be marked omitted) or Rule 2

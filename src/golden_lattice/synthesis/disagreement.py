@@ -9,7 +9,7 @@ disagreements_resolve_claim_ids and the SurfacedDisagreement constructor's
 ENGINE-AUTHORED DEFINITION OF "PRODUCTIVE" (v0):
 
 The spec uses "productive" without defining. Engine convention narrows the
-term to a three-component definition:
+term to a four-component definition:
 
   1. Both-sides high confidence — both the disagreeing peer and the
      disagreed-with claim's author have Phase 1 confidence >= threshold.
@@ -23,6 +23,14 @@ term to a three-component definition:
   3. Currency — the disagreement is from Phase 2 cross-reading or Phase 3
      critique, both of which are direct disagreement signals from the
      current session.
+
+  4. Channel restriction — productive disagreement sources only from
+     Phase 3 critique turns, not augment or converge. Critique is
+     spec-defined as "what's weak in others' positions" (§5). Augment
+     ("what to add") and converge ("where alignment exists") are not
+     disagreement channels even when augment implies a gap. Rule 3 honors
+     the spec's channel semantics rather than inferring disagreement
+     across channels.
 
 Each component is a deliberate narrowing. Future review may revise.
 
@@ -133,19 +141,34 @@ def compute_surfaced_disagreements(
     )
 
 
-def _phase_1_confidence_for_claim(session: Session, claim_id: str) -> Optional[float]:
+def _phase_1_confidence_for_claim(session: Session, claim_id: str) -> float:
     """Look up the Phase 1 confidence value for the model that authored this claim.
 
-    Returns None if the claim_id is not found in any Phase 1 response — this
-    can happen for Phase 2 missing claims, which have source_phase=CROSS_READING
-    and don't carry Phase 1 confidence. The caller should treat None as
-    'not eligible for confidence-threshold gating'.
+    Raises NotImplementedError for claims not found in any Phase 1 response —
+    e.g., Phase 2 missing claims, which have source_phase=CROSS_READING and
+    no associated IndependentResponse. Determining confidence semantics for
+    non-Phase-1 claims is a forward-looking v1 architectural decision and
+    should not be silently defaulted.
+
+    Open question for v1: do Phase 2 missing claims have confidence at all?
+    Candidates if we decide they do:
+      - Inherit the reader's Phase 1 confidence (the model surfacing the gap).
+      - Use a sentinel value (e.g., 0.5 = neutral) and document the choice.
+      - Make confidence optional on missing claims and have downstream rules
+        decide whether to gate or pass them through.
+
+    For v0, this helper raises so the deferral is structural, not implicit.
     """
-    for model, response in session.phase_1.items():
+    for response in session.phase_1.values():
         for claim in response.claims:
             if claim.claim_id == claim_id:
                 return response.confidence
-    return None
+    raise NotImplementedError(
+        f"_phase_1_confidence_for_claim called on claim_id {claim_id!r} which "
+        "is not a Phase 1 claim. Confidence semantics for Phase 2 missing "
+        "claims (source_phase=CROSS_READING) are an open v1 architectural "
+        "decision. v0 only operates on Phase 1 claims."
+    )
 
 
 def _phase_1_confidence_for_model(session: Session, model: ModelId) -> Optional[float]:
