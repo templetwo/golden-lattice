@@ -165,9 +165,14 @@ def main() -> int:
             print(f"      note: {sd.note}")
 
     # Parity metrics — the load-bearing measurement from spec §5.4.
+    # Uses the substrate's PARITY_THRESHOLD (default 0.15), NOT the
+    # config's confidence_threshold (0.7) — those are two different concepts.
+    # confidence_threshold gates which Phase 2/3 disagreements get surfaced;
+    # PARITY_THRESHOLD flags per-model contribution shares below the floor.
     print()
     _phase_banner("PARITY METRICS (spec §5.4)")
-    metrics = compute_parity_shares(session, threshold=config.confidence_threshold)
+    from golden_lattice.memory_graph.base import PARITY_THRESHOLD
+    metrics = compute_parity_shares(session, threshold=PARITY_THRESHOLD)
     if metrics is None:
         print("  (Parity metrics undefined — fewer than 3 invited models.)")
     else:
