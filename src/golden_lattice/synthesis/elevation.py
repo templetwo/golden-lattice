@@ -64,7 +64,17 @@ def compute_elevations(session: Session) -> tuple[Elevation, ...]:
       3. For each group with at least 2 distinct speaker_models, emit one
          Elevation citing all the group's converge_turn_ids and the union
          of their claim_ids.
-      4. Sort emitted Elevations by min(converge_turn_ids) for determinism.
+      4. Sort emitted Elevations by (min(converge_turn_ids), claim_ids) for
+         determinism — see comment at the sort site.
+
+    Note on target_model: target_model on a converge turn is informational
+    for elevation purposes. Convergence is recognition of shared claims,
+    not pairwise acknowledgment. Two speakers converging on the same
+    claim_ids constitute cross-model agreement regardless of which peer
+    each names as target_model. The substrate enforces target_model !=
+    speaker_model and target_model required when target_claim_ids is
+    non-empty; Rule 2 grouping is driven by speaker_model and claim_ids
+    only.
 
     Returns elevations in deterministic order.
     """
@@ -94,9 +104,14 @@ def compute_elevations(session: Session) -> tuple[Elevation, ...]:
             )
         )
 
-    # Stable order across runs.
+    # Sort with a secondary key on claim_ids: turn_ids are unique under valid
+    # Session construction so primary key alone suffices today, but secondary
+    # is defensive — if a future caller constructs Elevations with overlapping
+    # turn_id sets, the spec-determined claim_ids tiebreaker keeps ordering
+    # deterministic without relying on Python sort-stability + input-order
+    # implementation details.
     return tuple(
-        sorted(elevations, key=lambda e: min(e.converge_turn_ids))
+        sorted(elevations, key=lambda e: (min(e.converge_turn_ids), e.claim_ids))
     )
 
 

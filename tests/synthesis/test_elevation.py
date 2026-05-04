@@ -282,6 +282,96 @@ def test_compute_elevations_independent_of_build_claim_trace():
 # --- Substrate-refusal closure --------------------------------------------
 
 
+def test_v0_staging_artifact_claim_can_be_both_omitted_by_rule_1_and_elevated_by_rule_2():
+    """Documented v0 inconsistency: Rule 1's omission heuristic doesn't yet consume
+    Rule 2's output. The same claim CAN appear as omitted (low_confidence_isolated)
+    in claim_trace AND as part of an Elevation in elevations.
+
+    This is structural in v0 because rules compose independently. v1 composition
+    will resolve the inconsistency (a claim part of an Elevation should not be
+    marked low_confidence_isolated — engagement-as-corroboration extends to
+    elevation participation).
+
+    The test exists as a marker so v1 has to acknowledge it's fixing a known
+    state rather than silently changing behavior. Documented exceptions are
+    different from undocumented bugs.
+    """
+    from golden_lattice.memory_graph.schema import (
+        Claim,
+        IndependentResponse,
+        SelfReflectionArtifact,
+    )
+    from golden_lattice.synthesis.claim_trace import build_claim_trace
+
+    # Build a claim that will be:
+    #   - flagged as low-confidence-isolated by Rule 1 (author's weakest, no peer
+    #     agreement, no peer disagreement either — fully unengaged via Phase 2)
+    #   - elevated by Rule 2 via Phase 3 converge turns from 2 distinct peers
+    o_strong = _claim(ModelId.OPUS, "opus strong claim")
+    o_weak_but_elevated = _claim(ModelId.OPUS, "opus weak claim that gets elevated")
+    s1 = _claim(ModelId.SONNET, "sonnet alpha")
+    h1 = _claim(ModelId.HAIKU, "haiku alpha")
+    opus_reflection = SelfReflectionArtifact(
+        model_id=ModelId.OPUS,
+        generated_at=NOW,
+        strongest_claim_id=o_strong.claim_id,
+        weakest_claim_id=o_weak_but_elevated.claim_id,
+        tag_justification="opus strong is strongest; weak is weakest",
+    )
+
+    # Phase 3: Sonnet and Haiku both converge on Opus's weak claim.
+    sonnet_converge = _converge(
+        "c_s", ModelId.SONNET, (o_weak_but_elevated.claim_id,), target_model=ModelId.OPUS
+    )
+    haiku_converge = _converge(
+        "c_h", ModelId.HAIKU, (o_weak_but_elevated.claim_id,), target_model=ModelId.OPUS
+    )
+
+    session = Session(
+        session_id="t",
+        prompt="p",
+        prompt_hash="h",
+        models_invited=(ModelId.OPUS, ModelId.SONNET, ModelId.HAIKU),
+        phase_1={
+            ModelId.OPUS: IndependentResponse(
+                model_id=ModelId.OPUS,
+                prompt_hash="h",
+                response="r",
+                focus_tag=FocusTag.CORRECTNESS,
+                confidence=0.3,
+                claims=(o_strong, o_weak_but_elevated),
+                self_reflection_artifacts=(opus_reflection,),
+                generation_started_at=NOW,
+                generation_completed_at=NOW,
+            ),
+            ModelId.SONNET: _response(ModelId.SONNET, (s1,)),
+            ModelId.HAIKU: _response(ModelId.HAIKU, (h1,)),
+        },
+        # Phase 2 deliberately empty — no peer engagement via cross-reading on
+        # o_weak_but_elevated. Phase 3 converge is the only engagement signal,
+        # and v0 Rule 1 doesn't consume Phase 3.
+        phase_3=(sonnet_converge, haiku_converge),
+    )
+
+    trace = build_claim_trace(session)
+    elevations = compute_elevations(session)
+
+    # Rule 1 (v0): the weak claim has no Phase 2 engagement → marked omitted.
+    by_id = {e.claim_id: e for e in trace}
+    assert by_id[o_weak_but_elevated.claim_id].disposition == "omitted"
+    assert by_id[o_weak_but_elevated.claim_id].omission_reason.startswith(
+        "low_confidence_isolated:"
+    )
+
+    # Rule 2 (v0): the same claim has 2-distinct-speaker converge agreement → elevated.
+    assert len(elevations) == 1
+    assert o_weak_but_elevated.claim_id in elevations[0].claim_ids
+
+    # The inconsistency: same claim is both "omitted-because-isolated" AND
+    # "elevated-because-cross-model-agreement" within the same v0 synthesis.
+    # v1 composition resolves this. v0 documents it.
+
+
 def test_elevations_flow_through_substrate_validators_when_folded_into_session():
     """Closure: an Elevation produced by compute_elevations satisfies
     Session._synthesis_elevations_well_formed when folded into a SynthesisArtifact
