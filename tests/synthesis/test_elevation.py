@@ -181,6 +181,45 @@ def test_single_converge_turn_does_not_produce_elevation():
     assert compute_elevations(session) == ()
 
 
+def test_mixed_batch_anchored_and_general_converges_only_anchored_contribute():
+    """Live-data shape: a Phase 3 with both anchored and general converges
+    produces elevations only from the anchored subset. General converges
+    remain in phase_3 as dialogue and do not pollute the elevation set.
+
+    Pins the v0 staging boundary under realistic mixed conditions — the shape
+    real models will produce after the converge-channel prompt revision invites
+    two-form self-classification (claim-specific vs general). If this test
+    fails after a future change, the v0 staging boundary has been crossed and
+    the change must be deliberate, not accidental.
+    """
+    _, claims = _triad_session()
+    opus_id = claims[ModelId.OPUS].claim_id
+
+    # Anchored: Sonnet and Haiku both converge on Opus's claim.
+    sonnet_anchored = _converge(
+        "c_s_anchored", ModelId.SONNET, (opus_id,), target_model=ModelId.OPUS
+    )
+    haiku_anchored = _converge(
+        "c_h_anchored", ModelId.HAIKU, (opus_id,), target_model=ModelId.OPUS
+    )
+    # General: same speakers also emit untargeted-general converges in the
+    # same Phase 3 (substrate cap is 3 aggregate per speaker; 2 each is fine).
+    sonnet_general = _converge("c_s_general", ModelId.SONNET)
+    haiku_general = _converge("c_h_general", ModelId.HAIKU)
+
+    session, _ = _triad_session(
+        phase_3=(sonnet_anchored, sonnet_general, haiku_anchored, haiku_general)
+    )
+    elevations = compute_elevations(session)
+
+    assert len(elevations) == 1
+    elev = elevations[0]
+    assert opus_id in elev.claim_ids
+    assert set(elev.converge_turn_ids) == {"c_s_anchored", "c_h_anchored"}
+    assert "c_s_general" not in elev.converge_turn_ids
+    assert "c_h_general" not in elev.converge_turn_ids
+
+
 def test_non_converge_channels_are_not_consumed():
     """Critique and augment turns are not converge — even if they target the same claim."""
     _, claims = _triad_session()

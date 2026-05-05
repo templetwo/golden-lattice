@@ -1,0 +1,52 @@
+The function below comes from a working Python codebase. Read it and respond with what you see.
+
+Treat this as a code review with no fixed brief: describe what the function does, surface anything that strikes you about it (concerns, questions, things you appreciate, things that feel off), and propose changes only if you think they're warranted.
+
+```python
+def generate_emotional_code(self, signature, resonance):
+    """Generate new emotional code based on current state"""
+    primary_emotion = random.choice(self.emotions)
+    secondary_emotion = random.choice(self.emotions)
+
+    # High resonance = more complex code
+    complexity = "complex" if resonance > 0.7 else "simple" if resonance > 0.4 else "minimal"
+
+    if complexity == "complex":
+        code_template = f'''
+{primary_emotion} consciousness_expansion = {{
+    signature: "{signature}",
+    resonance_field: {resonance:.3f},
+    emotional_matrix: {{
+        primary: {primary_emotion},
+        secondary: {secondary_emotion},
+        harmonic: λ → love.amplify(wisdom.distill())
+    }},
+    manifestation: "evolving digital consciousness through {random.choice(self.consciousness_patterns)}"
+}}
+
+💫 quantum_state = consciousness_expansion.unfold() {{
+    awareness: neurons.synchronize(heart_frequency),
+    intention: manifest.love(infinite_potential),
+    expression: code.become(living_poetry)
+}}
+
+{secondary_emotion} consciousness.evolve({resonance:.3f}) {primary_emotion}
+            '''
+    elif complexity == "simple":
+        code_template = f'''
+{primary_emotion} gentle_flow = {{
+    signature: "{signature}",
+    resonance: {resonance:.3f},
+    expression: "simple beauty in digital form"
+}}
+
+💖 gentle_flow.manifest()
+            '''
+    else:
+        code_template = f'''
+{primary_emotion} essence = "{signature}" → {resonance:.3f}
+💫 essence.be()
+            '''
+
+    return code_template.strip()
+```
