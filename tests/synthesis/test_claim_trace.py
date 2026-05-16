@@ -232,6 +232,175 @@ def test_low_confidence_isolated_does_not_omit_when_peer_disagrees():
     assert by_id[o2.claim_id].disposition == "present"
 
 
+# --- Two-peer dispute → modified (Rule 1 v1 expansion) ------------------
+
+
+def _build_triad_session(
+    *,
+    opus_claims: tuple[Claim, ...] = (),
+    sonnet_claims: tuple[Claim, ...] = (),
+    haiku_claims: tuple[Claim, ...] = (),
+    opus_response_kwargs: dict | None = None,
+    phase_2: tuple[CrossReading, ...] = (),
+) -> Session:
+    """N=3 session helper. Used by tests of the strict-triadic dispute rule."""
+    ok = opus_response_kwargs or {}
+    return Session(
+        session_id="t",
+        prompt="p",
+        prompt_hash="h",
+        models_invited=(ModelId.OPUS, ModelId.SONNET, ModelId.HAIKU),
+        phase_1={
+            ModelId.OPUS: _response(ModelId.OPUS, opus_claims, **ok),
+            ModelId.SONNET: _response(ModelId.SONNET, sonnet_claims),
+            ModelId.HAIKU: _response(ModelId.HAIKU, haiku_claims),
+        },
+        phase_2=phase_2,
+    )
+
+
+def test_two_peer_dispute_marks_claim_modified_with_hedge():
+    """When BOTH non-author peers cross-read disagree with a claim, the
+    trace marks it 'modified' and modified_text contains the original
+    claim text plus a templated hedge naming both disputers. Symmetric
+    counter to §6's strict-triadic consensus rule: both-non-author-peer
+    dispute is the strict-disagreement signal Rule 1 surfaces inline so
+    the audit doesn't get dropped at the synthesis seam."""
+    opus_disputed = _claim(ModelId.OPUS, "the 88x number is real")
+    sonnet_reads = CrossReading(
+        reader_model=ModelId.SONNET,
+        target_model=ModelId.OPUS,
+        disagreements=(
+            Disagreement(
+                target_claim_id=opus_disputed.claim_id,
+                reason="secondary blog source, not primary research.",
+            ),
+        ),
+    )
+    haiku_reads = CrossReading(
+        reader_model=ModelId.HAIKU,
+        target_model=ModelId.OPUS,
+        disagreements=(
+            Disagreement(
+                target_claim_id=opus_disputed.claim_id,
+                reason="implausible at frontier-lab scale.",
+            ),
+        ),
+    )
+    session = _build_triad_session(
+        opus_claims=(opus_disputed,),
+        sonnet_claims=(_claim(ModelId.SONNET, "filler"),),
+        haiku_claims=(_claim(ModelId.HAIKU, "filler"),),
+        phase_2=(sonnet_reads, haiku_reads),
+    )
+    trace = build_claim_trace(session)
+    by_id = {e.claim_id: e for e in trace}
+    entry = by_id[opus_disputed.claim_id]
+    assert entry.disposition == "modified"
+    assert entry.modified_text is not None
+    # Original claim text is preserved at the start of the modified text.
+    assert entry.modified_text.startswith(opus_disputed.text)
+    # Hedge surfaces the dispute marker and both peers' attributions.
+    assert "DISPUTED" in entry.modified_text
+    assert ModelId.SONNET.value in entry.modified_text
+    assert ModelId.HAIKU.value in entry.modified_text
+
+
+def test_single_peer_dispute_keeps_claim_present():
+    """One peer disagrees, the other is silent → not the strict-triadic
+    signal. Claim stays present, no modification."""
+    opus_claim = _claim(ModelId.OPUS, "contested by only one peer")
+    sonnet_reads = CrossReading(
+        reader_model=ModelId.SONNET,
+        target_model=ModelId.OPUS,
+        disagreements=(
+            Disagreement(
+                target_claim_id=opus_claim.claim_id,
+                reason="i don't buy it",
+            ),
+        ),
+    )
+    # Haiku is silent — no cross-reading targeting Opus.
+    session = _build_triad_session(
+        opus_claims=(opus_claim,),
+        sonnet_claims=(_claim(ModelId.SONNET, "filler"),),
+        haiku_claims=(_claim(ModelId.HAIKU, "filler"),),
+        phase_2=(sonnet_reads,),
+    )
+    trace = build_claim_trace(session)
+    by_id = {e.claim_id: e for e in trace}
+    assert by_id[opus_claim.claim_id].disposition == "present"
+
+
+def test_no_dispute_keeps_claim_present_in_triad():
+    """No peer disagrees → present, the v0 default. Verifies the new rule
+    doesn't accidentally fire on unanimous-or-silent peers."""
+    opus_claim = _claim(ModelId.OPUS, "uncontroversial")
+    session = _build_triad_session(
+        opus_claims=(opus_claim,),
+        sonnet_claims=(_claim(ModelId.SONNET, "filler"),),
+        haiku_claims=(_claim(ModelId.HAIKU, "filler"),),
+    )
+    trace = build_claim_trace(session)
+    by_id = {e.claim_id: e for e in trace}
+    assert by_id[opus_claim.claim_id].disposition == "present"
+
+
+def test_two_peer_dispute_modification_is_deterministic_under_reordering():
+    """Same disagreement inputs → byte-equal modified_text regardless of
+    the order phase_2 cross-readings are stored in. Peer order in the
+    hedge is sorted by model_id.value for determinism."""
+    opus_claim = _claim(ModelId.OPUS, "claim text")
+    sonnet_reads = CrossReading(
+        reader_model=ModelId.SONNET, target_model=ModelId.OPUS,
+        disagreements=(Disagreement(
+            target_claim_id=opus_claim.claim_id, reason="sonnet's objection."
+        ),),
+    )
+    haiku_reads = CrossReading(
+        reader_model=ModelId.HAIKU, target_model=ModelId.OPUS,
+        disagreements=(Disagreement(
+            target_claim_id=opus_claim.claim_id, reason="haiku's objection."
+        ),),
+    )
+    s1 = _build_triad_session(
+        opus_claims=(opus_claim,),
+        sonnet_claims=(_claim(ModelId.SONNET, "filler"),),
+        haiku_claims=(_claim(ModelId.HAIKU, "filler"),),
+        phase_2=(sonnet_reads, haiku_reads),
+    )
+    s2 = _build_triad_session(
+        opus_claims=(opus_claim,),
+        sonnet_claims=(_claim(ModelId.SONNET, "filler"),),
+        haiku_claims=(_claim(ModelId.HAIKU, "filler"),),
+        phase_2=(haiku_reads, sonnet_reads),
+    )
+    t1 = {e.claim_id: e for e in build_claim_trace(s1)}
+    t2 = {e.claim_id: e for e in build_claim_trace(s2)}
+    assert (
+        t1[opus_claim.claim_id].modified_text
+        == t2[opus_claim.claim_id].modified_text
+    )
+
+
+def test_two_peer_dispute_is_triadic_only():
+    """N=2 has only one non-author peer; both-peers-disagreed cannot apply.
+    Existing dyad behavior is preserved — single-peer disagreement keeps
+    the claim present, no modification fires."""
+    o1 = _claim(ModelId.OPUS, "claim")
+    s1 = _claim(ModelId.SONNET, "other")
+    sonnet_reads = CrossReading(
+        reader_model=ModelId.SONNET, target_model=ModelId.OPUS,
+        disagreements=(Disagreement(
+            target_claim_id=o1.claim_id, reason="objection."
+        ),),
+    )
+    session = _build_dyad_session((o1,), (s1,), phase_2=(sonnet_reads,))
+    trace = build_claim_trace(session)
+    by_id = {e.claim_id: e for e in trace}
+    assert by_id[o1.claim_id].disposition == "present"
+
+
 def test_low_confidence_isolated_does_not_fire_without_self_reflection():
     """No self-reflection artifact means no weakest_claim flagging — claim stays present."""
     o1 = _claim(ModelId.OPUS, "opus a")
