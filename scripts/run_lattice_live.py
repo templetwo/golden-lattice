@@ -37,6 +37,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 from rich.console import Console
 from rich.live import Live
 
+from golden_lattice.exchange.tavily_search_client import TavilySearchClient
 from golden_lattice.memory_graph.store import JsonFileSessionStore
 from golden_lattice.orchestrator import (
     AnthropicClient,
@@ -130,6 +131,41 @@ def main(argv: list[str] | None = None) -> int:
     )
     client = AnthropicClient(api_key=api_key)
 
+    # --- Phase 0 clients: only run Phase 0 if a Tavily key is available.
+    # When TAVILY_API_KEY is absent, the session runs in M1-only mode (no
+    # investigation, no shared evidence feed) — the same backward-compat
+    # path the orchestrator already enforces when phase_0_client is None.
+    phase_0_client = None
+    search_client = None
+    tavily_key = os.environ.get("TAVILY_API_KEY")
+    if not tavily_key and sys.stdin.isatty():
+        console.print(
+            "\n[dim]TAVILY_API_KEY not set. Phase 0 (Investigation) "
+            "requires a Tavily key for search + extract.[/]"
+        )
+        try:
+            entered = getpass.getpass(
+                "TAVILY_API_KEY (press Enter to skip Phase 0): "
+            ).strip()
+        except (EOFError, KeyboardInterrupt):
+            entered = ""
+        if entered:
+            tavily_key = entered
+    if tavily_key:
+        # AnthropicClient already satisfies Phase0WireClient via
+        # submit_investigation_proposal — same client, four protocols.
+        phase_0_client = client
+        search_client = TavilySearchClient(api_key=tavily_key)
+        console.print(
+            "[green]Phase 0 enabled[/]  [dim]Tavily search + extract; "
+            "temporal grounding in America/New_York; flat cap = 3 per model.[/]"
+        )
+    else:
+        console.print(
+            "[dim]Phase 0 skipped — running M1 mode. The lattice will not "
+            "investigate before answering.[/]"
+        )
+
     if args.no_tui:
         def callback(event):
             print(
@@ -138,7 +174,12 @@ def main(argv: list[str] | None = None) -> int:
                 flush=True,
             )
         session = run_lattice_session(
-            prompt, config=config, client=client, progress_callback=callback
+            prompt,
+            config=config,
+            client=client,
+            progress_callback=callback,
+            phase_0_client=phase_0_client,
+            search_client=search_client,
         )
     else:
         state = TuiState()
@@ -152,8 +193,21 @@ def main(argv: list[str] | None = None) -> int:
                 apply_event(state, event)
                 live.update(build_layout(state))
             session = run_lattice_session(
-                prompt, config=config, client=client, progress_callback=callback
+                prompt,
+                config=config,
+                client=client,
+                progress_callback=callback,
+                phase_0_client=phase_0_client,
+                search_client=search_client,
             )
+
+    # Close the Tavily HTTP client if we opened one.
+    if search_client is not None:
+        import asyncio as _asyncio
+        try:
+            _asyncio.run(search_client.aclose())
+        except Exception:
+            pass
 
     args.sessions_dir.mkdir(parents=True, exist_ok=True)
     store = JsonFileSessionStore(args.sessions_dir)
