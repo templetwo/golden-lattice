@@ -102,6 +102,147 @@ def test_phase_1_response_prompt_clarifies_confidence_logged_not_weighted():
     assert "does not weight your contribution" in system
 
 
+# --- Phase 0 feed inclusion (Slice A fix) --------------------------------
+
+
+def test_phase_1_response_prompt_without_feed_has_no_evidence_section():
+    """Backward compat: no feed → no SHARED EVIDENCE section in the user
+    prompt. Existing sessions and tests that don't pass a feed see the
+    pre-amendment prompt unchanged."""
+    _, user = build_phase_1_response_prompt(
+        model_id=ModelId.OPUS,
+        original_prompt="p",
+    )
+    assert "SHARED EVIDENCE" not in user
+    assert "Phase 0" not in user
+
+
+def test_phase_1_response_prompt_with_grounding_only_feed_surfaces_datetime():
+    from datetime import datetime, timezone
+    from golden_lattice.memory_graph.phase_0 import (
+        DateTimeGrounding,
+        datetime_grounding_id,
+    )
+    when = datetime(2026, 5, 17, 14, 30, 0, tzinfo=timezone.utc)
+    grounding = DateTimeGrounding(
+        entry_id=datetime_grounding_id(when, "America/New_York"),
+        timestamp=when,
+        timezone_name="America/New_York",
+        formatted_text="2026-05-17 14:30:00 (America/New_York)",
+    )
+    _, user = build_phase_1_response_prompt(
+        model_id=ModelId.OPUS,
+        original_prompt="p",
+        feed=(grounding,),
+    )
+    assert "SHARED EVIDENCE" in user
+    assert "2026-05-17 14:30:00" in user
+    assert "America/New_York" in user
+
+
+def test_phase_1_response_prompt_includes_search_result_content():
+    from datetime import datetime, timezone
+    from golden_lattice.memory_graph.phase_0 import (
+        DateTimeGrounding,
+        SearchResult,
+        datetime_grounding_id,
+        search_result_id,
+    )
+    when = datetime(2026, 5, 17, 14, 30, 0, tzinfo=timezone.utc)
+    grounding = DateTimeGrounding(
+        entry_id=datetime_grounding_id(when, "America/New_York"),
+        timestamp=when,
+        timezone_name="America/New_York",
+        formatted_text="2026-05-17 14:30:00 (America/New_York)",
+    )
+    result = SearchResult(
+        entry_id=search_result_id("https://github.com/templetwo", when),
+        query="https://github.com/templetwo",
+        result_text="Temple of Two — Anthony's research repo. Contains golden-lattice and related projects.",
+        source_urls=("https://github.com/templetwo",),
+        executed_at=when,
+    )
+    _, user = build_phase_1_response_prompt(
+        model_id=ModelId.OPUS,
+        original_prompt="evaluate this work",
+        feed=(grounding, result),
+    )
+    assert "https://github.com/templetwo" in user
+    assert "Temple of Two" in user
+    assert "Anthony's research repo" in user
+
+
+def test_phase_1_response_prompt_includes_failed_search_with_reason():
+    from datetime import datetime, timezone
+    from golden_lattice.memory_graph.phase_0 import (
+        DateTimeGrounding,
+        FailedSearch,
+        datetime_grounding_id,
+        failed_search_id,
+    )
+    when = datetime(2026, 5, 17, 14, 30, 0, tzinfo=timezone.utc)
+    grounding = DateTimeGrounding(
+        entry_id=datetime_grounding_id(when, "America/New_York"),
+        timestamp=when,
+        timezone_name="America/New_York",
+        formatted_text="2026-05-17 14:30:00 (America/New_York)",
+    )
+    failed = FailedSearch(
+        entry_id=failed_search_id("https://unreachable.example", when),
+        query="https://unreachable.example",
+        reason="connection timeout",
+        attempted_at=when,
+    )
+    _, user = build_phase_1_response_prompt(
+        model_id=ModelId.OPUS,
+        original_prompt="p",
+        feed=(grounding, failed),
+    )
+    assert "https://unreachable.example" in user
+    assert "connection timeout" in user
+    # Failed evidence is itself shared evidence — must be marked, not buried.
+    assert "fail" in user.lower() or "could not" in user.lower() or "did not" in user.lower()
+
+
+def test_phase_1_response_prompt_renders_feed_in_order():
+    """Feed entries appear in the prompt in their feed-order (grounding
+    first, then search entries in arrival order)."""
+    from datetime import datetime, timedelta, timezone
+    from golden_lattice.memory_graph.phase_0 import (
+        DateTimeGrounding,
+        SearchResult,
+        datetime_grounding_id,
+        search_result_id,
+    )
+    when = datetime(2026, 5, 17, 14, 30, 0, tzinfo=timezone.utc)
+    grounding = DateTimeGrounding(
+        entry_id=datetime_grounding_id(when, "America/New_York"),
+        timestamp=when,
+        timezone_name="America/New_York",
+        formatted_text="2026-05-17 (now)",
+    )
+    r1 = SearchResult(
+        entry_id=search_result_id("alpha-query", when),
+        query="alpha-query",
+        result_text="ALPHA_RESULT_TEXT",
+        executed_at=when,
+    )
+    r2 = SearchResult(
+        entry_id=search_result_id("beta-query", when + timedelta(seconds=1)),
+        query="beta-query",
+        result_text="BETA_RESULT_TEXT",
+        executed_at=when + timedelta(seconds=1),
+    )
+    _, user = build_phase_1_response_prompt(
+        model_id=ModelId.OPUS,
+        original_prompt="p",
+        feed=(grounding, r1, r2),
+    )
+    alpha_idx = user.index("ALPHA_RESULT_TEXT")
+    beta_idx = user.index("BETA_RESULT_TEXT")
+    assert alpha_idx < beta_idx
+
+
 def test_self_reflection_prompt_anchors_honest_self_read():
     """The honest-self-read sentence flips Phase 2 from criterion to temporal context."""
     response = IndependentResponse(

@@ -174,12 +174,80 @@ def self_reflection_tool_schema() -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
+def _format_feed_for_phase_1(feed) -> str:
+    """Render a Phase 0 frozen feed as a SHARED EVIDENCE section for the
+    Phase 1 user prompt. The feed is symmetrically visible to all three
+    peers (per §5.0); this is the inlining that makes that visibility
+    operative at generation time.
+
+    Empty/None feed returns empty string — no section, backward compat.
+    """
+    if not feed:
+        return ""
+
+    # Local imports keep the schema dependency optional at module-import
+    # time and self-contained inside this rendering helper.
+    from golden_lattice.memory_graph.phase_0 import (
+        DateTimeGrounding,
+        FailedSearch,
+        SearchResult,
+    )
+    try:
+        from golden_lattice.memory_graph.phase_0 import InvestigationSummary
+        has_summary = True
+    except ImportError:  # pragma: no cover — until slice C ships
+        InvestigationSummary = None  # type: ignore[assignment]
+        has_summary = False
+
+    parts: list[str] = []
+    parts.append("SHARED EVIDENCE (Phase 0 investigation — all three peers see this verbatim):")
+    parts.append("")
+    for entry in feed:
+        if isinstance(entry, DateTimeGrounding):
+            parts.append(f"  [temporal grounding] {entry.formatted_text}")
+        elif isinstance(entry, SearchResult):
+            parts.append(f"  [investigation result] query: {entry.query}")
+            if entry.source_urls:
+                parts.append(f"    sources: {', '.join(entry.source_urls)}")
+            # Cap rendered content to keep the prompt bounded.
+            content = entry.result_text.strip()
+            if len(content) > 4000:
+                content = content[:4000] + " … [truncated]"
+            parts.append(f"    content:\n    {content}")
+        elif isinstance(entry, FailedSearch):
+            parts.append(
+                f"  [investigation attempted, did not return content] "
+                f"query: {entry.query}  reason: {entry.reason}"
+            )
+        elif has_summary and isinstance(entry, InvestigationSummary):
+            parts.append(
+                f"  [investigation summary by {entry.source_model.value}]"
+            )
+            parts.append(f"    summary: {entry.summary_text}")
+            if entry.source_urls:
+                parts.append(f"    sources: {', '.join(entry.source_urls)}")
+        else:  # pragma: no cover
+            parts.append(f"  [unknown feed entry type] {type(entry).__name__}")
+    parts.append("")
+    parts.append("End of shared evidence. Use it where it informs your response; cite the source URL when grounding a claim in fetched content.")
+    return "\n".join(parts)
+
+
 def build_phase_1_response_prompt(
     *,
     model_id: ModelId,
     original_prompt: str,
+    feed=None,
 ) -> tuple[str, str]:
-    """Returns (system, user) messages for Phase 1 independent generation."""
+    """Returns (system, user) messages for Phase 1 independent generation.
+
+    The optional `feed` parameter carries the Phase 0 investigation feed
+    (tuple of FeedEntry). When provided and non-empty, the feed contents
+    are inlined into the user prompt as a SHARED EVIDENCE section so all
+    three peers generate on the same symmetric evidence layer (per §5.0).
+    Backward compatible: no feed → no extra section, same prompt as the
+    pre-amendment Phase 1.
+    """
     focus_values = ", ".join(t.value for t in FocusTag)
 
     system = (
@@ -204,7 +272,11 @@ def build_phase_1_response_prompt(
         "prose outside the tool will be ignored."
     )
 
-    user = f"Prompt:\n{original_prompt}"
+    feed_section = _format_feed_for_phase_1(feed)
+    if feed_section:
+        user = f"Prompt:\n{original_prompt}\n\n{feed_section}"
+    else:
+        user = f"Prompt:\n{original_prompt}"
     return system, user
 
 
@@ -453,6 +525,7 @@ class Phase1WireClient(Protocol):
         model_id: ModelId,
         original_prompt: str,
         prompt_hash: str,
+        feed: Optional[tuple] = None,
     ) -> IndependentResponse: ...
 
     def submit_self_reflection(

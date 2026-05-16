@@ -133,9 +133,10 @@ class AnthropicClient:
         model_id: ModelId,
         original_prompt: str,
         prompt_hash: str,
+        feed: Optional[tuple] = None,
     ) -> IndependentResponse:
         system, user = build_phase_1_response_prompt(
-            model_id=model_id, original_prompt=original_prompt
+            model_id=model_id, original_prompt=original_prompt, feed=feed
         )
         tool = phase_1_response_tool_schema()
         started = datetime.now(timezone.utc)

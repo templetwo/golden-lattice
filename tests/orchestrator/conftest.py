@@ -115,6 +115,7 @@ class StubAnthropicClient:
         model_id: ModelId,
         original_prompt: str,
         prompt_hash: str,
+        feed: Optional[tuple] = None,
     ) -> IndependentResponse:
         delay = self.phase_1_delay_seconds.get(model_id, 0.0)
         if delay:

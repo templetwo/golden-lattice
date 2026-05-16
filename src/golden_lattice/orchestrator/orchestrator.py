@@ -252,6 +252,9 @@ async def run_lattice_session_async(
         invited_models=invited_models,
         config=config,
         emitter=emitter,
+        phase_0_feed=(
+            phase_0_investigation.feed if phase_0_investigation else None
+        ),
     )
 
     # --- Phase 2: cross-readings + taggings, all in parallel ----------
@@ -511,9 +514,15 @@ async def _run_phase_1_with_reflection(
     invited_models: tuple[ModelId, ...],
     config: LatticeConfig,
     emitter: "_Emitter | _NullEmitter",
+    phase_0_feed: Optional[tuple[FeedEntry, ...]] = None,
 ) -> dict[ModelId, IndependentResponse]:
     """Per-model coroutines sequence Phase 1 → self-reflection. Outer gather
-    awaits all three. Latency-gap utilization happens inside each coroutine."""
+    awaits all three. Latency-gap utilization happens inside each coroutine.
+
+    phase_0_feed (when present) is threaded into each model's submit_phase_1_response
+    call so the model's Phase 1 generation sees the §5.0 shared evidence
+    feed. Each peer receives the same feed — symmetric visibility on the
+    investigation layer (per invariant 2)."""
 
     async def _one_model(model: ModelId) -> tuple[ModelId, IndependentResponse]:
         emitter.emit(Phase1ResponseStartedEvent(
@@ -527,6 +536,7 @@ async def _run_phase_1_with_reflection(
                     model_id=model,
                     original_prompt=prompt,
                     prompt_hash=prompt_hash,
+                    feed=phase_0_feed,
                 ),
                 timeout=config.timeout_phase_1_seconds,
             )
