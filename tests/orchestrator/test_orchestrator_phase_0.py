@@ -181,6 +181,62 @@ def test_phase_0_requires_both_clients_or_neither(
         )
 
 
+def test_phase_0_emits_grounding_proposals_results_freeze_in_order(
+    stub_client, stub_phase_0_client, stub_search_client
+):
+    """Live orchestrator fires the same Phase 0 events replay emits, in
+    canonical order: grounding → proposals → results → frozen."""
+    from golden_lattice.events import (
+        Phase0DatetimeGroundingEvent,
+        Phase0FailedSearchEvent,
+        Phase0FeedFrozenEvent,
+        Phase0ProposalSubmittedEvent,
+        Phase0SearchResultEvent,
+        Phase1ResponseStartedEvent,
+    )
+
+    stub_phase_0_client.canned_proposals[ModelId.OPUS] = ("succeeds",)
+    stub_phase_0_client.canned_proposals[ModelId.SONNET] = ("fails",)
+    stub_search_client.results = {"succeeds": "Result text."}
+    stub_search_client.fail_reasons = {"fails": "rate limited"}
+
+    events: list = []
+    config = LatticeConfig()
+    run_lattice_session(
+        "p",
+        config=config,
+        client=stub_client,
+        phase_0_client=stub_phase_0_client,
+        search_client=stub_search_client,
+        progress_callback=events.append,
+    )
+
+    type_order = [type(e).__name__ for e in events]
+    # First non-Session event after SessionStarted should be grounding.
+    grounding_idx = type_order.index("Phase0DatetimeGroundingEvent")
+    frozen_idx = type_order.index("Phase0FeedFrozenEvent")
+    first_phase_1_idx = type_order.index("Phase1ResponseStartedEvent")
+    proposal_idxs = [
+        i for i, t in enumerate(type_order)
+        if t == "Phase0ProposalSubmittedEvent"
+    ]
+    result_idxs = [
+        i for i, t in enumerate(type_order)
+        if t == "Phase0SearchResultEvent"
+    ]
+    failed_idxs = [
+        i for i, t in enumerate(type_order)
+        if t == "Phase0FailedSearchEvent"
+    ]
+    assert grounding_idx < proposal_idxs[0]
+    assert max(proposal_idxs) < min(result_idxs + failed_idxs)
+    assert max(result_idxs + failed_idxs) < frozen_idx
+    assert frozen_idx < first_phase_1_idx
+    assert len(proposal_idxs) == 3  # one per invited model
+    assert len(result_idxs) == 1
+    assert len(failed_idxs) == 1
+
+
 def test_phase_0_full_pipeline_produces_substrate_valid_session(
     stub_client, stub_phase_0_client, stub_search_client
 ):

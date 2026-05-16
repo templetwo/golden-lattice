@@ -37,6 +37,11 @@ from typing import Callable, Optional
 
 from golden_lattice.events import (
     LatticeEvent,
+    Phase0DatetimeGroundingEvent,
+    Phase0FailedSearchEvent,
+    Phase0FeedFrozenEvent,
+    Phase0ProposalSubmittedEvent,
+    Phase0SearchResultEvent,
     Phase1ClaimEvent,
     Phase1ResponseCompletedEvent,
     Phase1ResponseStartedEvent,
@@ -236,6 +241,7 @@ async def run_lattice_session_async(
             search_client=search_client,
             invited_models=invited_models,
             config=config,
+            emitter=emitter,
         )
 
     # --- Phase 1 + self-reflection (per-model latency-gap utilization) ---
@@ -411,6 +417,7 @@ async def _run_phase_0(
     search_client: SearchClient,
     invited_models: tuple[ModelId, ...],
     config: LatticeConfig,
+    emitter: "_Emitter | _NullEmitter",
 ) -> Phase0Investigation:
     """Phase 0: temporal grounding precondition + collective propose-and-union
     + parallel search execution + freeze.
@@ -429,14 +436,26 @@ async def _run_phase_0(
     """
     # Step 1: deterministic temporal grounding.
     grounding = _make_datetime_grounding()
+    emitter.emit(Phase0DatetimeGroundingEvent(
+        timestamp_offset_ms=emitter.now_ms(),
+        entry_id=grounding.entry_id,
+        timezone_name=grounding.timezone_name,
+        formatted_text=grounding.formatted_text,
+    ))
 
     # Step 2: collect proposals from all invited models in parallel.
     async def _one_proposal(model: ModelId) -> InvestigationProposal:
-        return await phase_0_client.submit_investigation_proposal(
+        proposal = await phase_0_client.submit_investigation_proposal(
             model_id=model,
             original_prompt=prompt,
             max_queries=INVESTIGATION_CAP,
         )
+        emitter.emit(Phase0ProposalSubmittedEvent(
+            timestamp_offset_ms=emitter.now_ms(),
+            model_id=proposal.model_id,
+            queries=proposal.queries,
+        ))
+        return proposal
 
     proposal_coros = [_one_proposal(m) for m in invited_models]
     proposals = tuple(await asyncio.gather(*proposal_coros))
@@ -453,14 +472,35 @@ async def _run_phase_0(
 
     # Step 4: dispatch deduplicated searches in parallel.
     async def _one_search(query: str):
-        return await search_client.execute_search(query)
+        result = await search_client.execute_search(query)
+        if isinstance(result, SearchResult):
+            emitter.emit(Phase0SearchResultEvent(
+                timestamp_offset_ms=emitter.now_ms(),
+                entry_id=result.entry_id,
+                query=result.query,
+                result_text_preview=result.result_text[:200],
+                source_urls=result.source_urls,
+            ))
+        elif isinstance(result, FailedSearch):
+            emitter.emit(Phase0FailedSearchEvent(
+                timestamp_offset_ms=emitter.now_ms(),
+                entry_id=result.entry_id,
+                query=result.query,
+                reason=result.reason,
+            ))
+        return result
 
     search_coros = [_one_search(q) for q in union_queries]
     search_results = await asyncio.gather(*search_coros) if search_coros else []
 
-    # Step 5: assemble Phase 0 artifact.
+    # Step 5: assemble Phase 0 artifact and emit the freeze event.
     feed: tuple[FeedEntry, ...] = (grounding, *search_results)
-    return Phase0Investigation(proposals=proposals, feed=feed)
+    investigation = Phase0Investigation(proposals=proposals, feed=feed)
+    emitter.emit(Phase0FeedFrozenEvent(
+        timestamp_offset_ms=emitter.now_ms(),
+        entry_count=len(feed),
+    ))
+    return investigation
 
 
 async def _run_phase_1_with_reflection(

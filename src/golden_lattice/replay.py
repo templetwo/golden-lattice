@@ -33,6 +33,11 @@ from typing import Iterator
 
 from golden_lattice.events import (
     LatticeEvent,
+    Phase0DatetimeGroundingEvent,
+    Phase0FailedSearchEvent,
+    Phase0FeedFrozenEvent,
+    Phase0ProposalSubmittedEvent,
+    Phase0SearchResultEvent,
     Phase1ClaimEvent,
     Phase1ResponseCompletedEvent,
     Phase1ResponseStartedEvent,
@@ -49,6 +54,11 @@ from golden_lattice.events import (
 from golden_lattice.memory_graph.metrics import (
     compute_parity_shares,
     interpret_parity_flags,
+)
+from golden_lattice.memory_graph.phase_0 import (
+    DateTimeGrounding,
+    FailedSearch,
+    SearchResult,
 )
 from golden_lattice.memory_graph.schema import Session
 
@@ -90,6 +100,54 @@ def replay_session_events(session: Session) -> Iterator[LatticeEvent]:
         prompt_hash=session.prompt_hash,
         models_invited=session.models_invited,
     )
+
+    # Phase 0 events (replay) — emitted iff session.phase_0 is not None.
+    # Emission order: grounding → proposals → search entries → frozen.
+    # All Phase 0 events use synthetic offsets just after session start so
+    # they precede Phase 1 events in the rendered stream.
+    if session.phase_0 is not None:
+        phase_0_offset = 0
+        for entry in session.phase_0.feed:
+            if isinstance(entry, DateTimeGrounding):
+                yield Phase0DatetimeGroundingEvent(
+                    timestamp_offset_ms=phase_0_offset,
+                    entry_id=entry.entry_id,
+                    timezone_name=entry.timezone_name,
+                    formatted_text=entry.formatted_text,
+                )
+                phase_0_offset += _SYNTHETIC_GAP_MS
+                break
+        for proposal in session.phase_0.proposals:
+            yield Phase0ProposalSubmittedEvent(
+                timestamp_offset_ms=phase_0_offset,
+                model_id=proposal.model_id,
+                queries=proposal.queries,
+            )
+            phase_0_offset += _SYNTHETIC_GAP_MS
+        for entry in session.phase_0.feed:
+            if isinstance(entry, DateTimeGrounding):
+                continue
+            if isinstance(entry, SearchResult):
+                preview = entry.result_text[:200]
+                yield Phase0SearchResultEvent(
+                    timestamp_offset_ms=phase_0_offset,
+                    entry_id=entry.entry_id,
+                    query=entry.query,
+                    result_text_preview=preview,
+                    source_urls=entry.source_urls,
+                )
+            elif isinstance(entry, FailedSearch):
+                yield Phase0FailedSearchEvent(
+                    timestamp_offset_ms=phase_0_offset,
+                    entry_id=entry.entry_id,
+                    query=entry.query,
+                    reason=entry.reason,
+                )
+            phase_0_offset += _SYNTHETIC_GAP_MS
+        yield Phase0FeedFrozenEvent(
+            timestamp_offset_ms=phase_0_offset,
+            entry_count=len(session.phase_0.feed),
+        )
 
     # Per-model phase_1_response_started, ordered by generation_started_at.
     started_order = sorted(

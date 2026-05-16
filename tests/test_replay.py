@@ -13,6 +13,11 @@ from pathlib import Path
 import pytest
 
 from golden_lattice.events import (
+    Phase0DatetimeGroundingEvent,
+    Phase0FailedSearchEvent,
+    Phase0FeedFrozenEvent,
+    Phase0ProposalSubmittedEvent,
+    Phase0SearchResultEvent,
     Phase1ClaimEvent,
     Phase1ResponseCompletedEvent,
     Phase1ResponseStartedEvent,
@@ -287,6 +292,222 @@ def test_replay_persisted_sessions_event_protocol(session_id):
     assert sum(1 for e in events if isinstance(e, Phase4ArtifactEvent)) == 1
     assert sum(1 for e in events if isinstance(e, Phase4MetricsEvent)) == 1
     assert sum(1 for e in events if isinstance(e, Phase4FlagInterpretationsEvent)) == 1
+
+
+# --- Phase 0 replay -------------------------------------------------------
+
+
+def _phase_0_session(
+    *,
+    with_proposals: bool = True,
+    with_failed_search: bool = False,
+) -> Session:
+    """Build a triadic session with a populated Phase 0 investigation."""
+    from datetime import timedelta
+    from golden_lattice.memory_graph.phase_0 import (
+        DateTimeGrounding,
+        FailedSearch,
+        InvestigationProposal,
+        Phase0Investigation,
+        SearchResult,
+        datetime_grounding_id,
+        failed_search_id,
+        search_result_id,
+    )
+    grounding_at = NOW
+    grounding = DateTimeGrounding(
+        entry_id=datetime_grounding_id(grounding_at, "America/New_York"),
+        timestamp=grounding_at,
+        timezone_name="America/New_York",
+        formatted_text=f"{grounding_at.isoformat()} (America/New_York)",
+    )
+    feed_entries = [grounding]
+    proposals = []
+
+    if with_proposals:
+        proposals.append(
+            InvestigationProposal(
+                model_id=ModelId.OPUS,
+                queries=("opus query", "shared query"),
+            )
+        )
+        proposals.append(
+            InvestigationProposal(
+                model_id=ModelId.SONNET,
+                queries=("shared query",),
+            )
+        )
+        proposals.append(
+            InvestigationProposal(model_id=ModelId.HAIKU, queries=())
+        )
+        # Two deduped queries → two search-result entries.
+        result_at = grounding_at + timedelta(seconds=1)
+        feed_entries.append(
+            SearchResult(
+                entry_id=search_result_id("opus query", result_at),
+                query="opus query",
+                result_text="Result for opus query.",
+                executed_at=result_at,
+            )
+        )
+        if with_failed_search:
+            feed_entries.append(
+                FailedSearch(
+                    entry_id=failed_search_id("shared query", result_at),
+                    query="shared query",
+                    reason="rate limited",
+                    attempted_at=result_at,
+                )
+            )
+        else:
+            feed_entries.append(
+                SearchResult(
+                    entry_id=search_result_id("shared query", result_at),
+                    query="shared query",
+                    result_text="Result for shared query.",
+                    executed_at=result_at,
+                )
+            )
+
+    inv = Phase0Investigation(
+        proposals=tuple(proposals),
+        feed=tuple(feed_entries),
+    )
+
+    opus_claims = (_claim(ModelId.OPUS, "opus a"), _claim(ModelId.OPUS, "opus b"))
+    sonnet_claims = (_claim(ModelId.SONNET, "sonnet a"), _claim(ModelId.SONNET, "sonnet b"))
+    haiku_claims = (_claim(ModelId.HAIKU, "haiku a"), _claim(ModelId.HAIKU, "haiku b"))
+    return Session(
+        session_id="phase-0-replay",
+        prompt="p",
+        prompt_hash="h",
+        models_invited=(ModelId.OPUS, ModelId.SONNET, ModelId.HAIKU),
+        phase_0=inv,
+        phase_1={
+            ModelId.OPUS: _response(ModelId.OPUS, claims=opus_claims),
+            ModelId.SONNET: _response(ModelId.SONNET, claims=sonnet_claims),
+            ModelId.HAIKU: _response(ModelId.HAIKU, claims=haiku_claims),
+        },
+    )
+
+
+def test_replay_emits_phase_0_grounding_event_when_phase_0_set():
+    session = _phase_0_session()
+    events = list(replay_session_events(session))
+    grounding_events = [
+        e for e in events if isinstance(e, Phase0DatetimeGroundingEvent)
+    ]
+    assert len(grounding_events) == 1
+    g = grounding_events[0]
+    assert g.timezone_name == "America/New_York"
+    assert "America/New_York" in g.formatted_text
+
+
+def test_replay_emits_phase_0_proposal_events_one_per_invited_model():
+    session = _phase_0_session()
+    events = list(replay_session_events(session))
+    proposal_events = [
+        e for e in events if isinstance(e, Phase0ProposalSubmittedEvent)
+    ]
+    assert len(proposal_events) == 3
+    by_model = {e.model_id: e for e in proposal_events}
+    assert by_model[ModelId.OPUS].queries == ("opus query", "shared query")
+    assert by_model[ModelId.SONNET].queries == ("shared query",)
+    assert by_model[ModelId.HAIKU].queries == ()
+
+
+def test_replay_emits_phase_0_search_result_event_for_success():
+    session = _phase_0_session()
+    events = list(replay_session_events(session))
+    result_events = [
+        e for e in events if isinstance(e, Phase0SearchResultEvent)
+    ]
+    assert len(result_events) == 2
+    queries = {e.query for e in result_events}
+    assert queries == {"opus query", "shared query"}
+
+
+def test_replay_emits_phase_0_failed_search_event_for_failure():
+    session = _phase_0_session(with_failed_search=True)
+    events = list(replay_session_events(session))
+    failed_events = [
+        e for e in events if isinstance(e, Phase0FailedSearchEvent)
+    ]
+    assert len(failed_events) == 1
+    f = failed_events[0]
+    assert f.query == "shared query"
+    assert f.reason == "rate limited"
+
+
+def test_replay_emits_phase_0_feed_frozen_event_after_entries():
+    session = _phase_0_session()
+    events = list(replay_session_events(session))
+    frozen_events = [
+        e for e in events if isinstance(e, Phase0FeedFrozenEvent)
+    ]
+    assert len(frozen_events) == 1
+    # 1 grounding + 2 search results = 3 entries.
+    assert frozen_events[0].entry_count == 3
+
+
+def test_replay_phase_0_events_precede_phase_1_events():
+    """Phase 0 emissions must complete before any Phase 1 event fires —
+    the §5.0 freeze discipline made temporal in the event stream."""
+    session = _phase_0_session()
+    events = list(replay_session_events(session))
+    first_phase_1_idx = next(
+        i for i, e in enumerate(events)
+        if isinstance(e, Phase1ResponseStartedEvent)
+    )
+    frozen_idx = next(
+        i for i, e in enumerate(events)
+        if isinstance(e, Phase0FeedFrozenEvent)
+    )
+    assert frozen_idx < first_phase_1_idx
+    # Also: all Phase 0 events precede first Phase 1 event.
+    phase_0_types = (
+        Phase0DatetimeGroundingEvent,
+        Phase0ProposalSubmittedEvent,
+        Phase0SearchResultEvent,
+        Phase0FailedSearchEvent,
+        Phase0FeedFrozenEvent,
+    )
+    for i, e in enumerate(events[:first_phase_1_idx]):
+        if isinstance(e, phase_0_types):
+            assert i < first_phase_1_idx
+
+
+def test_replay_grounding_event_precedes_proposal_events():
+    """Per §5.0: temporal grounding is the precondition gate. It fires
+    before any model proposes."""
+    session = _phase_0_session()
+    events = list(replay_session_events(session))
+    grounding_idx = next(
+        i for i, e in enumerate(events)
+        if isinstance(e, Phase0DatetimeGroundingEvent)
+    )
+    first_proposal_idx = next(
+        i for i, e in enumerate(events)
+        if isinstance(e, Phase0ProposalSubmittedEvent)
+    )
+    assert grounding_idx < first_proposal_idx
+
+
+def test_replay_omits_phase_0_events_when_phase_0_is_none():
+    """Backward compat: sessions without Phase 0 emit no Phase 0 events."""
+    session = _triad_session_with_latency()
+    events = list(replay_session_events(session))
+    for e in events:
+        assert not isinstance(
+            e,
+            (
+                Phase0DatetimeGroundingEvent,
+                Phase0ProposalSubmittedEvent,
+                Phase0SearchResultEvent,
+                Phase0FailedSearchEvent,
+                Phase0FeedFrozenEvent,
+            ),
+        )
 
 
 def test_replay_lucumi_flag_event_carries_peer_divergence():

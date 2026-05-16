@@ -36,6 +36,11 @@ from golden_lattice.memory_graph.schema import (
 __all__ = [
     "EventType",
     "SessionStartedEvent",
+    "Phase0DatetimeGroundingEvent",
+    "Phase0ProposalSubmittedEvent",
+    "Phase0SearchResultEvent",
+    "Phase0FailedSearchEvent",
+    "Phase0FeedFrozenEvent",
     "Phase1ResponseStartedEvent",
     "Phase1ClaimEvent",
     "Phase1ResponseCompletedEvent",
@@ -55,6 +60,11 @@ class EventType:
     """Event-type string constants. Use as literal discriminators."""
 
     SESSION_STARTED = "session_started"
+    PHASE_0_DATETIME_GROUNDING = "phase_0_datetime_grounding"
+    PHASE_0_PROPOSAL_SUBMITTED = "phase_0_proposal_submitted"
+    PHASE_0_SEARCH_RESULT = "phase_0_search_result"
+    PHASE_0_FAILED_SEARCH = "phase_0_failed_search"
+    PHASE_0_FEED_FROZEN = "phase_0_feed_frozen"
     PHASE_1_RESPONSE_STARTED = "phase_1_response_started"
     PHASE_1_CLAIM = "phase_1_claim"
     PHASE_1_RESPONSE_COMPLETED = "phase_1_response_completed"
@@ -80,6 +90,53 @@ class SessionStartedEvent(_BaseEvent):
     prompt: str
     prompt_hash: str
     models_invited: tuple[ModelId, ...]
+
+
+class Phase0DatetimeGroundingEvent(_BaseEvent):
+    """Temporal grounding seeded as the first feed entry — the §5.0
+    precondition gate. Deterministic, no model involvement."""
+
+    event_type: Literal["phase_0_datetime_grounding"] = "phase_0_datetime_grounding"
+    entry_id: str
+    timezone_name: str
+    formatted_text: str
+
+
+class Phase0ProposalSubmittedEvent(_BaseEvent):
+    """One model submitted its InvestigationProposal during Phase 0a.
+    No peer visibility (Phase 1 independence pattern)."""
+
+    event_type: Literal["phase_0_proposal_submitted"] = "phase_0_proposal_submitted"
+    model_id: ModelId
+    queries: tuple[str, ...]
+
+
+class Phase0SearchResultEvent(_BaseEvent):
+    """A successful search landed as a feed entry."""
+
+    event_type: Literal["phase_0_search_result"] = "phase_0_search_result"
+    entry_id: str
+    query: str
+    result_text_preview: str
+    source_urls: tuple[str, ...] = ()
+
+
+class Phase0FailedSearchEvent(_BaseEvent):
+    """A failed search landed as a typed feed entry — all peers see it
+    (§8 no-silent-failures)."""
+
+    event_type: Literal["phase_0_failed_search"] = "phase_0_failed_search"
+    entry_id: str
+    query: str
+    reason: str
+
+
+class Phase0FeedFrozenEvent(_BaseEvent):
+    """The feed is frozen; Phase 1 can now begin. Mapping onto §8's freeze
+    discipline applied upstream of independent generation."""
+
+    event_type: Literal["phase_0_feed_frozen"] = "phase_0_feed_frozen"
+    entry_count: int
 
 
 class Phase1ResponseStartedEvent(_BaseEvent):
@@ -163,6 +220,11 @@ class SessionCompletedEvent(_BaseEvent):
 
 LatticeEvent = Union[
     SessionStartedEvent,
+    Phase0DatetimeGroundingEvent,
+    Phase0ProposalSubmittedEvent,
+    Phase0SearchResultEvent,
+    Phase0FailedSearchEvent,
+    Phase0FeedFrozenEvent,
     Phase1ResponseStartedEvent,
     Phase1ClaimEvent,
     Phase1ResponseCompletedEvent,
