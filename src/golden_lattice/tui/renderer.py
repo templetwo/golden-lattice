@@ -135,7 +135,13 @@ def render_model_column(state: TuiState, model: ModelId) -> Panel:
 
 def render_feed_panel(state: TuiState) -> Panel:
     """Phase 0 feed — temporal grounding, proposals, search results / failures,
-    freeze status. Renders empty placeholder when Phase 0 didn't run."""
+    freeze status.
+
+    Compact rendering: one line per state slot so the full feed fits inside
+    the layout's allocated height. Entries are clipped after a visible cap
+    with a +more indicator (visibility-clipped, not data-clipped — the
+    persisted Session retains every entry).
+    """
     has_phase_0 = (
         state.phase_0_grounding is not None
         or state.phase_0_proposals
@@ -150,45 +156,59 @@ def render_feed_panel(state: TuiState) -> Panel:
         )
 
     parts: list[RenderableType] = []
+
     g = state.phase_0_grounding
     if g is not None:
         parts.append(Text.from_markup(
-            f"[bold]grounding[/]  [dim]{g.formatted_text}[/]"
+            f"[bold]grounding[/] [dim]{g.formatted_text}[/]"
         ))
+
     if state.phase_0_proposals:
-        parts.append(Text(""))
-        parts.append(Text.from_markup("[bold]proposals[/]"))
+        prop_summary_pieces: list[str] = []
         for p in state.phase_0_proposals:
             color = MODEL_COLOR.get(p.model_id, "white")
             short = _short_model(p.model_id)
-            if not p.queries:
-                parts.append(Text.from_markup(
-                    f"  [{color}]{short:8s}[/] [dim](no proposals)[/]"
-                ))
-            else:
-                qlist = "; ".join(p.queries)[:120]
-                parts.append(Text.from_markup(
-                    f"  [{color}]{short:8s}[/] {qlist}"
-                ))
-    entries: list[RenderableType] = []
+            prop_summary_pieces.append(
+                f"[{color}]{short}[/]:{len(p.queries)}"
+            )
+        n_unique = len({
+            q for p in state.phase_0_proposals for q in p.queries
+        })
+        parts.append(Text.from_markup(
+            f"[bold]proposals[/] "
+            + " ".join(prop_summary_pieces)
+            + f" [dim]({n_unique} unique after dedup)[/]"
+        ))
+
+    # Entries: compact one-line per entry, capped with +more indicator.
+    MAX_VISIBLE_ENTRIES = 6
+    all_entries: list[tuple[bool, str, str]] = []
+    # (is_success, query, summary)
     for r in state.phase_0_search_results:
-        preview = r.result_text_preview.replace("\n", " ")[:90]
-        entries.append(Text.from_markup(
-            f"  [bright_green]✓[/] [white]{r.query[:60]}[/]  [dim]{preview}[/]"
-        ))
+        size = len(r.result_text_preview)
+        all_entries.append((True, r.query, f"{size}c"))
     for f in state.phase_0_failed_searches:
-        entries.append(Text.from_markup(
-            f"  [bright_red]✗[/] [white]{f.query[:60]}[/]  [bright_red]{f.reason[:90]}[/]"
+        all_entries.append((False, f.query, f.reason[:50]))
+
+    if all_entries:
+        parts.append(Text.from_markup(
+            f"[bold]entries[/] [dim]({len(all_entries)} total)[/]"
         ))
-    if entries:
-        parts.append(Text(""))
-        parts.append(Text.from_markup("[bold]entries[/]"))
-        parts.extend(entries)
+        visible = all_entries[:MAX_VISIBLE_ENTRIES]
+        for is_success, query, summary in visible:
+            icon = "[bright_green]✓[/]" if is_success else "[bright_red]✗[/]"
+            q_short = query[:55] + ("…" if len(query) > 55 else "")
+            parts.append(Text.from_markup(
+                f"  {icon} [white]{q_short}[/] [dim]→ {summary}[/]"
+            ))
+        if len(all_entries) > MAX_VISIBLE_ENTRIES:
+            parts.append(Text.from_markup(
+                f"  [dim](+{len(all_entries) - MAX_VISIBLE_ENTRIES} more entries — see persisted session)[/]"
+            ))
 
     if state.phase_0_feed_frozen is not None:
-        parts.append(Text(""))
         parts.append(Text.from_markup(
-            f"[yellow]frozen[/]  [dim]{state.phase_0_feed_frozen.entry_count} entries; Phase 1 can begin[/]"
+            f"[yellow]frozen[/] [dim]{state.phase_0_feed_frozen.entry_count} entries; Phase 1 can begin[/]"
         ))
 
     return Panel(Group(*parts), title="feed (Phase 0)", border_style="yellow")
@@ -470,7 +490,7 @@ def build_layout(state: TuiState) -> Layout:
     root = Layout()
     root.split_column(
         Layout(name="header", size=4),
-        Layout(name="feed", ratio=2),
+        Layout(name="feed", ratio=3),
         Layout(name="columns", ratio=4),
         Layout(name="loom", ratio=3),
         Layout(name="phase4", ratio=4),
