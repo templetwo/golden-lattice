@@ -38,6 +38,11 @@ class DashboardServer:
         self.app.router.add_get("/ws", self._handle_ws)
         self.clients: Set[web.WebSocketResponse] = set()
         self.event_log: list[str] = []
+        # Inbound prompt queue: persistent-mode dashboard input. WebSocket
+        # clients push {"type":"prompt","text":...} messages; the live
+        # script's loop awaits wait_for_prompt() between sessions. A None
+        # entry signals quit (sent as {"type":"quit"} by the client).
+        self._prompt_queue: asyncio.Queue[str | None] = asyncio.Queue()
 
     async def broadcast(self, event: LatticeEvent) -> None:
         """Serialize event to JSON, append to log, send to all clients."""
@@ -58,6 +63,16 @@ class DashboardServer:
         """Clear the event log. Use before a fresh replay or live run so
         new clients don't inherit prior session state."""
         self.event_log.clear()
+
+    async def wait_for_prompt(self) -> str | None:
+        """Block until a client submits a prompt via WebSocket.
+
+        Returns the prompt text (always non-empty, stripped of leading/
+        trailing whitespace by the inbound filter), or None if the client
+        sent a quit signal. Used by the live script's persistent-mode loop
+        to source questions from the browser tab instead of stdin.
+        """
+        return await self._prompt_queue.get()
 
     async def _handle_index(self, request: web.Request) -> web.Response:
         if _INDEX_PATH.exists():
@@ -80,10 +95,27 @@ class DashboardServer:
         self.clients.add(ws)
         try:
             async for msg in ws:
-                # Clients don't need to send messages in v0; just keep the
-                # connection open. Echo or ignore.
                 if msg.type == WSMsgType.ERROR:
                     break
+                if msg.type != WSMsgType.TEXT:
+                    continue
+                # Inbound message routing: prompts and quit signals from
+                # the dashboard input bar. Anything malformed is silently
+                # ignored — the WebSocket stays open and waits for the
+                # next message.
+                try:
+                    data = json.loads(msg.data)
+                except (json.JSONDecodeError, ValueError):
+                    continue
+                if not isinstance(data, dict):
+                    continue
+                kind = data.get("type")
+                if kind == "prompt":
+                    text = data.get("text")
+                    if isinstance(text, str) and text.strip():
+                        await self._prompt_queue.put(text)
+                elif kind == "quit":
+                    await self._prompt_queue.put(None)
         finally:
             self.clients.discard(ws)
         return ws

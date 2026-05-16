@@ -8,21 +8,30 @@ two sources.
 
 Launch interactively — the script prompts for an API key (hidden input via
 getpass) if ANTHROPIC_API_KEY is not already in the environment, and for a
-question if no prompt was passed as argv/file/stdin.
+question if no prompt was passed as argv/file/stdin. In interactive mode
+the script stays alive after the first session ends: keys are captured
+once, then a prompt loop runs sessions back-to-back until you type 'q'
+or hit Ctrl-D.
 
 Usage:
   python scripts/run_lattice_live.py
-      → prompts for API key (if not in env) and question, then runs.
+      → prompts for API key (if not in env) and enters persistent mode:
+        each loop asks for a new question, runs the lattice, prints the
+        synthesis, and re-prompts. 'q' / Ctrl-D / Ctrl-C exits.
   python scripts/run_lattice_live.py "your prompt here"
-      → uses the provided question; prompts for API key only if needed.
+      → one-shot. Uses the provided question; prompts for API key only if
+        needed; exits after the session.
   python scripts/run_lattice_live.py --prompt-file path.txt
-      → reads question from a file.
+      → one-shot from file.
   ANTHROPIC_API_KEY=sk-... echo "prompt" | python scripts/run_lattice_live.py
-      → fully non-interactive; reads everything from env and pipe.
+      → one-shot, fully non-interactive; reads everything from env and pipe.
 
 Flags:
   --no-tui    Stream event-type lines to stderr instead of opening the TUI.
               Useful for headless runs or when piping the persisted-path output.
+  --dashboard Open the web dashboard in a browser tab and stream events via
+              WebSocket. In persistent mode the server stays up across loop
+              iterations; the panels reset on each new session_started event.
   --sessions-dir DIR  Override where the resulting session is saved.
 """
 
@@ -37,7 +46,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 from rich.console import Console
 from rich.live import Live
 
+from golden_lattice.cli.interactive import get_next_prompt
 from golden_lattice.exchange.tavily_search_client import TavilySearchClient
+from golden_lattice.memory_graph.schema import Session
 from golden_lattice.memory_graph.store import JsonFileSessionStore
 from golden_lattice.orchestrator import (
     AnthropicClient,
@@ -47,6 +58,202 @@ from golden_lattice.orchestrator import (
 )
 from golden_lattice.tui.renderer import build_layout
 from golden_lattice.tui.state import TuiState, apply_event
+
+
+def _persist_and_print(session: Session, sessions_dir: Path, console: Console) -> Path:
+    """Save the session to disk and print the Phase 4 synthesis."""
+    sessions_dir.mkdir(parents=True, exist_ok=True)
+    store = JsonFileSessionStore(sessions_dir)
+    store.save(session)
+    persisted_path = sessions_dir / f"{session.session_id}{store.SUFFIX}"
+    if session.phase_4 is not None:
+        console.print()
+        console.rule("[bold]Synthesis (Phase 4)[/]", style="bright_black")
+        console.print()
+        console.print(session.phase_4.output)
+        console.print()
+        console.rule(style="bright_black")
+    console.print(f"\n[green]Session persisted:[/] {persisted_path}")
+    return persisted_path
+
+
+def _run_no_tui(
+    *,
+    initial_prompt: str | None,
+    interactive_mode: bool,
+    config: LatticeConfig,
+    client: AnthropicClient,
+    phase_0_client,
+    search_client,
+    sessions_dir: Path,
+    console: Console,
+) -> int:
+    """No-TUI rendering: stream event lines to stderr; loop in interactive mode."""
+
+    def callback(event):
+        print(
+            f"[{event.timestamp_offset_ms:7d}ms] {event.event_type}",
+            file=sys.stderr,
+            flush=True,
+        )
+
+    def run_once(prompt: str) -> Session:
+        return run_lattice_session(
+            prompt,
+            config=config,
+            client=client,
+            progress_callback=callback,
+            phase_0_client=phase_0_client,
+            search_client=search_client,
+        )
+
+    if not interactive_mode:
+        assert initial_prompt is not None
+        session = run_once(initial_prompt)
+        _persist_and_print(session, sessions_dir, console)
+        return 0
+
+    while True:
+        prompt = get_next_prompt(console)
+        if prompt is None:
+            return 0
+        session = run_once(prompt)
+        _persist_and_print(session, sessions_dir, console)
+
+
+def _run_tui(
+    *,
+    initial_prompt: str | None,
+    interactive_mode: bool,
+    config: LatticeConfig,
+    client: AnthropicClient,
+    phase_0_client,
+    search_client,
+    sessions_dir: Path,
+    console: Console,
+) -> int:
+    """Terminal TUI: fresh TuiState + Live context per session; loop in
+    interactive mode so the user sees the synthesis printed cleanly
+    between runs."""
+
+    def run_once(prompt: str) -> Session:
+        state = TuiState()
+        with Live(
+            build_layout(state),
+            console=console,
+            refresh_per_second=15,
+            screen=False,
+        ) as live:
+            def callback(event):
+                apply_event(state, event)
+                live.update(build_layout(state))
+            return run_lattice_session(
+                prompt,
+                config=config,
+                client=client,
+                progress_callback=callback,
+                phase_0_client=phase_0_client,
+                search_client=search_client,
+            )
+
+    if not interactive_mode:
+        assert initial_prompt is not None
+        session = run_once(initial_prompt)
+        _persist_and_print(session, sessions_dir, console)
+        return 0
+
+    while True:
+        prompt = get_next_prompt(console)
+        if prompt is None:
+            return 0
+        session = run_once(prompt)
+        _persist_and_print(session, sessions_dir, console)
+
+
+def _run_dashboard(
+    *,
+    initial_prompt: str | None,
+    interactive_mode: bool,
+    dashboard_port: int,
+    config: LatticeConfig,
+    client: AnthropicClient,
+    phase_0_client,
+    search_client,
+    sessions_dir: Path,
+    console: Console,
+) -> int:
+    """Web dashboard: aiohttp server stays up for the full run. In
+    interactive mode the same server services multiple back-to-back
+    sessions; reset_log() clears the buffer between them so a late-joining
+    client sees the current session, not the prior one. The browser tab's
+    own state resets on each session_started (see static/index.html)."""
+    import asyncio
+    import webbrowser
+    from aiohttp import web as aioweb
+    from golden_lattice.dashboard.server import DashboardServer
+
+    async def _async_main() -> int:
+        server = DashboardServer()
+        runner = aioweb.AppRunner(server.app)
+        await runner.setup()
+        site = aioweb.TCPSite(runner, "127.0.0.1", dashboard_port)
+        await site.start()
+        url = f"http://127.0.0.1:{dashboard_port}"
+        console.print(f"[green]Dashboard at[/] {url}")
+        webbrowser.open(url)
+        await asyncio.sleep(1.0)  # let the browser connect first
+
+        pending: list[asyncio.Task] = []
+
+        def callback(event):
+            pending.append(asyncio.create_task(server.broadcast(event)))
+
+        async def run_once(prompt: str) -> Session:
+            server.reset_log()
+            pending.clear()
+            session = await run_lattice_session_async(
+                prompt,
+                config=config,
+                client=client,
+                progress_callback=callback,
+                phase_0_client=phase_0_client,
+                search_client=search_client,
+            )
+            await asyncio.gather(*pending, return_exceptions=True)
+            return session
+
+        try:
+            if not interactive_mode:
+                assert initial_prompt is not None
+                session = await run_once(initial_prompt)
+                _persist_and_print(session, sessions_dir, console)
+                console.print(
+                    "[dim]session_completed — dashboard stays live for 60s; "
+                    "Ctrl-C to exit sooner.[/]"
+                )
+                await asyncio.sleep(60.0)
+                return 0
+
+            console.print(
+                "[dim]Persistent mode — submit prompts from the browser tab. "
+                "Ctrl-C here (or the 'quit' button in the tab) to exit.[/]"
+            )
+            while True:
+                # Prompts arrive over the WebSocket from the dashboard's
+                # input bar; the server pushes them to a queue we await.
+                prompt = await server.wait_for_prompt()
+                if prompt is None:
+                    return 0
+                session = await run_once(prompt)
+                _persist_and_print(session, sessions_dir, console)
+        finally:
+            await runner.cleanup()
+
+    try:
+        return asyncio.run(_async_main())
+    except KeyboardInterrupt:
+        console.print("\n[dim]Dashboard stopped.[/]")
+        return 130
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -90,7 +297,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     console = Console()
 
-    # --- API key acquisition --------------------------------------------
+    # --- API key acquisition (once, up front) ----------------------------
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
         if not sys.stdin.isatty():
@@ -113,24 +320,16 @@ def main(argv: list[str] | None = None) -> int:
             console.print("[red]ERROR:[/] empty API key.")
             return 1
 
-    # --- Prompt acquisition --------------------------------------------
+    # --- Prompt source: one-shot if argv/file/pipe, else interactive loop
+    initial_prompt: str | None = None
     if args.prompt_file is not None:
-        prompt = args.prompt_file.read_text(encoding="utf-8")
+        initial_prompt = args.prompt_file.read_text(encoding="utf-8")
     elif args.prompt is not None:
-        prompt = args.prompt
-    elif sys.stdin.isatty():
-        console.print(
-            "\n[bold]Question for the lattice[/]  [dim](single line; "
-            "use --prompt-file for multi-line)[/]"
-        )
-        try:
-            prompt = input("> ")
-        except (EOFError, KeyboardInterrupt):
-            console.print("\n[dim]cancelled.[/]")
-            return 130
-    else:
-        prompt = sys.stdin.read()
-    if not prompt.strip():
+        initial_prompt = args.prompt
+    elif not sys.stdin.isatty():
+        initial_prompt = sys.stdin.read()
+    interactive_mode = initial_prompt is None
+    if initial_prompt is not None and not initial_prompt.strip():
         console.print("[red]ERROR:[/] empty prompt.")
         return 1
 
@@ -178,119 +377,63 @@ def main(argv: list[str] | None = None) -> int:
             "investigate before answering.[/]"
         )
 
-    if args.dashboard:
-        # Web dashboard: orchestrator and server run in the same asyncio
-        # loop. Each event broadcasts to connected browser clients via the
-        # DashboardServer. Server stays alive a few seconds after
-        # session_completed so the user can read the final state, then exits.
-        import asyncio
-        import webbrowser
-        from aiohttp import web as aioweb
-        from golden_lattice.dashboard.server import DashboardServer
-
-        async def _run_with_dashboard():
-            server = DashboardServer()
-            runner = aioweb.AppRunner(server.app)
-            await runner.setup()
-            site = aioweb.TCPSite(runner, "127.0.0.1", args.dashboard_port)
-            await site.start()
-            url = f"http://127.0.0.1:{args.dashboard_port}"
-            console.print(f"[green]Dashboard at[/] {url}")
-            webbrowser.open(url)
-            await asyncio.sleep(1.0)  # let the browser connect first
-
-            pending: list[asyncio.Task] = []
-
-            def callback(event):
-                # Fire-and-forget the async broadcast from the sync callback;
-                # we collect tasks so we can await them before exit to make
-                # sure the browser actually received the final events.
-                pending.append(asyncio.create_task(server.broadcast(event)))
-
-            try:
-                session = await run_lattice_session_async(
-                    prompt,
-                    config=config,
-                    client=client,
-                    progress_callback=callback,
-                    phase_0_client=phase_0_client,
-                    search_client=search_client,
-                )
-                await asyncio.gather(*pending, return_exceptions=True)
-                console.print(
-                    "[dim]session_completed — dashboard stays live for 60s; "
-                    "Ctrl-C to exit sooner.[/]"
-                )
-                await asyncio.sleep(60.0)
-                return session
-            finally:
-                await runner.cleanup()
-
-        try:
-            session = asyncio.run(_run_with_dashboard())
-        except KeyboardInterrupt:
-            console.print("\n[dim]Dashboard stopped.[/]")
-            return 130
-    elif args.no_tui:
-        def callback(event):
-            print(
-                f"[{event.timestamp_offset_ms:7d}ms] {event.event_type}",
-                file=sys.stderr,
-                flush=True,
+    if interactive_mode:
+        if args.dashboard:
+            console.print(
+                "\n[bold]Persistent mode[/]  [dim]keys captured; prompts come "
+                "from the browser tab. Ctrl-C here to exit.[/]"
             )
-        session = run_lattice_session(
-            prompt,
-            config=config,
-            client=client,
-            progress_callback=callback,
-            phase_0_client=phase_0_client,
-            search_client=search_client,
-        )
-    else:
-        state = TuiState()
-        with Live(
-            build_layout(state),
-            console=console,
-            refresh_per_second=15,
-            screen=False,
-        ) as live:
-            def callback(event):
-                apply_event(state, event)
-                live.update(build_layout(state))
-            session = run_lattice_session(
-                prompt,
+        else:
+            console.print(
+                "\n[bold]Persistent mode[/]  [dim]keys captured; loop until "
+                "'q' or Ctrl-D.[/]"
+            )
+
+    rc = 0
+    try:
+        if args.dashboard:
+            rc = _run_dashboard(
+                initial_prompt=initial_prompt,
+                interactive_mode=interactive_mode,
+                dashboard_port=args.dashboard_port,
                 config=config,
                 client=client,
-                progress_callback=callback,
                 phase_0_client=phase_0_client,
                 search_client=search_client,
+                sessions_dir=args.sessions_dir,
+                console=console,
             )
+        elif args.no_tui:
+            rc = _run_no_tui(
+                initial_prompt=initial_prompt,
+                interactive_mode=interactive_mode,
+                config=config,
+                client=client,
+                phase_0_client=phase_0_client,
+                search_client=search_client,
+                sessions_dir=args.sessions_dir,
+                console=console,
+            )
+        else:
+            rc = _run_tui(
+                initial_prompt=initial_prompt,
+                interactive_mode=interactive_mode,
+                config=config,
+                client=client,
+                phase_0_client=phase_0_client,
+                search_client=search_client,
+                sessions_dir=args.sessions_dir,
+                console=console,
+            )
+    finally:
+        if search_client is not None:
+            import asyncio as _asyncio
+            try:
+                _asyncio.run(search_client.aclose())
+            except Exception:
+                pass
 
-    # Close the Tavily HTTP client if we opened one.
-    if search_client is not None:
-        import asyncio as _asyncio
-        try:
-            _asyncio.run(search_client.aclose())
-        except Exception:
-            pass
-
-    args.sessions_dir.mkdir(parents=True, exist_ok=True)
-    store = JsonFileSessionStore(args.sessions_dir)
-    store.save(session)
-    persisted_path = args.sessions_dir / f"{session.session_id}{store.SUFFIX}"
-
-    # Print the synthesis output prominently so the answer is visible in
-    # the terminal, not just in the persisted JSON. The TUI panels show
-    # the structural picture; this shows the actual co-authored response.
-    if session.phase_4 is not None:
-        console.print()
-        console.rule("[bold]Synthesis (Phase 4)[/]", style="bright_black")
-        console.print()
-        console.print(session.phase_4.output)
-        console.print()
-        console.rule(style="bright_black")
-    console.print(f"\n[green]Session persisted:[/] {persisted_path}")
-    return 0
+    return rc
 
 
 if __name__ == "__main__":

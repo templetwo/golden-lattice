@@ -200,6 +200,84 @@ def test_event_log_replays_then_continues_live():
 # --- Reset (for replay re-runs) -----------------------------------------
 
 
+# --- Inbound prompts (persistent-mode dashboard input) -------------------
+
+
+def test_client_can_submit_prompt_via_websocket():
+    """Client sends {'type':'prompt','text':'...'} → server's wait_for_prompt
+    returns that text. This is the dashboard-as-input-surface path used by
+    run_lattice_live.py --dashboard in persistent mode."""
+
+    async def _run():
+        server = DashboardServer()
+        runner, port = await _start_server(server)
+        try:
+            async with ClientSession() as http:
+                async with http.ws_connect(f"ws://127.0.0.1:{port}/ws") as ws:
+                    await asyncio.sleep(0.05)
+                    await ws.send_str(json.dumps({"type": "prompt", "text": "what is consciousness"}))
+                    prompt = await asyncio.wait_for(server.wait_for_prompt(), timeout=2.0)
+                    assert prompt == "what is consciousness"
+                    await ws.close()
+        finally:
+            await runner.cleanup()
+
+    asyncio.run(_run())
+
+
+def test_client_can_signal_quit_via_websocket():
+    """Client sends {'type':'quit'} → server's wait_for_prompt returns None
+    so the script's loop knows to exit."""
+
+    async def _run():
+        server = DashboardServer()
+        runner, port = await _start_server(server)
+        try:
+            async with ClientSession() as http:
+                async with http.ws_connect(f"ws://127.0.0.1:{port}/ws") as ws:
+                    await asyncio.sleep(0.05)
+                    await ws.send_str(json.dumps({"type": "quit"}))
+                    result = await asyncio.wait_for(server.wait_for_prompt(), timeout=2.0)
+                    assert result is None
+                    await ws.close()
+        finally:
+            await runner.cleanup()
+
+    asyncio.run(_run())
+
+
+def test_empty_or_invalid_inbound_messages_are_ignored():
+    """Whitespace-only prompts, malformed JSON, and unknown message types
+    don't get pushed to the prompt queue. A valid prompt sent after still
+    arrives correctly."""
+
+    async def _run():
+        server = DashboardServer()
+        runner, port = await _start_server(server)
+        try:
+            async with ClientSession() as http:
+                async with http.ws_connect(f"ws://127.0.0.1:{port}/ws") as ws:
+                    await asyncio.sleep(0.05)
+                    # Whitespace-only — ignored.
+                    await ws.send_str(json.dumps({"type": "prompt", "text": "   "}))
+                    # Garbage JSON — ignored.
+                    await ws.send_str("not-json{")
+                    # Unknown type — ignored.
+                    await ws.send_str(json.dumps({"type": "wat", "text": "x"}))
+                    # Now a valid prompt.
+                    await ws.send_str(json.dumps({"type": "prompt", "text": "real question"}))
+                    prompt = await asyncio.wait_for(server.wait_for_prompt(), timeout=2.0)
+                    assert prompt == "real question"
+                    await ws.close()
+        finally:
+            await runner.cleanup()
+
+    asyncio.run(_run())
+
+
+# --- Reset (for replay re-runs) -----------------------------------------
+
+
 def test_server_reset_clears_event_log():
     """Replay mode needs to clear the log between runs so a fresh client
     doesn't see stale state from a prior run."""

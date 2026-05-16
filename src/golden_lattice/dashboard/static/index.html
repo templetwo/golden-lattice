@@ -40,7 +40,8 @@
       minmax(220px, 1fr)  /* columns */
       minmax(180px, 0.8fr) /* loom */
       minmax(220px, 1fr)  /* phase4 (ledger + parity) */
-      minmax(140px, auto); /* synthesis (capped) */
+      minmax(140px, auto) /* synthesis (capped) */
+      auto;               /* input bar */
     gap: 8px;
     padding: 8px;
   }
@@ -241,6 +242,51 @@
   .conn-banner.connected { color: var(--success); border-color: var(--success); }
   .conn-banner.disconnected { color: var(--fail); border-color: var(--fail); }
   .empty { color: var(--dim); font-style: italic; }
+
+  /* Input bar (persistent-mode prompt entry) */
+  .input-bar {
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+    border-radius: 6px;
+    padding: 8px 12px;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .input-bar-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--dim);
+    flex-shrink: 0;
+  }
+  #prompt-input {
+    flex: 1;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--panel-border);
+    border-radius: 4px;
+    padding: 6px 10px;
+    font-family: inherit;
+    font-size: 13px;
+    outline: none;
+  }
+  #prompt-input:focus { border-color: var(--accent); }
+  #prompt-input:disabled { color: var(--dim); background: rgba(0, 0, 0, 0.2); }
+  #prompt-submit {
+    background: var(--accent);
+    color: var(--bg);
+    border: none;
+    border-radius: 4px;
+    padding: 6px 18px;
+    font-family: inherit;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    cursor: pointer;
+    font-weight: 600;
+  }
+  #prompt-submit:disabled { background: var(--panel-border); color: var(--dim); cursor: not-allowed; }
 </style>
 </head>
 <body>
@@ -290,6 +336,11 @@
   <div class="panel synthesis">
     <div class="panel-title">synthesis (Phase 4)</div>
     <div class="panel-body" id="synthesis-body"><div class="empty">synthesis not yet emitted…</div></div>
+  </div>
+  <div class="input-bar">
+    <span class="input-bar-label">ask:</span>
+    <input type="text" id="prompt-input" placeholder="waiting for connection…" autocomplete="off" disabled />
+    <button id="prompt-submit" disabled>send</button>
   </div>
 </div>
 
@@ -349,12 +400,29 @@
     state.current_offset_ms = ev.timestamp_offset_ms;
     switch (ev.event_type) {
       case 'session_started':
+        // Full reset so back-to-back persistent-mode sessions render
+        // clean panels instead of accumulating on top of the prior run.
         state.session_id = ev.session_id;
         state.prompt = ev.prompt;
         state.prompt_hash = ev.prompt_hash;
         state.invited_models = ev.models_invited;
+        state.completed = false;
+        state.current_offset_ms = 0;
+        state.phase_0_grounding = null;
+        state.phase_0_proposals = [];
+        state.phase_0_search_results = [];
+        state.phase_0_failed_searches = [];
+        state.phase_0_feed_frozen = null;
+        state.phase_1 = {};
+        state.self_reflections = {};
+        state.cross_readings = [];
+        state.taggings = [];
+        state.turns = [];
+        state.artifact = null;
+        state.metrics = null;
+        state.flag_interps = [];
         for (const m of ev.models_invited) {
-          state.phase_1[m] = state.phase_1[m] || { claims: [], started_ms: null, completed_ms: null };
+          state.phase_1[m] = { claims: [], started_ms: null, completed_ms: null };
         }
         break;
       case 'phase_0_datetime_grounding':
@@ -682,16 +750,71 @@
     banner.textContent = text;
     banner.className = 'conn-banner ' + cls;
   }
+
+  // Hoisted so the input bar's submit handler can use the live socket
+  // across reconnects.
+  let ws = null;
+
+  // ---- Input bar ----
+  const promptInput = document.getElementById('prompt-input');
+  const promptSubmit = document.getElementById('prompt-submit');
+
+  function setInputEnabled(enabled, placeholder) {
+    promptInput.disabled = !enabled;
+    promptSubmit.disabled = !enabled;
+    if (placeholder !== undefined) promptInput.placeholder = placeholder;
+  }
+
+  function submitPrompt() {
+    if (promptInput.disabled) return;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    const text = promptInput.value;
+    if (!text.trim()) return;
+    ws.send(JSON.stringify({ type: 'prompt', text: text }));
+    promptInput.value = '';
+    setInputEnabled(false, 'session in flight…');
+  }
+
+  promptSubmit.addEventListener('click', submitPrompt);
+  promptInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      submitPrompt();
+    }
+  });
+
   function connect() {
     const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
-    const ws = new WebSocket(proto + '://' + window.location.host + '/ws');
-    ws.onopen = () => setStatus('connected', 'connected');
-    ws.onclose = () => { setStatus('disconnected — retrying…', 'disconnected'); setTimeout(connect, 1500); };
+    ws = new WebSocket(proto + '://' + window.location.host + '/ws');
+    ws.onopen = () => {
+      setStatus('connected', 'connected');
+      // Re-enable input on connect, unless a session is currently in
+      // flight (between session_started and session_completed).
+      const inFlight = state.session_id && !state.completed;
+      if (inFlight) {
+        setInputEnabled(false, 'session in flight…');
+      } else {
+        setInputEnabled(true, 'question for the lattice — Enter to submit');
+      }
+      promptInput.focus();
+    };
+    ws.onclose = () => {
+      setStatus('disconnected — retrying…', 'disconnected');
+      setInputEnabled(false, 'reconnecting…');
+      setTimeout(connect, 1500);
+    };
     ws.onerror = () => setStatus('error', 'disconnected');
     ws.onmessage = (e) => {
       try {
         const ev = JSON.parse(e.data);
         applyEvent(ev);
+        // Session lifecycle drives input enable/disable.
+        if (ev.event_type === 'session_started') {
+          setInputEnabled(false, 'session in flight…');
+        } else if (ev.event_type === 'session_completed') {
+          setInputEnabled(true, 'question for the lattice — Enter to submit');
+          promptInput.focus();
+        }
         renderAll();
       } catch (err) {
         console.error('failed to parse event', err, e.data);
