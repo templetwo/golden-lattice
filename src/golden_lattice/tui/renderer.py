@@ -27,7 +27,12 @@ from golden_lattice.tui.colors import (
     READING_COLOR,
     READING_GLOSS,
 )
-from golden_lattice.tui.state import TuiState, apply_event, converge_pairs_per_claim
+from golden_lattice.tui.state import (
+    TuiState,
+    apply_event,
+    claim_grounding_source,
+    converge_pairs_per_claim,
+)
 
 
 # --- individual panels ----------------------------------------------------
@@ -128,6 +133,67 @@ def render_model_column(state: TuiState, model: ModelId) -> Panel:
     )
 
 
+def render_feed_panel(state: TuiState) -> Panel:
+    """Phase 0 feed — temporal grounding, proposals, search results / failures,
+    freeze status. Renders empty placeholder when Phase 0 didn't run."""
+    has_phase_0 = (
+        state.phase_0_grounding is not None
+        or state.phase_0_proposals
+        or state.phase_0_search_results
+        or state.phase_0_failed_searches
+    )
+    if not has_phase_0:
+        return Panel(
+            Text("Phase 0 did not run (no investigation).", style="dim italic"),
+            title="feed (Phase 0)",
+            border_style="bright_black",
+        )
+
+    parts: list[RenderableType] = []
+    g = state.phase_0_grounding
+    if g is not None:
+        parts.append(Text.from_markup(
+            f"[bold]grounding[/]  [dim]{g.formatted_text}[/]"
+        ))
+    if state.phase_0_proposals:
+        parts.append(Text(""))
+        parts.append(Text.from_markup("[bold]proposals[/]"))
+        for p in state.phase_0_proposals:
+            color = MODEL_COLOR.get(p.model_id, "white")
+            short = _short_model(p.model_id)
+            if not p.queries:
+                parts.append(Text.from_markup(
+                    f"  [{color}]{short:8s}[/] [dim](no proposals)[/]"
+                ))
+            else:
+                qlist = "; ".join(p.queries)[:120]
+                parts.append(Text.from_markup(
+                    f"  [{color}]{short:8s}[/] {qlist}"
+                ))
+    entries: list[RenderableType] = []
+    for r in state.phase_0_search_results:
+        preview = r.result_text_preview.replace("\n", " ")[:90]
+        entries.append(Text.from_markup(
+            f"  [bright_green]✓[/] [white]{r.query[:60]}[/]  [dim]{preview}[/]"
+        ))
+    for f in state.phase_0_failed_searches:
+        entries.append(Text.from_markup(
+            f"  [bright_red]✗[/] [white]{f.query[:60]}[/]  [bright_red]{f.reason[:90]}[/]"
+        ))
+    if entries:
+        parts.append(Text(""))
+        parts.append(Text.from_markup("[bold]entries[/]"))
+        parts.extend(entries)
+
+    if state.phase_0_feed_frozen is not None:
+        parts.append(Text(""))
+        parts.append(Text.from_markup(
+            f"[yellow]frozen[/]  [dim]{state.phase_0_feed_frozen.entry_count} entries; Phase 1 can begin[/]"
+        ))
+
+    return Panel(Group(*parts), title="feed (Phase 0)", border_style="yellow")
+
+
 def render_loom(state: TuiState) -> Panel:
     """Phase 3 weave — channel-colored directed lines between speakers and
     targets, in arrival order. Doubled-converge claims (Rule 2 elevation
@@ -218,9 +284,18 @@ def render_trace_ledger(state: TuiState) -> Panel:
 
     table = Table(show_header=True, header_style="bold", expand=True, pad_edge=False)
     table.add_column("Author", no_wrap=True, width=8)
+    table.add_column("Gnd", no_wrap=True, width=4)
     table.add_column("Claim", overflow="ellipsis", ratio=4)
     table.add_column("Disp.", no_wrap=True, width=10)
     table.add_column("Detail", overflow="ellipsis", ratio=3)
+
+    # Build a provenance lookup from the live Phase 1 claim events. The
+    # state accumulator does not currently track tool_provenance per claim
+    # — that would require persisting provenance on Phase1ClaimEvent, which
+    # is a future amendment. For now the renderer treats absence of
+    # provenance info as "prior", which is correct for all current sessions
+    # since live Phase 1 stubs do not set provenance.
+    provenance_by_claim: dict[str, tuple[str, ...]] = {}
 
     for entry in artifact.claim_trace:
         author, text = claim_index.get(entry.claim_id, (None, entry.claim_id))
@@ -229,6 +304,14 @@ def render_trace_ledger(state: TuiState) -> Panel:
             if author
             else "[dim]?[/]"
         )
+        grounding = claim_grounding_source(
+            state, entry.claim_id, provenance_by_claim.get(entry.claim_id, ())
+        )
+        grounding_cell = {
+            "prior": "[dim]P[/]",
+            "feed": "[yellow]F[/]",
+            "unknown": "[bright_red]?[/]",
+        }[grounding]
         disp_color = DISPOSITION_COLOR.get(entry.disposition, "white")
         disp_cell = f"[{disp_color}]{entry.disposition}[/]"
         if entry.disposition == "modified":
@@ -238,7 +321,7 @@ def render_trace_ledger(state: TuiState) -> Panel:
         else:
             detail = ""
         text_preview = text[:80].replace("\n", " ") if text else entry.claim_id
-        table.add_row(author_label, text_preview, disp_cell, detail)
+        table.add_row(author_label, grounding_cell, text_preview, disp_cell, detail)
 
     return Panel(
         Group(header, Text(""), table),
@@ -387,6 +470,7 @@ def build_layout(state: TuiState) -> Layout:
     root = Layout()
     root.split_column(
         Layout(name="header", size=4),
+        Layout(name="feed", ratio=2),
         Layout(name="columns", ratio=4),
         Layout(name="loom", ratio=3),
         Layout(name="phase4", ratio=4),
@@ -402,6 +486,7 @@ def build_layout(state: TuiState) -> Layout:
     )
 
     root["header"].update(render_header(state))
+    root["feed"].update(render_feed_panel(state))
     if state.invited_models:
         for m in state.invited_models:
             root["columns"][m.value].update(render_model_column(state, m))

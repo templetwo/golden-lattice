@@ -8,10 +8,15 @@ owns state; every panel reads from this accumulator.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Literal, Optional, Sequence
 
 from golden_lattice.events import (
     LatticeEvent,
+    Phase0DatetimeGroundingEvent,
+    Phase0FailedSearchEvent,
+    Phase0FeedFrozenEvent,
+    Phase0ProposalSubmittedEvent,
+    Phase0SearchResultEvent,
     Phase1ClaimEvent,
     Phase1ResponseCompletedEvent,
     Phase1ResponseStartedEvent,
@@ -33,6 +38,15 @@ class TuiState:
     session_id: Optional[str] = None
     prompt: Optional[str] = None
     invited_models: tuple[ModelId, ...] = ()
+
+    # Phase 0 — Investigation. Populated as events arrive; empty/None when
+    # the session did not run Phase 0 (backward compatible with pre-amendment
+    # sessions).
+    phase_0_grounding: Optional[Phase0DatetimeGroundingEvent] = None
+    phase_0_proposals: list[Phase0ProposalSubmittedEvent] = field(default_factory=list)
+    phase_0_search_results: list[Phase0SearchResultEvent] = field(default_factory=list)
+    phase_0_failed_searches: list[Phase0FailedSearchEvent] = field(default_factory=list)
+    phase_0_feed_frozen: Optional[Phase0FeedFrozenEvent] = None
 
     phase_1_started_ms: dict[ModelId, int] = field(default_factory=dict)
     phase_1_claims: dict[ModelId, list[Phase1ClaimEvent]] = field(default_factory=dict)
@@ -62,6 +76,16 @@ def apply_event(state: TuiState, event: LatticeEvent) -> None:
         state.invited_models = event.models_invited
         for m in event.models_invited:
             state.phase_1_claims.setdefault(m, [])
+    elif isinstance(event, Phase0DatetimeGroundingEvent):
+        state.phase_0_grounding = event
+    elif isinstance(event, Phase0ProposalSubmittedEvent):
+        state.phase_0_proposals.append(event)
+    elif isinstance(event, Phase0SearchResultEvent):
+        state.phase_0_search_results.append(event)
+    elif isinstance(event, Phase0FailedSearchEvent):
+        state.phase_0_failed_searches.append(event)
+    elif isinstance(event, Phase0FeedFrozenEvent):
+        state.phase_0_feed_frozen = event
     elif isinstance(event, Phase1ResponseStartedEvent):
         state.phase_1_started_ms[event.model_id] = event.timestamp_offset_ms
     elif isinstance(event, Phase1ClaimEvent):
@@ -84,6 +108,45 @@ def apply_event(state: TuiState, event: LatticeEvent) -> None:
         state.flag_event = event
     elif isinstance(event, SessionCompletedEvent):
         state.session_complete = True
+
+
+GroundingSource = Literal["feed", "prior", "unknown"]
+
+
+def claim_grounding_source(
+    state: TuiState,
+    claim_id: str,
+    tool_provenance: Sequence[str],
+) -> GroundingSource:
+    """Classify a claim's grounding for the trace-ledger renderer.
+
+    Returns:
+      "prior"   — empty tool_provenance: the claim came from model priors,
+                  no Phase 0 feed entry referenced.
+      "feed"    — every provenance id resolves to a Phase 0 feed entry that
+                  the renderer has seen (grounding/search-result/failed-search).
+      "unknown" — at least one provenance id does not resolve. Possible if
+                  events arrived out of order, or if the state hasn't yet
+                  ingested the relevant feed entry. The ledger renders this
+                  as a warning rather than silently misattributing.
+
+    Note: claim_id is accepted for interface symmetry — the function may
+    consult it in future revisions (e.g., to confirm the claim is known to
+    state). Current implementation classifies on tool_provenance alone.
+    """
+    if not tool_provenance:
+        return "prior"
+    known_entry_ids: set[str] = set()
+    if state.phase_0_grounding is not None:
+        known_entry_ids.add(state.phase_0_grounding.entry_id)
+    for r in state.phase_0_search_results:
+        known_entry_ids.add(r.entry_id)
+    for f in state.phase_0_failed_searches:
+        known_entry_ids.add(f.entry_id)
+    for entry_id in tool_provenance:
+        if entry_id not in known_entry_ids:
+            return "unknown"
+    return "feed"
 
 
 def converge_pairs_per_claim(state: TuiState) -> dict[str, list[Phase3TurnEvent]]:

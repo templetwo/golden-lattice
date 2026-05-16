@@ -11,6 +11,11 @@ from __future__ import annotations
 from pathlib import Path
 
 from golden_lattice.events import (
+    Phase0DatetimeGroundingEvent,
+    Phase0FailedSearchEvent,
+    Phase0FeedFrozenEvent,
+    Phase0ProposalSubmittedEvent,
+    Phase0SearchResultEvent,
     Phase1ClaimEvent,
     Phase1ResponseCompletedEvent,
     Phase1ResponseStartedEvent,
@@ -156,6 +161,124 @@ def test_converge_pairs_ignores_non_converge_channels():
         ),
     ]
     assert converge_pairs_per_claim(state) == {}
+
+
+# --- Phase 0 state folding ------------------------------------------------
+
+
+def test_phase_0_grounding_event_folds_into_state():
+    state = TuiState()
+    state.invited_models = (ModelId.OPUS, ModelId.SONNET, ModelId.HAIKU)
+    apply_event(
+        state,
+        Phase0DatetimeGroundingEvent(
+            timestamp_offset_ms=10,
+            entry_id="abc123",
+            timezone_name="America/New_York",
+            formatted_text="2026-05-17 12:00:00 (America/New_York)",
+        ),
+    )
+    assert state.phase_0_grounding is not None
+    assert state.phase_0_grounding.entry_id == "abc123"
+    assert state.phase_0_grounding.timezone_name == "America/New_York"
+
+
+def test_phase_0_proposal_events_accumulate_per_model():
+    state = TuiState()
+    state.invited_models = (ModelId.OPUS, ModelId.SONNET, ModelId.HAIKU)
+    for m, qs in (
+        (ModelId.OPUS, ("opus q1", "opus q2")),
+        (ModelId.SONNET, ("sonnet q",)),
+        (ModelId.HAIKU, ()),
+    ):
+        apply_event(
+            state,
+            Phase0ProposalSubmittedEvent(
+                timestamp_offset_ms=0,
+                model_id=m,
+                queries=qs,
+            ),
+        )
+    assert len(state.phase_0_proposals) == 3
+    by_model = {p.model_id: p for p in state.phase_0_proposals}
+    assert by_model[ModelId.OPUS].queries == ("opus q1", "opus q2")
+    assert by_model[ModelId.HAIKU].queries == ()
+
+
+def test_phase_0_search_result_event_folds_into_state():
+    state = TuiState()
+    apply_event(
+        state,
+        Phase0SearchResultEvent(
+            timestamp_offset_ms=0,
+            entry_id="entry1",
+            query="some query",
+            result_text_preview="Some result.",
+            source_urls=("https://example.com",),
+        ),
+    )
+    assert len(state.phase_0_search_results) == 1
+    assert state.phase_0_search_results[0].query == "some query"
+
+
+def test_phase_0_failed_search_event_folds_into_state():
+    state = TuiState()
+    apply_event(
+        state,
+        Phase0FailedSearchEvent(
+            timestamp_offset_ms=0,
+            entry_id="entry-failed",
+            query="bad query",
+            reason="rate limited",
+        ),
+    )
+    assert len(state.phase_0_failed_searches) == 1
+    assert state.phase_0_failed_searches[0].reason == "rate limited"
+
+
+def test_phase_0_feed_frozen_event_folds_into_state():
+    state = TuiState()
+    apply_event(
+        state,
+        Phase0FeedFrozenEvent(
+            timestamp_offset_ms=0,
+            entry_count=4,
+        ),
+    )
+    assert state.phase_0_feed_frozen is not None
+    assert state.phase_0_feed_frozen.entry_count == 4
+
+
+def test_claim_grounding_source_returns_feed_when_tool_provenance_matches():
+    """Renderer helper: claim_grounding_source(state, claim_id) tells the
+    trace ledger whether to mark a claim feed-grounded or prior-grounded."""
+    from golden_lattice.tui.state import claim_grounding_source
+
+    state = TuiState()
+    apply_event(
+        state,
+        Phase0SearchResultEvent(
+            timestamp_offset_ms=0,
+            entry_id="feed-entry-x",
+            query="q",
+            result_text_preview="r",
+        ),
+    )
+    # Phase 1 claim that references the feed entry via tool_provenance.
+    apply_event(
+        state,
+        Phase1ClaimEvent(
+            timestamp_offset_ms=1,
+            model_id=ModelId.OPUS,
+            claim_id="claim-from-feed",
+            text="grounded in evidence",
+        ),
+    )
+    # Tool provenance is tracked separately; for state-level testing, the
+    # helper accepts an explicit set of provenance ids.
+    assert claim_grounding_source(state, "claim-from-feed", ("feed-entry-x",)) == "feed"
+    assert claim_grounding_source(state, "claim-from-feed", ()) == "prior"
+    assert claim_grounding_source(state, "claim-from-feed", ("never-in-feed",)) == "unknown"
 
 
 def test_full_lucumi_replay_round_trip_through_state():
