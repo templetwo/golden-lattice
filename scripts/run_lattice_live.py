@@ -213,6 +213,17 @@ def main(argv: list[str] | None = None) -> int:
     store = JsonFileSessionStore(args.sessions_dir)
     store.save(session)
     persisted_path = args.sessions_dir / f"{session.session_id}{store.SUFFIX}"
+
+    # Print the synthesis output prominently so the answer is visible in
+    # the terminal, not just in the persisted JSON. The TUI panels show
+    # the structural picture; this shows the actual co-authored response.
+    if session.phase_4 is not None:
+        console.print()
+        console.rule("[bold]Synthesis (Phase 4)[/]", style="bright_black")
+        console.print()
+        console.print(session.phase_4.output)
+        console.print()
+        console.rule(style="bright_black")
     console.print(f"\n[green]Session persisted:[/] {persisted_path}")
     return 0
 

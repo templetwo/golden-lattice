@@ -98,7 +98,7 @@ def render_model_column(state: TuiState, model: ModelId) -> Panel:
                 marker = "[bright_yellow]★[/] "
             elif c.claim_id == weak_id:
                 marker = "[dim]·[/] "
-            preview = c.text[:80] + ("…" if len(c.text) > 80 else "")
+            preview = c.text[:220] + ("…" if len(c.text) > 220 else "")
             parts.append(Text.from_markup(
                 f"{marker}[{color}]·[/] {preview}",
             ))
@@ -253,8 +253,8 @@ def render_loom(state: TuiState) -> Panel:
             "[bright_yellow]★[/] " if turn.turn_id in elevated_turn_ids else "  "
         )
         t_seconds = turn.timestamp_offset_ms / 1000.0
-        content_preview = turn.content[:100].replace("\n", " ")
-        if len(turn.content) > 100:
+        content_preview = turn.content[:280].replace("\n", " ")
+        if len(turn.content) > 280:
             content_preview += "…"
 
         arrow = f"[{channel_color}]──{turn.channel}──▶[/]"
@@ -335,12 +335,12 @@ def render_trace_ledger(state: TuiState) -> Panel:
         disp_color = DISPOSITION_COLOR.get(entry.disposition, "white")
         disp_cell = f"[{disp_color}]{entry.disposition}[/]"
         if entry.disposition == "modified":
-            detail = (entry.modified_text or "")[:80]
+            detail = (entry.modified_text or "")[:180]
         elif entry.disposition == "omitted":
-            detail = f"[italic]{(entry.omission_reason or '')[:80]}[/]"
+            detail = f"[italic]{(entry.omission_reason or '')[:180]}[/]"
         else:
             detail = ""
-        text_preview = text[:80].replace("\n", " ") if text else entry.claim_id
+        text_preview = text[:220].replace("\n", " ") if text else entry.claim_id
         table.add_row(author_label, grounding_cell, text_preview, disp_cell, detail)
 
     return Panel(
