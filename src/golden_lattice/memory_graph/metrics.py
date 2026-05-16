@@ -13,7 +13,9 @@ compute_consensus_pair_distribution and compute_consensus_pair_skew.
 from __future__ import annotations
 
 from collections import Counter
-from typing import Optional
+from typing import Literal, Optional
+
+from pydantic import BaseModel, ConfigDict
 
 from golden_lattice.memory_graph.base import (
     EDGE_CASE_DIMENSION,
@@ -21,6 +23,7 @@ from golden_lattice.memory_graph.base import (
     STRUCTURAL_PATTERN_DIMENSION,
     Dimension,
     ModelId,
+    Phase,
 )
 from golden_lattice.memory_graph.schema import Claim, Session, SessionMetrics
 from golden_lattice.memory_graph.tagging import (
@@ -202,6 +205,236 @@ def contested_peer_tags(
         for (claim_id, dimension, tag_value), voters in votes.items()
         if len(voters) == 1
     )
+
+
+FlagReading = Literal[
+    "peer_divergence",
+    "vocabulary_failed",
+    "not_recognized",
+    "low_claim_volume",
+    "ambiguous",
+]
+
+
+class FlagInterpretation(BaseModel):
+    """One reading per parity violation in a SessionMetrics object.
+
+    The architecture is built to flag, not to explain. Three readings the panel
+    must hold open without prejudging when a consensus-dimension violation fires:
+
+      peer_divergence   — n=1 dominates: peers each cover claims in this
+                          dimension but disagree on which. The vocabulary worked
+                          per-peer, the peers diverged per-claim.
+      vocabulary_failed — OTHER-only entries dominate: peers saw the dimension
+                          applies but no subtype fit. ARCHITECTURE.md §5.2
+                          vocabulary-fitness signal.
+      not_recognized    — n=0 dominates: peers did not see claims as
+                          dimension-relevant at all. Real recognition asymmetry.
+
+    A fourth reading is reserved for the non-consensus violation:
+
+      low_claim_volume  — distinct_claim_share fell below threshold. The model
+                          contributed too few Phase 1 claims relative to peers.
+                          Histogram fields are zero by convention; the share
+                          is the whole story.
+
+    ambiguous           — No signal exceeds the dominance threshold. The panel
+                          shows histogram + share and lets the reader decide.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    source_model: ModelId
+    dimension_label: str
+    share: float
+    reading: FlagReading
+    histogram_n_zero: int = 0
+    histogram_n_one: int = 0
+    histogram_n_two: int = 0
+    other_only_entries: int = 0
+    total_claims: int = 0
+
+
+_DIMENSION_BY_LABEL: dict[str, Dimension] = {
+    "edge_case_coverage_share": EDGE_CASE_DIMENSION,
+    "structural_pattern_share": STRUCTURAL_PATTERN_DIMENSION,
+}
+
+_DOMINANCE_THRESHOLD = 0.4
+
+
+def _classify_consensus_flag(
+    n_zero: int,
+    n_one: int,
+    other_only_entries: int,
+    total_claims: int,
+    n_peers: int,
+) -> FlagReading:
+    """Pick the strongest signal among the three consensus-flag readings.
+
+    Compares normalized signals over the model's Phase 1 claims:
+      zero_frac        = n_zero / total_claims
+      one_frac         = n_one  / total_claims
+      other_only_frac  = other_only_entries / (total_claims * n_peers)
+
+    n=2 is the passing-case bucket and not a flag reading, so it does not
+    enter classification. Vocabulary check fires first: it is per-entry
+    rather than per-claim and can be the dominant signal even when the
+    per-claim histogram looks ordinary. Otherwise the larger of
+    {zero_frac, one_frac} names the reading, provided it exceeds
+    _DOMINANCE_THRESHOLD. Below threshold → ambiguous.
+    """
+    if total_claims == 0 or n_peers <= 0:
+        return "ambiguous"
+
+    zero_frac = n_zero / total_claims
+    one_frac = n_one / total_claims
+    other_only_frac = other_only_entries / (total_claims * n_peers)
+
+    # OTHER-only entries force n_cover to zero (the OTHER value is excluded
+    # from cover-counting), so vocabulary_failed and not_recognized peak
+    # together when OTHER-only dominates. Prefer the more informative read:
+    # "peers saw the dimension applies but no subtype fit" is a strict
+    # superset of "peers did not cover the claim."
+    if other_only_frac >= 0.5 and other_only_frac >= max(one_frac, zero_frac):
+        return "vocabulary_failed"
+
+    if one_frac > zero_frac and one_frac >= _DOMINANCE_THRESHOLD:
+        return "peer_divergence"
+    if zero_frac > one_frac and zero_frac >= _DOMINANCE_THRESHOLD:
+        return "not_recognized"
+    return "ambiguous"
+
+
+def _peer_recognition_histogram(
+    session: Session,
+    source_model: ModelId,
+    dimension: Dimension,
+) -> tuple[int, int, int, int, int]:
+    """Per-claim peer-recognition histogram for one (source_model, dimension).
+
+    Returns (n_zero, n_one, n_two, other_only_entries, total_claims).
+
+    For each Phase 1 claim authored by source_model, counts how many distinct
+    non-self peer-taggers covered it (any non-OTHER tag in dimension) versus
+    marked it OTHER-only (only OTHER in dimension). Self-tags excluded — they
+    do not enter parity, per ARCHITECTURE.md §6.
+    """
+    # Index peer_tags by (tagger, claim_id) for fast lookup.
+    peer_tag_index: dict[tuple[ModelId, str], ClaimTags] = {}
+    for tagging in session.phase_2_taggings:
+        for ct in tagging.peer_tags:
+            peer_tag_index[(tagging.tagger_model, ct.claim_id)] = ct
+
+    invited = tuple(session.models_invited)
+    peers = tuple(m for m in invited if m is not source_model)
+
+    own_claims = [
+        c
+        for r in session.phase_1.values()
+        for c in r.claims
+        if c.source_model is source_model and c.source_phase is Phase.INDEPENDENT
+    ]
+
+    n_zero = n_one = n_two = 0
+    other_only_entries = 0
+
+    for claim in own_claims:
+        peers_covering = 0
+        for peer in peers:
+            ct = peer_tag_index.get((peer, claim.claim_id))
+            if ct is None:
+                continue
+            tags_in_dim = (
+                ct.edge_case_tags
+                if dimension == EDGE_CASE_DIMENSION
+                else ct.structural_pattern_tags
+            )
+            if not tags_in_dim:
+                continue
+            other_value = (
+                EdgeCaseTag.OTHER
+                if dimension == EDGE_CASE_DIMENSION
+                else StructuralPatternTag.OTHER
+            )
+            has_substantive = any(t is not other_value for t in tags_in_dim)
+            if has_substantive:
+                peers_covering += 1
+            else:
+                other_only_entries += 1
+
+        if peers_covering == 0:
+            n_zero += 1
+        elif peers_covering == 1:
+            n_one += 1
+        else:
+            n_two += 1
+
+    return n_zero, n_one, n_two, other_only_entries, len(own_claims)
+
+
+def interpret_parity_flags(session: Session) -> tuple[FlagInterpretation, ...]:
+    """For each parity violation in session.metrics, return a labeled reading.
+
+    Pure sync, no LLM calls. The panel reads the result; it does not compute.
+    Empty tuple when metrics is None (dyad) or no violations.
+
+    Three readings the architecture must hold open are distinguished by the
+    per-claim peer-recognition histogram; see _classify_consensus_flag and
+    FlagInterpretation docstrings. A fourth reading is reserved for
+    distinct_claim_share violations, which are not consensus-derived.
+    """
+    if session.metrics is None:
+        return ()
+
+    n_peers = len(set(session.models_invited)) - 1
+    out: list[FlagInterpretation] = []
+
+    for label, model_id, share in session.metrics.parity_violations:
+        if label == "distinct_claim_share":
+            out.append(
+                FlagInterpretation(
+                    source_model=model_id,
+                    dimension_label=label,
+                    share=share,
+                    reading="low_claim_volume",
+                )
+            )
+            continue
+
+        dimension = _DIMENSION_BY_LABEL.get(label)
+        if dimension is None:
+            out.append(
+                FlagInterpretation(
+                    source_model=model_id,
+                    dimension_label=label,
+                    share=share,
+                    reading="ambiguous",
+                )
+            )
+            continue
+
+        n_zero, n_one, n_two, other_only, total = _peer_recognition_histogram(
+            session, model_id, dimension
+        )
+        reading = _classify_consensus_flag(
+            n_zero, n_one, other_only, total, n_peers
+        )
+        out.append(
+            FlagInterpretation(
+                source_model=model_id,
+                dimension_label=label,
+                share=share,
+                reading=reading,
+                histogram_n_zero=n_zero,
+                histogram_n_one=n_one,
+                histogram_n_two=n_two,
+                other_only_entries=other_only,
+                total_claims=total,
+            )
+        )
+
+    return tuple(out)
 
 
 def contested_self_tags(
