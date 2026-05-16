@@ -16,6 +16,11 @@ import hashlib
 from datetime import datetime, timezone
 from typing import Any, Optional
 
+from golden_lattice.exchange.phase_0_investigation import (
+    build_investigation_proposal_prompt,
+    investigation_proposal_tool_schema,
+    parse_investigation_proposal_tool_use,
+)
 from golden_lattice.exchange.phase_1_independent import (
     build_phase_1_response_prompt,
     build_self_reflection_prompt,
@@ -39,6 +44,7 @@ from golden_lattice.exchange.phase_3_dialogue import (
     phase_3_dialogue_tool_schema,
 )
 from golden_lattice.memory_graph.base import ModelId
+from golden_lattice.memory_graph.phase_0 import InvestigationProposal
 from golden_lattice.memory_graph.schema import (
     Claim,
     CrossReading,
@@ -55,7 +61,8 @@ def _prompt_hash(prompt: str) -> str:
 
 
 class AnthropicClient:
-    """Implements Phase1WireClient, Phase2WireClient, Phase3WireClient.
+    """Implements Phase0WireClient, Phase1WireClient, Phase2WireClient,
+    Phase3WireClient.
 
     Wraps the anthropic SDK's async client. Each method:
       1. Builds the (system, user) prompts via the wire layer's builders.
@@ -79,6 +86,44 @@ class AnthropicClient:
                 "Install with: pip install anthropic"
             ) from exc
         self._client = anthropic.AsyncAnthropic(api_key=api_key)
+
+    # --- Phase 0 ---------------------------------------------------------
+
+    async def submit_investigation_proposal(
+        self,
+        *,
+        model_id: ModelId,
+        original_prompt: str,
+        max_queries: int,
+    ) -> InvestigationProposal:
+        system, user = build_investigation_proposal_prompt(
+            model_id=model_id,
+            original_prompt=original_prompt,
+            max_queries=max_queries,
+        )
+        tool = investigation_proposal_tool_schema(max_queries=max_queries)
+        try:
+            response = await self._client.messages.create(
+                model=model_id.value,
+                max_tokens=2048,
+                system=system,
+                messages=[{"role": "user", "content": user}],
+                tools=[tool],
+                tool_choice={"type": "tool", "name": tool["name"]},
+            )
+        except Exception as exc:
+            raise OrchestratorProviderError(
+                model=model_id, phase="phase_0_proposal", underlying=exc
+            ) from exc
+        tool_input = _extract_tool_input(response, tool["name"])
+        try:
+            return parse_investigation_proposal_tool_use(
+                tool_input, expected_model=model_id
+            )
+        except WireParseError as exc:
+            raise WireParseError(
+                f"[model={model_id.value}, phase=phase_0_proposal] {exc}"
+            ) from exc
 
     # --- Phase 1 ---------------------------------------------------------
 
