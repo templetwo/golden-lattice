@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Golden Lattice — Dashboard</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel-bg: #161a21;
+    --panel-border: #2a2f3a;
+    --text: #d8dee9;
+    --dim: #6b7280;
+    --accent: #ffd60a;
+    --opus: #c084fc;
+    --sonnet: #7dd3fc;
+    --haiku: #86efac;
+    --critique: #f87171;
+    --augment: #93c5fd;
+    --converge: #fbbf24;
+    --success: #86efac;
+    --fail: #f87171;
+    --present: #86efac;
+    --modified: #fbbf24;
+    --omitted: #f87171;
+    --feed-marker: #fbbf24;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; background: var(--bg); color: var(--text); }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .grid {
+    display: grid;
+    height: 100vh;
+    grid-template-rows:
+      auto                /* header */
+      minmax(120px, 220px) /* feed */
+      minmax(220px, 1fr)  /* columns */
+      minmax(180px, 0.8fr) /* loom */
+      minmax(220px, 1fr)  /* phase4 (ledger + parity) */
+      minmax(140px, auto); /* synthesis (capped) */
+    gap: 8px;
+    padding: 8px;
+  }
+  .panel {
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+    border-radius: 6px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-height: 0;
+  }
+  .panel-title {
+    padding: 6px 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border-bottom: 1px solid var(--panel-border);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--dim);
+    flex-shrink: 0;
+  }
+  .panel-body {
+    padding: 8px 12px;
+    overflow-y: auto;
+    flex: 1;
+    min-height: 0;
+  }
+  .columns {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+    min-height: 0;
+  }
+  .phase4 {
+    display: grid;
+    grid-template-columns: 3fr 2fr;
+    gap: 8px;
+    min-height: 0;
+  }
+  .opus { border-top: 2px solid var(--opus); }
+  .sonnet { border-top: 2px solid var(--sonnet); }
+  .haiku { border-top: 2px solid var(--haiku); }
+  .feed { border-top: 2px solid var(--feed-marker); }
+  .synthesis { border-top: 2px solid var(--accent); }
+  .opus-color { color: var(--opus); }
+  .sonnet-color { color: var(--sonnet); }
+  .haiku-color { color: var(--haiku); }
+  .critique-color { color: var(--critique); }
+  .augment-color { color: var(--augment); }
+  .converge-color { color: var(--converge); }
+  .success-icon { color: var(--success); }
+  .fail-icon { color: var(--fail); }
+  .dim { color: var(--dim); }
+  .accent { color: var(--accent); }
+  .header-panel {
+    padding: 10px 14px;
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+    border-radius: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 13px;
+  }
+  .header-row .session-id { color: var(--accent); font-weight: 600; font-family: ui-monospace, monospace; }
+  .header-row .status { color: var(--dim); font-family: ui-monospace, monospace; }
+  .header-row .status.completed { color: var(--success); }
+  .prompt-preview {
+    color: var(--dim);
+    font-style: italic;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .claim {
+    margin: 6px 0;
+    padding: 6px 8px;
+    background: rgba(255, 255, 255, 0.02);
+    border-left: 3px solid var(--panel-border);
+    border-radius: 3px;
+  }
+  .claim.opus { border-left-color: var(--opus); }
+  .claim.sonnet { border-left-color: var(--sonnet); }
+  .claim.haiku { border-left-color: var(--haiku); }
+  .claim-id { color: var(--dim); font-family: ui-monospace, monospace; font-size: 11px; }
+  .claim-text { margin-top: 2px; }
+  .strongest-marker { color: var(--accent); font-weight: 700; }
+  .weakest-marker { color: var(--dim); }
+  .reflection {
+    margin-top: 12px;
+    padding: 8px;
+    background: rgba(255, 214, 10, 0.06);
+    border-radius: 4px;
+    color: var(--dim);
+    font-style: italic;
+    font-size: 12px;
+  }
+  .meta-line {
+    color: var(--dim);
+    font-size: 11px;
+    font-family: ui-monospace, monospace;
+    margin-bottom: 6px;
+  }
+  .feed-entry {
+    margin: 6px 0;
+    padding: 6px 8px;
+    background: rgba(255, 255, 255, 0.02);
+    border-left: 3px solid var(--panel-border);
+    border-radius: 3px;
+  }
+  .feed-entry.success { border-left-color: var(--success); }
+  .feed-entry.fail { border-left-color: var(--fail); }
+  .feed-entry .query { font-family: ui-monospace, monospace; color: var(--text); }
+  .feed-entry .summary { color: var(--dim); margin-top: 2px; }
+  .feed-entry details { margin-top: 4px; }
+  .feed-entry details summary { color: var(--dim); cursor: pointer; font-size: 11px; }
+  .feed-entry pre {
+    background: rgba(0, 0, 0, 0.3);
+    padding: 8px;
+    border-radius: 3px;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    font-size: 11px;
+    color: var(--text);
+    margin: 4px 0 0 0;
+    max-height: 300px;
+    overflow-y: auto;
+  }
+  .turn {
+    margin: 4px 0;
+    padding: 6px 8px;
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: 3px;
+  }
+  .turn.critique { border-left: 3px solid var(--critique); }
+  .turn.augment { border-left: 3px solid var(--augment); }
+  .turn.converge { border-left: 3px solid var(--converge); }
+  .turn.elevated { background: rgba(251, 191, 36, 0.08); }
+  .turn-header { font-size: 11px; font-family: ui-monospace, monospace; margin-bottom: 2px; }
+  .turn-content { font-size: 12px; }
+  .arrow { color: var(--dim); }
+  table.ledger { width: 100%; border-collapse: collapse; font-size: 12px; }
+  table.ledger th { text-align: left; color: var(--dim); font-weight: 500; padding: 4px 6px; border-bottom: 1px solid var(--panel-border); }
+  table.ledger td { padding: 6px; border-bottom: 1px solid rgba(255, 255, 255, 0.03); vertical-align: top; }
+  .disp-present { color: var(--present); }
+  .disp-modified { color: var(--modified); }
+  .disp-omitted { color: var(--omitted); }
+  .grounding-P { color: var(--dim); }
+  .grounding-F { color: var(--accent); }
+  .grounding-Q { color: var(--fail); }
+  .parity-row { margin: 6px 0; }
+  .parity-bar {
+    display: inline-block;
+    width: 120px;
+    height: 8px;
+    background: var(--panel-border);
+    border-radius: 2px;
+    overflow: hidden;
+    vertical-align: middle;
+    margin: 0 6px;
+  }
+  .parity-bar-fill { display: block; height: 100%; background: var(--accent); }
+  .parity-dim-title { color: var(--dim); margin: 10px 0 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .below-threshold { color: var(--fail); margin-left: 4px; }
+  .flag-reading {
+    margin-top: 10px;
+    padding: 8px;
+    background: rgba(248, 113, 113, 0.08);
+    border-radius: 3px;
+    border-left: 3px solid var(--fail);
+  }
+  .flag-reading .reading { font-weight: 600; }
+  .flag-reading .gloss { color: var(--dim); margin-top: 2px; font-size: 11px; }
+  .flag-reading .histogram { font-family: ui-monospace, monospace; font-size: 11px; color: var(--dim); margin-top: 4px; }
+  .synthesis-body { white-space: pre-wrap; font-size: 12px; line-height: 1.6; }
+  .synthesis-body .attr-O { color: var(--opus); }
+  .synthesis-body .attr-S { color: var(--sonnet); }
+  .synthesis-body .attr-H { color: var(--haiku); }
+  .conn-banner {
+    position: fixed;
+    top: 8px;
+    right: 8px;
+    padding: 4px 10px;
+    border-radius: 12px;
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+    font-size: 11px;
+    color: var(--dim);
+    z-index: 100;
+  }
+  .conn-banner.connected { color: var(--success); border-color: var(--success); }
+  .conn-banner.disconnected { color: var(--fail); border-color: var(--fail); }
+  .empty { color: var(--dim); font-style: italic; }
+</style>
+</head>
+<body>
+<div class="conn-banner" id="conn-banner">connecting…</div>
+<div class="grid">
+  <div class="header-panel">
+    <div class="header-row">
+      <div class="session-id" id="session-id">awaiting session_started…</div>
+      <div class="status" id="status">—</div>
+    </div>
+    <div class="prompt-preview" id="prompt-preview"></div>
+  </div>
+  <div class="panel feed">
+    <div class="panel-title">feed (Phase 0)</div>
+    <div class="panel-body" id="feed-body">
+      <div class="empty">no investigation yet</div>
+    </div>
+  </div>
+  <div class="columns">
+    <div class="panel opus">
+      <div class="panel-title opus-color">OPUS</div>
+      <div class="panel-body" id="col-claude-opus-4-7"><div class="empty">waiting…</div></div>
+    </div>
+    <div class="panel sonnet">
+      <div class="panel-title sonnet-color">SONNET</div>
+      <div class="panel-body" id="col-claude-sonnet-4-6"><div class="empty">waiting…</div></div>
+    </div>
+    <div class="panel haiku">
+      <div class="panel-title haiku-color">HAIKU</div>
+      <div class="panel-body" id="col-claude-haiku-4-5"><div class="empty">waiting…</div></div>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="panel-title">loom (Phase 3)</div>
+    <div class="panel-body" id="loom-body"><div class="empty">Phase 3 not yet started…</div></div>
+  </div>
+  <div class="phase4">
+    <div class="panel">
+      <div class="panel-title">trace ledger (Phase 4)</div>
+      <div class="panel-body" id="ledger-body"><div class="empty">Phase 4 trace not yet composed…</div></div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">parity</div>
+      <div class="panel-body" id="parity-body"><div class="empty">parity not yet computed…</div></div>
+    </div>
+  </div>
+  <div class="panel synthesis">
+    <div class="panel-title">synthesis (Phase 4)</div>
+    <div class="panel-body" id="synthesis-body"><div class="empty">synthesis not yet emitted…</div></div>
+  </div>
+</div>
+
+<script>
+(function() {
+  // ---- Color and label helpers ----
+  const MODEL_COLOR = {
+    'claude-opus-4-7': 'opus-color',
+    'claude-sonnet-4-6': 'sonnet-color',
+    'claude-haiku-4-5': 'haiku-color',
+  };
+  const MODEL_SHORT = {
+    'claude-opus-4-7': 'OPUS',
+    'claude-sonnet-4-6': 'SONNET',
+    'claude-haiku-4-5': 'HAIKU',
+  };
+  const READING_GLOSS = {
+    'not_recognized': 'Genuine recognition asymmetry — peers did not see these claims as dimension-relevant.',
+    'vocabulary_failed': 'The closed vocabulary did not cover these contributions.',
+    'peer_divergence': 'Peers split per-claim on this model’s contributions.',
+    'low_claim_volume': 'Too few claims to compute meaningfully.',
+    'ambiguous': 'Histogram does not match a clean pattern.',
+  };
+  function shortModel(m) { return MODEL_SHORT[m] || m; }
+  function escapeHtml(s) {
+    return String(s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  // ---- State accumulator (mirrors TuiState semantics) ----
+  const state = {
+    session_id: null,
+    prompt: null,
+    prompt_hash: null,
+    invited_models: [],
+    completed: false,
+    current_offset_ms: 0,
+    phase_0_grounding: null,
+    phase_0_proposals: [],
+    phase_0_search_results: [],
+    phase_0_failed_searches: [],
+    phase_0_feed_frozen: null,
+    phase_1: {},  // model_id -> {focus, confidence, claims, completed_ms, started_ms, reflection}
+    self_reflections: {},
+    cross_readings: [],
+    taggings: [],
+    turns: [],
+    artifact: null,
+    metrics: null,
+    flag_interps: [],
+  };
+
+  // ---- Event dispatch ----
+  function applyEvent(ev) {
+    state.current_offset_ms = ev.timestamp_offset_ms;
+    switch (ev.event_type) {
+      case 'session_started':
+        state.session_id = ev.session_id;
+        state.prompt = ev.prompt;
+        state.prompt_hash = ev.prompt_hash;
+        state.invited_models = ev.models_invited;
+        for (const m of ev.models_invited) {
+          state.phase_1[m] = state.phase_1[m] || { claims: [], started_ms: null, completed_ms: null };
+        }
+        break;
+      case 'phase_0_datetime_grounding':
+        state.phase_0_grounding = ev;
+        break;
+      case 'phase_0_proposal_submitted':
+        state.phase_0_proposals.push(ev);
+        break;
+      case 'phase_0_search_result':
+        state.phase_0_search_results.push(ev);
+        break;
+      case 'phase_0_failed_search':
+        state.phase_0_failed_searches.push(ev);
+        break;
+      case 'phase_0_feed_frozen':
+        state.phase_0_feed_frozen = ev;
+        break;
+      case 'phase_1_response_started':
+        state.phase_1[ev.model_id] = state.phase_1[ev.model_id] || { claims: [] };
+        state.phase_1[ev.model_id].started_ms = ev.timestamp_offset_ms;
+        break;
+      case 'phase_1_claim':
+        state.phase_1[ev.model_id] = state.phase_1[ev.model_id] || { claims: [] };
+        state.phase_1[ev.model_id].claims.push(ev);
+        break;
+      case 'phase_1_response_completed':
+        state.phase_1[ev.model_id] = state.phase_1[ev.model_id] || { claims: [] };
+        state.phase_1[ev.model_id].focus = ev.focus_tag;
+        state.phase_1[ev.model_id].confidence = ev.confidence;
+        state.phase_1[ev.model_id].claim_count = ev.claim_count;
+        state.phase_1[ev.model_id].completed_ms = ev.timestamp_offset_ms;
+        break;
+      case 'self_reflection':
+        state.self_reflections[ev.model_id] = ev;
+        break;
+      case 'phase_2_cross_reading':
+        state.cross_readings.push(ev);
+        break;
+      case 'phase_2_tagging':
+        state.taggings.push(ev);
+        break;
+      case 'phase_3_turn':
+        state.turns.push(ev);
+        break;
+      case 'phase_4_artifact':
+        state.artifact = ev;
+        break;
+      case 'phase_4_metrics':
+        state.metrics = ev.metrics;
+        break;
+      case 'phase_4_flag_interpretations':
+        state.flag_interps = ev.interpretations || [];
+        break;
+      case 'session_completed':
+        state.completed = true;
+        break;
+    }
+  }
+
+  // ---- Renderers ----
+  function elapsedStr() {
+    return 't+' + (state.current_offset_ms / 1000).toFixed(1) + 's';
+  }
+  function renderHeader() {
+    document.getElementById('session-id').textContent = state.session_id || 'awaiting session_started…';
+    const statusEl = document.getElementById('status');
+    statusEl.textContent = elapsedStr() + '  •  ' + (state.completed ? 'session_completed' : 'in flight');
+    statusEl.className = 'status' + (state.completed ? ' completed' : '');
+    document.getElementById('prompt-preview').textContent = state.prompt || '';
+  }
+  function renderFeed() {
+    const body = document.getElementById('feed-body');
+    if (!state.phase_0_grounding && state.phase_0_proposals.length === 0 &&
+        state.phase_0_search_results.length === 0 && state.phase_0_failed_searches.length === 0) {
+      body.innerHTML = '<div class="empty">Phase 0 did not run (no investigation).</div>';
+      return;
+    }
+    const parts = [];
+    if (state.phase_0_grounding) {
+      parts.push('<div class="meta-line"><span class="accent">grounding</span> ' +
+                 escapeHtml(state.phase_0_grounding.formatted_text) + '</div>');
+    }
+    if (state.phase_0_proposals.length) {
+      const summary = state.phase_0_proposals.map(p => {
+        const color = MODEL_COLOR[p.model_id] || '';
+        return '<span class="' + color + '">' + shortModel(p.model_id) + '</span>:' + p.queries.length;
+      }).join(' ');
+      const unique = new Set();
+      state.phase_0_proposals.forEach(p => p.queries.forEach(q => unique.add(q)));
+      parts.push('<div class="meta-line"><strong>proposals</strong> ' + summary +
+                 ' <span class="dim">(' + unique.size + ' unique)</span></div>');
+    }
+    const successes = state.phase_0_search_results.length;
+    const failures = state.phase_0_failed_searches.length;
+    if (successes + failures > 0) {
+      parts.push('<div class="meta-line"><strong>entries</strong> <span class="dim">(' +
+                 (successes + failures) + ' total)</span></div>');
+      for (const r of state.phase_0_search_results) {
+        parts.push(
+          '<div class="feed-entry success">' +
+          '<span class="success-icon">✓</span> ' +
+          '<span class="query">' + escapeHtml(r.query) + '</span>' +
+          '<details><summary>preview (' + r.result_text_preview.length + ' chars)</summary>' +
+          '<pre>' + escapeHtml(r.result_text_preview) + '</pre>' +
+          '</details>' +
+          '</div>'
+        );
+      }
+      for (const f of state.phase_0_failed_searches) {
+        parts.push(
+          '<div class="feed-entry fail">' +
+          '<span class="fail-icon">✗</span> ' +
+          '<span class="query">' + escapeHtml(f.query) + '</span>' +
+          '<div class="summary">' + escapeHtml(f.reason) + '</div>' +
+          '</div>'
+        );
+      }
+    }
+    if (state.phase_0_feed_frozen) {
+      parts.push('<div class="meta-line"><span class="accent">frozen</span> ' +
+                 state.phase_0_feed_frozen.entry_count + ' entries; Phase 1 can begin</div>');
+    }
+    body.innerHTML = parts.join('');
+  }
+  function renderColumn(model_id) {
+    const body = document.getElementById('col-' + model_id);
+    if (!body) return;
+    const m = state.phase_1[model_id] || { claims: [] };
+    const reflection = state.self_reflections[model_id];
+    const strongId = reflection ? reflection.strongest_claim_id : null;
+    const weakId = reflection ? reflection.weakest_claim_id : null;
+    const color = MODEL_COLOR[model_id] || '';
+    const parts = [];
+    if (m.focus != null) {
+      const elapsed = m.completed_ms && m.started_ms ? ((m.completed_ms - m.started_ms) / 1000).toFixed(1) + 's' : '';
+      parts.push('<div class="meta-line"><span class="' + color + '">focus:</span> ' + escapeHtml(m.focus) +
+                 ' <span class="' + color + '">conf:</span> ' + (m.confidence != null ? m.confidence.toFixed(2) : '?') +
+                 ' <span class="dim">(' + elapsed + ', ' + (m.claim_count || m.claims.length) + ' claims)</span></div>');
+    } else if (m.started_ms != null) {
+      parts.push('<div class="meta-line ' + color + '">generating…</div>');
+    }
+    for (const c of m.claims) {
+      let marker = '';
+      let markerClass = '';
+      if (c.claim_id === strongId) { marker = '★ '; markerClass = 'strongest-marker'; }
+      else if (c.claim_id === weakId) { marker = '· '; markerClass = 'weakest-marker'; }
+      parts.push(
+        '<div class="claim ' + model_id.split('-')[1] + '">' +
+        '<div class="claim-text"><span class="' + markerClass + '">' + marker + '</span>' + escapeHtml(c.text) + '</div>' +
+        '<div class="claim-id">' + escapeHtml(c.claim_id) + '</div>' +
+        '</div>'
+      );
+    }
+    if (reflection) {
+      parts.push('<div class="reflection">reflection: ' + escapeHtml(reflection.tag_justification) + '</div>');
+    }
+    body.innerHTML = parts.join('') || '<div class="empty">waiting…</div>';
+  }
+  function renderLoom() {
+    const body = document.getElementById('loom-body');
+    if (state.turns.length === 0) {
+      body.innerHTML = '<div class="empty">Phase 3 not yet started…</div>';
+      return;
+    }
+    // Elevation detection: claims targeted by >=2 converge turns from distinct speakers.
+    const convergeByClaim = {};
+    for (const t of state.turns) {
+      if (t.channel !== 'converge') continue;
+      for (const cid of (t.target_claim_ids || [])) {
+        convergeByClaim[cid] = convergeByClaim[cid] || new Set();
+        convergeByClaim[cid].add(t.speaker_model);
+      }
+    }
+    const elevatedTurnIds = new Set();
+    for (const t of state.turns) {
+      if (t.channel !== 'converge') continue;
+      for (const cid of (t.target_claim_ids || [])) {
+        if (convergeByClaim[cid] && convergeByClaim[cid].size >= 2) elevatedTurnIds.add(t.turn_id);
+      }
+    }
+    const parts = [];
+    for (const t of state.turns) {
+      const elev = elevatedTurnIds.has(t.turn_id) ? ' elevated' : '';
+      const speakerColor = MODEL_COLOR[t.speaker_model] || '';
+      const targetColor = t.target_model ? (MODEL_COLOR[t.target_model] || '') : 'dim';
+      const targetLabel = t.target_model ? shortModel(t.target_model) : 'all peers';
+      const tSec = (t.timestamp_offset_ms / 1000).toFixed(1);
+      parts.push(
+        '<div class="turn ' + t.channel + elev + '">' +
+        '<div class="turn-header">' +
+        (elevatedTurnIds.has(t.turn_id) ? '<span class="accent">★</span> ' : '') +
+        '<span class="dim">' + tSec + 's</span> ' +
+        '<span class="' + speakerColor + '">' + shortModel(t.speaker_model) + '</span> ' +
+        '<span class="' + t.channel + '-color">─' + t.channel + '→</span> ' +
+        '<span class="' + targetColor + '">' + targetLabel + '</span>' +
+        '</div>' +
+        '<div class="turn-content">' + escapeHtml(t.content) + '</div>' +
+        '</div>'
+      );
+    }
+    body.innerHTML = parts.join('');
+  }
+  function renderLedger() {
+    const body = document.getElementById('ledger-body');
+    if (!state.artifact) {
+      body.innerHTML = '<div class="empty">Phase 4 trace not yet composed…</div>';
+      return;
+    }
+    // Build a claim lookup from Phase 1 events.
+    const claimById = {};
+    for (const m of Object.keys(state.phase_1)) {
+      for (const c of state.phase_1[m].claims) {
+        claimById[c.claim_id] = { author: m, text: c.text };
+      }
+    }
+    const trace = state.artifact.claim_trace || [];
+    const nPresent = trace.filter(e => e.disposition === 'present').length;
+    const nModified = trace.filter(e => e.disposition === 'modified').length;
+    const nOmitted = trace.filter(e => e.disposition === 'omitted').length;
+    const total = trace.length;
+    const pct = total ? Math.round((nPresent + nModified + nOmitted) / total * 100) : 0;
+    const parts = [];
+    parts.push('<div class="meta-line"><span class="disp-present">' + nPresent +
+               '</span>/<span class="disp-modified">' + nModified +
+               '</span>/<span class="disp-omitted">' + nOmitted + '</span> of ' + total + ' claims  •  ' + pct + '% coverage</div>');
+    parts.push('<table class="ledger"><thead><tr><th>Author</th><th>Claim</th><th>Disp.</th><th>Detail</th></tr></thead><tbody>');
+    for (const e of trace) {
+      const info = claimById[e.claim_id] || { author: '?', text: e.claim_id };
+      const authorColor = MODEL_COLOR[info.author] || '';
+      const authorLabel = shortModel(info.author);
+      let detail = '';
+      if (e.disposition === 'modified') detail = escapeHtml(e.modified_text || '');
+      else if (e.disposition === 'omitted') detail = '<em>' + escapeHtml(e.omission_reason || '') + '</em>';
+      parts.push(
+        '<tr>' +
+        '<td><span class="' + authorColor + '">' + authorLabel + '</span></td>' +
+        '<td>' + escapeHtml(info.text) + '</td>' +
+        '<td><span class="disp-' + e.disposition + '">' + e.disposition + '</span></td>' +
+        '<td>' + detail + '</td>' +
+        '</tr>'
+      );
+    }
+    parts.push('</tbody></table>');
+    body.innerHTML = parts.join('');
+  }
+  function renderParity() {
+    const body = document.getElementById('parity-body');
+    if (!state.metrics && !state.artifact) {
+      body.innerHTML = '<div class="empty">parity not yet computed…</div>';
+      return;
+    }
+    if (!state.metrics) {
+      body.innerHTML = '<div class="dim">parity undefined (N&lt;3)</div>';
+      return;
+    }
+    const m = state.metrics;
+    const threshold = m.parity_threshold;
+    const parts = [];
+    function dim(label, share_dict) {
+      parts.push('<div class="parity-dim-title">' + escapeHtml(label) + '</div>');
+      for (const [model, share] of Object.entries(share_dict)) {
+        const color = MODEL_COLOR[model] || '';
+        const pct = Math.min(1, share) * 100;
+        const below = share < threshold ? '<span class="below-threshold">&lt;</span>' : '';
+        parts.push(
+          '<div class="parity-row"><span class="' + color + '">' + shortModel(model) + '</span>' +
+          '<span class="parity-bar"><span class="parity-bar-fill" style="width:' + pct + '%"></span></span>' +
+          share.toFixed(3) + below + '</div>'
+        );
+      }
+    }
+    dim('distinct_claim_share', m.distinct_claim_share);
+    dim('edge_case_coverage', m.edge_case_coverage_share);
+    dim('structural_pattern', m.structural_pattern_share);
+    if (state.flag_interps.length === 0 && state.artifact) {
+      parts.push('<div style="margin-top:12px;color:var(--success);">parity holds across all dimensions and models.</div>');
+    }
+    for (const interp of state.flag_interps) {
+      const color = MODEL_COLOR[interp.source_model] || '';
+      parts.push(
+        '<div class="flag-reading">' +
+        '<div><span class="' + color + '">' + shortModel(interp.source_model) + '</span>  ' +
+        '<span class="dim">' + escapeHtml(interp.dimension_label) + '</span>  ' +
+        'share=' + interp.share.toFixed(3) + '  ' +
+        '<span class="reading">→ ' + escapeHtml(interp.reading) + '</span>' +
+        '</div>' +
+        '<div class="gloss">' + escapeHtml(READING_GLOSS[interp.reading] || '') + '</div>' +
+        (interp.reading !== 'low_claim_volume'
+          ? '<div class="histogram">n=0: ' + interp.histogram_n_zero +
+            '  n=1: ' + interp.histogram_n_one +
+            '  n=2: ' + interp.histogram_n_two +
+            '  (OTHER-only: ' + interp.other_only_entries + ', claims: ' + interp.total_claims + ')</div>'
+          : '') +
+        '</div>'
+      );
+    }
+    body.innerHTML = parts.join('');
+  }
+  function renderSynthesis() {
+    const body = document.getElementById('synthesis-body');
+    if (!state.artifact) {
+      body.innerHTML = '<div class="empty">synthesis not yet emitted…</div>';
+      return;
+    }
+    // Color [O] [S] [H] attribution markers inline.
+    let text = escapeHtml(state.artifact.output);
+    text = text.replace(/\[O\]/g, '<span class="attr-O">[O]</span>');
+    text = text.replace(/\[S\]/g, '<span class="attr-S">[S]</span>');
+    text = text.replace(/\[H\]/g, '<span class="attr-H">[H]</span>');
+    body.innerHTML = '<div class="synthesis-body">' + text + '</div>';
+  }
+  function renderAll() {
+    renderHeader();
+    renderFeed();
+    for (const m of state.invited_models) renderColumn(m);
+    renderLoom();
+    renderLedger();
+    renderParity();
+    renderSynthesis();
+  }
+
+  // ---- WebSocket connection ----
+  const banner = document.getElementById('conn-banner');
+  function setStatus(text, cls) {
+    banner.textContent = text;
+    banner.className = 'conn-banner ' + cls;
+  }
+  function connect() {
+    const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
+    const ws = new WebSocket(proto + '://' + window.location.host + '/ws');
+    ws.onopen = () => setStatus('connected', 'connected');
+    ws.onclose = () => { setStatus('disconnected — retrying…', 'disconnected'); setTimeout(connect, 1500); };
+    ws.onerror = () => setStatus('error', 'disconnected');
+    ws.onmessage = (e) => {
+      try {
+        const ev = JSON.parse(e.data);
+        applyEvent(ev);
+        renderAll();
+      } catch (err) {
+        console.error('failed to parse event', err, e.data);
+      }
+    };
+  }
+  connect();
+  renderAll();
+})();
+</script>
+</body>
+</html>

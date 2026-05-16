@@ -43,6 +43,7 @@ from golden_lattice.orchestrator import (
     AnthropicClient,
     LatticeConfig,
     run_lattice_session,
+    run_lattice_session_async,
 )
 from golden_lattice.tui.renderer import build_layout
 from golden_lattice.tui.state import TuiState, apply_event
@@ -74,6 +75,17 @@ def main(argv: list[str] | None = None) -> int:
         "--no-tui",
         action="store_true",
         help="Stream event-type lines to stderr instead of rendering the TUI.",
+    )
+    parser.add_argument(
+        "--dashboard",
+        action="store_true",
+        help="Run the web dashboard instead of the terminal TUI. Opens a browser tab and streams events via WebSocket so panels can be scrolled and read in full.",
+    )
+    parser.add_argument(
+        "--dashboard-port",
+        type=int,
+        default=8765,
+        help="Dashboard port when --dashboard is set (default: 8765).",
     )
     args = parser.parse_args(argv)
     console = Console()
@@ -166,7 +178,60 @@ def main(argv: list[str] | None = None) -> int:
             "investigate before answering.[/]"
         )
 
-    if args.no_tui:
+    if args.dashboard:
+        # Web dashboard: orchestrator and server run in the same asyncio
+        # loop. Each event broadcasts to connected browser clients via the
+        # DashboardServer. Server stays alive a few seconds after
+        # session_completed so the user can read the final state, then exits.
+        import asyncio
+        import webbrowser
+        from aiohttp import web as aioweb
+        from golden_lattice.dashboard.server import DashboardServer
+
+        async def _run_with_dashboard():
+            server = DashboardServer()
+            runner = aioweb.AppRunner(server.app)
+            await runner.setup()
+            site = aioweb.TCPSite(runner, "127.0.0.1", args.dashboard_port)
+            await site.start()
+            url = f"http://127.0.0.1:{args.dashboard_port}"
+            console.print(f"[green]Dashboard at[/] {url}")
+            webbrowser.open(url)
+            await asyncio.sleep(1.0)  # let the browser connect first
+
+            pending: list[asyncio.Task] = []
+
+            def callback(event):
+                # Fire-and-forget the async broadcast from the sync callback;
+                # we collect tasks so we can await them before exit to make
+                # sure the browser actually received the final events.
+                pending.append(asyncio.create_task(server.broadcast(event)))
+
+            try:
+                session = await run_lattice_session_async(
+                    prompt,
+                    config=config,
+                    client=client,
+                    progress_callback=callback,
+                    phase_0_client=phase_0_client,
+                    search_client=search_client,
+                )
+                await asyncio.gather(*pending, return_exceptions=True)
+                console.print(
+                    "[dim]session_completed — dashboard stays live for 60s; "
+                    "Ctrl-C to exit sooner.[/]"
+                )
+                await asyncio.sleep(60.0)
+                return session
+            finally:
+                await runner.cleanup()
+
+        try:
+            session = asyncio.run(_run_with_dashboard())
+        except KeyboardInterrupt:
+            console.print("\n[dim]Dashboard stopped.[/]")
+            return 130
+    elif args.no_tui:
         def callback(event):
             print(
                 f"[{event.timestamp_offset_ms:7d}ms] {event.event_type}",
