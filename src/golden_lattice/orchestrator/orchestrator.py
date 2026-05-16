@@ -50,16 +50,34 @@ from golden_lattice.events import (
     SessionCompletedEvent,
     SessionStartedEvent,
 )
+from golden_lattice.exchange.phase_0_investigation import (
+    Phase0WireClient,
+    SearchClient,
+)
 from golden_lattice.exchange.phase_1_independent import (
     Phase1WireClient,
     compose_phase_1_with_reflection,
 )
 from golden_lattice.exchange.phase_2_cross_reading import Phase2WireClient
 from golden_lattice.exchange.phase_3_dialogue import Phase3WireClient
-from golden_lattice.memory_graph.base import PARITY_THRESHOLD, ModelId
+from golden_lattice.memory_graph.base import (
+    INVESTIGATION_CAP,
+    INVESTIGATION_TIMEZONE,
+    PARITY_THRESHOLD,
+    ModelId,
+)
 from golden_lattice.memory_graph.metrics import (
     compute_parity_shares,
     interpret_parity_flags,
+)
+from golden_lattice.memory_graph.phase_0 import (
+    DateTimeGrounding,
+    FailedSearch,
+    FeedEntry,
+    InvestigationProposal,
+    Phase0Investigation,
+    SearchResult,
+    datetime_grounding_id,
 )
 from golden_lattice.memory_graph.schema import (
     Claim,
@@ -72,6 +90,12 @@ from golden_lattice.memory_graph.tagging import Phase2Tagging
 from golden_lattice.orchestrator.config import LatticeConfig
 from golden_lattice.orchestrator.errors import OrchestratorTimeoutError
 from golden_lattice.synthesis.engine import synthesize
+
+try:
+    # Python 3.9+: stdlib zoneinfo for IANA timezone resolution.
+    from zoneinfo import ZoneInfo
+except ImportError:  # pragma: no cover
+    ZoneInfo = None  # type: ignore[assignment, misc]
 
 
 ProgressCallback = Callable[[LatticeEvent], None]
@@ -146,12 +170,14 @@ async def run_lattice_session_async(
     prompt: str,
     *,
     config: LatticeConfig,
-    client,  # satisfies all three wire Protocols
+    client,  # satisfies all three wire Protocols (Phase 1/2/3)
     invited_models: tuple[ModelId, ...] = DEFAULT_INVITED_MODELS,
     session_id: Optional[str] = None,
     progress_callback: Optional[ProgressCallback] = None,
+    phase_0_client: Optional[Phase0WireClient] = None,
+    search_client: Optional[SearchClient] = None,
 ) -> Session:
-    """Run a complete Lattice session: Phase 1 → 2 → 3 → 4. Returns Session.
+    """Run a complete Lattice session: Phase 0 → 1 → 2 → 3 → 4. Returns Session.
 
     Async core. Use run_lattice_session() for sync callers.
 
@@ -172,7 +198,22 @@ async def run_lattice_session_async(
     If progress_callback is provided, the orchestrator fires LatticeEvents at
     each phase boundary as they happen — the same event types replay yields
     against a persisted Session. One renderer, two sources.
+
+    Phase 0 (Investigation) runs iff both phase_0_client and search_client
+    are provided. Asymmetric configuration (one provided, the other not)
+    raises ValueError — the boundary refuses ambiguous configuration rather
+    than silently skipping. When Phase 0 is skipped, Session.phase_0 stays
+    None and the lattice proceeds with pre-amendment behavior (backward
+    compatible with sessions that predate ARCHITECTURE.md §5.0).
     """
+    if (phase_0_client is None) != (search_client is None):
+        raise ValueError(
+            "phase_0_client and search_client must be provided together "
+            "or both omitted. Asymmetric configuration is a user error — "
+            "Phase 0 needs both interfaces to run, and the orchestrator "
+            "refuses to silently disable Phase 0 if only one is missing."
+        )
+
     if session_id is None:
         session_id = _generate_session_id()
     prompt_hash = _prompt_hash(prompt)
@@ -185,6 +226,17 @@ async def run_lattice_session_async(
         prompt_hash=prompt_hash,
         models_invited=invited_models,
     ))
+
+    # --- Phase 0: Investigation (optional, runs iff both clients provided)
+    phase_0_investigation: Optional[Phase0Investigation] = None
+    if phase_0_client is not None and search_client is not None:
+        phase_0_investigation = await _run_phase_0(
+            prompt=prompt,
+            phase_0_client=phase_0_client,
+            search_client=search_client,
+            invited_models=invited_models,
+            config=config,
+        )
 
     # --- Phase 1 + self-reflection (per-model latency-gap utilization) ---
     phase_1_results = await _run_phase_1_with_reflection(
@@ -231,6 +283,7 @@ async def run_lattice_session_async(
         prompt=prompt,
         prompt_hash=prompt_hash,
         models_invited=invited_models,
+        phase_0=phase_0_investigation,
         phase_1=phase_1_results,
         phase_2=phase_2_cross_readings,
         phase_2_taggings=phase_2_taggings,
@@ -268,6 +321,7 @@ async def run_lattice_session_async(
         prompt=pre_synth_session.prompt,
         prompt_hash=pre_synth_session.prompt_hash,
         models_invited=pre_synth_session.models_invited,
+        phase_0=pre_synth_session.phase_0,
         phase_1=pre_synth_session.phase_1,
         phase_2=pre_synth_session.phase_2,
         phase_2_taggings=pre_synth_session.phase_2_taggings,
@@ -296,6 +350,8 @@ def run_lattice_session(
     invited_models: tuple[ModelId, ...] = DEFAULT_INVITED_MODELS,
     session_id: Optional[str] = None,
     progress_callback: Optional[ProgressCallback] = None,
+    phase_0_client: Optional[Phase0WireClient] = None,
+    search_client: Optional[SearchClient] = None,
 ) -> Session:
     """Sync wrapper around run_lattice_session_async. Canonical CLI entry."""
     return asyncio.run(
@@ -306,6 +362,8 @@ def run_lattice_session(
             invited_models=invited_models,
             session_id=session_id,
             progress_callback=progress_callback,
+            phase_0_client=phase_0_client,
+            search_client=search_client,
         )
     )
 
@@ -313,6 +371,96 @@ def run_lattice_session(
 # ---------------------------------------------------------------------------
 # Phase pipeline helpers.
 # ---------------------------------------------------------------------------
+
+
+def _make_datetime_grounding() -> DateTimeGrounding:
+    """Deterministic temporal-grounding precondition. Called by the
+    orchestrator before any model proposes investigations. No authority
+    gradient because no model decides what comes back — same constitutional
+    category as §8 prompt re-anchoring.
+
+    Reads current wall time in INVESTIGATION_TIMEZONE (America/New_York,
+    per the locked decision). When zoneinfo is unavailable (e.g., minimal
+    runtime), falls back to UTC; the formatted_text reflects which zone
+    was actually resolved.
+    """
+    if ZoneInfo is not None:
+        try:
+            tz = ZoneInfo(INVESTIGATION_TIMEZONE)
+            now = datetime.now(tz)
+            tz_label = INVESTIGATION_TIMEZONE
+        except Exception:  # pragma: no cover
+            now = datetime.now(timezone.utc)
+            tz_label = "UTC"
+    else:  # pragma: no cover
+        now = datetime.now(timezone.utc)
+        tz_label = "UTC"
+    formatted = f"{now.strftime('%Y-%m-%d %H:%M:%S')} ({tz_label})"
+    return DateTimeGrounding(
+        entry_id=datetime_grounding_id(now, tz_label),
+        timestamp=now,
+        timezone_name=tz_label,
+        formatted_text=formatted,
+    )
+
+
+async def _run_phase_0(
+    *,
+    prompt: str,
+    phase_0_client: Phase0WireClient,
+    search_client: SearchClient,
+    invited_models: tuple[ModelId, ...],
+    config: LatticeConfig,
+) -> Phase0Investigation:
+    """Phase 0: temporal grounding precondition + collective propose-and-union
+    + parallel search execution + freeze.
+
+    Pipeline:
+      1. Seed the feed with DateTimeGrounding (deterministic, no model).
+      2. Dispatch InvestigationProposal calls to all invited models in
+         parallel (no peer visibility — Phase 1 independence pattern).
+      3. Union the proposed queries by exact/structural dedup (never
+         semantic — that would need an adjudicator and reintroduce the
+         authority gradient invariant 1 refuses).
+      4. Dispatch search executions for each deduplicated query in
+         parallel. SearchResult on success, FailedSearch on failure — the
+         search client converts internally.
+      5. Assemble the frozen Phase0Investigation.
+    """
+    # Step 1: deterministic temporal grounding.
+    grounding = _make_datetime_grounding()
+
+    # Step 2: collect proposals from all invited models in parallel.
+    async def _one_proposal(model: ModelId) -> InvestigationProposal:
+        return await phase_0_client.submit_investigation_proposal(
+            model_id=model,
+            original_prompt=prompt,
+            max_queries=INVESTIGATION_CAP,
+        )
+
+    proposal_coros = [_one_proposal(m) for m in invited_models]
+    proposals = tuple(await asyncio.gather(*proposal_coros))
+
+    # Step 3: rule-based exact union of queries. Preserve first-seen order
+    # so the feed has a deterministic deduplicated sequence.
+    union_queries: list[str] = []
+    seen: set[str] = set()
+    for p in proposals:
+        for q in p.queries:
+            if q not in seen:
+                seen.add(q)
+                union_queries.append(q)
+
+    # Step 4: dispatch deduplicated searches in parallel.
+    async def _one_search(query: str):
+        return await search_client.execute_search(query)
+
+    search_coros = [_one_search(q) for q in union_queries]
+    search_results = await asyncio.gather(*search_coros) if search_coros else []
+
+    # Step 5: assemble Phase 0 artifact.
+    feed: tuple[FeedEntry, ...] = (grounding, *search_results)
+    return Phase0Investigation(proposals=proposals, feed=feed)
 
 
 async def _run_phase_1_with_reflection(

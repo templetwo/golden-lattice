@@ -18,6 +18,13 @@ from golden_lattice.memory_graph.base import (
     Phase,
     claim_id_for,
 )
+from golden_lattice.memory_graph.phase_0 import (
+    FailedSearch,
+    InvestigationProposal,
+    SearchResult,
+    failed_search_id,
+    search_result_id,
+)
 from golden_lattice.memory_graph.schema import (
     Claim,
     CrossReading,
@@ -194,6 +201,85 @@ class StubAnthropicClient:
             return await self.phase_3_hook(speaker_model=speaker_model)
         # Default: empty dialogue.
         return ()
+
+
+class StubPhase0Client:
+    """Stub satisfying Phase0WireClient — returns canned investigation
+    proposals per model.
+
+    Default: each model proposes nothing (empty-union path). Tests that
+    exercise Phase 0 with proposals set them via the canned_proposals dict.
+    """
+
+    def __init__(self) -> None:
+        self.canned_proposals: dict[ModelId, tuple[str, ...]] = {
+            ModelId.OPUS: (),
+            ModelId.SONNET: (),
+            ModelId.HAIKU: (),
+        }
+        self.proposal_delay_seconds: dict[ModelId, float] = {}
+
+    async def submit_investigation_proposal(
+        self,
+        *,
+        model_id: ModelId,
+        original_prompt: str,
+        max_queries: int,
+    ) -> InvestigationProposal:
+        delay = self.proposal_delay_seconds.get(model_id, 0.0)
+        if delay:
+            await asyncio.sleep(delay)
+        queries = self.canned_proposals.get(model_id, ())[:max_queries]
+        return InvestigationProposal(model_id=model_id, queries=queries)
+
+
+class StubSearchClient:
+    """Stub satisfying SearchClient — maps queries to canned results or
+    canned failures. Defaults to a generic FailedSearch on unknown queries
+    so tests must opt-in to results explicitly."""
+
+    def __init__(self) -> None:
+        self.results: dict[str, str] = {}
+        self.fail_reasons: dict[str, str] = {}
+        self.search_delay_seconds: float = 0.0
+        # When set, all searches sleep this long (useful for timeout tests).
+
+    async def execute_search(
+        self, query: str
+    ):  # -> Union[SearchResult, FailedSearch]
+        if self.search_delay_seconds:
+            await asyncio.sleep(self.search_delay_seconds)
+        if query in self.fail_reasons:
+            return FailedSearch(
+                entry_id=failed_search_id(query, NOW),
+                query=query,
+                reason=self.fail_reasons[query],
+                attempted_at=NOW,
+            )
+        if query in self.results:
+            return SearchResult(
+                entry_id=search_result_id(query, NOW),
+                query=query,
+                result_text=self.results[query],
+                source_urls=("https://stub.example/" + query.replace(" ", "_"),),
+                executed_at=NOW,
+            )
+        return FailedSearch(
+            entry_id=failed_search_id(query, NOW),
+            query=query,
+            reason=f"stub has no canned result for {query!r}",
+            attempted_at=NOW,
+        )
+
+
+@pytest.fixture
+def stub_phase_0_client() -> StubPhase0Client:
+    return StubPhase0Client()
+
+
+@pytest.fixture
+def stub_search_client() -> StubSearchClient:
+    return StubSearchClient()
 
 
 @pytest.fixture
