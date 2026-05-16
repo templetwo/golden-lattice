@@ -41,7 +41,8 @@ from golden_lattice.exchange.phase_1_independent import (
 )
 from golden_lattice.exchange.phase_2_cross_reading import Phase2WireClient
 from golden_lattice.exchange.phase_3_dialogue import Phase3WireClient
-from golden_lattice.memory_graph.base import ModelId
+from golden_lattice.memory_graph.base import PARITY_THRESHOLD, ModelId
+from golden_lattice.memory_graph.metrics import compute_parity_shares
 from golden_lattice.memory_graph.schema import (
     Claim,
     CrossReading,
@@ -166,7 +167,12 @@ async def run_lattice_session_async(
         confidence_threshold=config.confidence_threshold,
     )
 
-    # Final Session with phase_4 set.
+    # --- Parity metrics: single source of truth at the canonical builder.
+    # Pure sync over the tagged Session (no LLM call). None for dyad
+    # sessions per ARCHITECTURE.md §5.3 — parity is undefined at N<3.
+    metrics = compute_parity_shares(pre_synth_session, threshold=PARITY_THRESHOLD)
+
+    # Final Session with phase_4 and metrics set.
     return Session(
         session_id=pre_synth_session.session_id,
         prompt=pre_synth_session.prompt,
@@ -177,6 +183,7 @@ async def run_lattice_session_async(
         phase_2_taggings=pre_synth_session.phase_2_taggings,
         phase_3=pre_synth_session.phase_3,
         phase_4=artifact,
+        metrics=metrics,
     )
 
 

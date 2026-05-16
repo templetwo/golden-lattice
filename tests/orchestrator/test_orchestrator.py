@@ -25,11 +25,14 @@ from golden_lattice.exchange.phase_3_dialogue import (
 )
 from golden_lattice.memory_graph.base import (
     DEFAULT_OUTPUT_MODE,
+    PARITY_THRESHOLD,
     ModelId,
     OutputMode,
     SynthesisRule,
 )
-from golden_lattice.memory_graph.schema import Session
+from golden_lattice.memory_graph.metrics import compute_parity_shares
+from golden_lattice.memory_graph.schema import Session, SessionMetrics
+from golden_lattice.memory_graph.store import JsonFileSessionStore
 from golden_lattice.orchestrator import (
     AnthropicClient,
     LatticeConfig,
@@ -256,6 +259,73 @@ def test_async_api_works(stub_client):
     session = asyncio.run(_run())
     assert isinstance(session, Session)
     assert session.phase_4 is not None
+
+
+# --- Parity wiring: load-bearing measurement at the canonical builder ----
+
+
+def test_run_lattice_session_attaches_parity_metrics_for_triadic(stub_client):
+    """N=3 emitted Session carries metrics computed by the orchestrator.
+
+    ARCHITECTURE.md falsification criterion #3 (contribution parity) is the
+    load-bearing measurement. compute_parity_shares is pure sync over the
+    tagged Session; the orchestrator is the canonical Session-builder, so
+    every emitted Session has parity computed exactly once at the boundary
+    where the lattice meets the world.
+    """
+    config = LatticeConfig()
+    session = run_lattice_session("p", config=config, client=stub_client)
+    assert session.metrics is not None
+    assert isinstance(session.metrics, SessionMetrics)
+    assert set(session.metrics.distinct_claim_share.keys()) == {
+        ModelId.OPUS, ModelId.SONNET, ModelId.HAIKU,
+    }
+    assert session.metrics.parity_threshold == PARITY_THRESHOLD
+
+
+def test_run_lattice_session_metrics_is_none_for_dyad(stub_client):
+    """N=2 emitted Session has metrics=None.
+
+    Recognition-from-within requires a third presence in the room. With N=2,
+    the consensus rule degenerates into one peer adjudicating the other —
+    the authority gradient the protocol refused. Parity is structurally
+    undefined, and the orchestrator surfaces that as None rather than a
+    misleading zero.
+    """
+    config = LatticeConfig()
+    session = run_lattice_session(
+        "p",
+        config=config,
+        client=stub_client,
+        invited_models=(ModelId.OPUS, ModelId.SONNET),
+    )
+    assert session.metrics is None
+
+
+def test_persisted_session_round_trips_parity_computable(tmp_path, stub_client):
+    """Round-trip a real triadic Session through JsonFileSessionStore and
+    confirm compute_parity_shares produces a well-formed SessionMetrics
+    over the reloaded object.
+
+    This is the kernel-level regression for the wiring: orchestrator emits
+    a Session with metrics; the store persists and reloads it without loss;
+    compute_parity_shares applied to the reloaded session still computes.
+
+    The same shape of test, run against the real persisted May 4 session
+    (sessions/session_20260505_010010_e9fd466c.session.json), is the
+    H1/H2 discriminator outside the test suite — see the suite-run notes.
+    """
+    config = LatticeConfig()
+    session = run_lattice_session(
+        "p", config=config, client=stub_client, session_id="round_trip_test"
+    )
+    store = JsonFileSessionStore(tmp_path)
+    store.save(session)
+    reloaded = store.load("round_trip_test")
+    assert reloaded.metrics is not None
+    assert reloaded.metrics == session.metrics
+    recomputed = compute_parity_shares(reloaded, threshold=PARITY_THRESHOLD)
+    assert recomputed == reloaded.metrics
 
 
 # --- Live integration test (gated) ---------------------------------------
