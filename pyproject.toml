@@ -9,6 +9,7 @@ description = "A structure that refuses the natural collapse of multi-model infe
 requires-python = ">=3.11"
 dependencies = [
     "pydantic>=2.6",
+    "rich>=13.0",
 ]
 
 [project.optional-dependencies]
