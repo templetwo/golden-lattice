@@ -42,11 +42,35 @@ No model's contribution can be fully subsumed without trace. Every distinct clai
 
 **Schema enforcement:** `Session` refuses construction if Phase 4's `claim_trace` does not cover every Phase 1 `claim_id`. `ClaimTraceEntry` refuses `modified` without `modified_text` and `omitted` without `omission_reason`.
 
+**Feed-grounded claims (Phase 0).** Claims that derive from Phase 0 investigation results carry `tool_provenance` references to feed entries. The irreducibility refusal covers feed-grounded claims identically to prior-grounded ones — the trace is the proof, and what got investigated is part of the trace. Tool-provenance references that do not resolve to a feed entry in `Session.phase_0.feed` are refused at construction.
+
 ## 4. Identity and tamper-evidence
 
 Claim IDs are content-addressed: `sha256(source_model | phase | text)[:16]`. Claims with mismatched IDs are refused at construction. Identity is tamper-evident across the session graph. Tag references that point to non-existent claim IDs are refused. Cross-layer references cannot be forged or silently corrupted.
 
 ## 5. The protocol
+
+The protocol has five phases. Phase 0 is the investigation phase added in this amendment; Phases 1–4 are the original specification. Phase 0 is optional: sessions that need no external evidence skip directly to Phase 1 with a minimal grounding-only feed.
+
+### Phase 0 — Investigation
+
+Some questions require evidence the lattice does not have. Phase 0 is the phase where the lattice acquires it, before independent generation begins. Added in this amendment; see chronicle entries `golden-lattice,phase-0,decisions-locked` for the design's lineage.
+
+**Temporal grounding precondition.** Before any model proposes any investigation, the orchestrator deterministically reads local date/time (`INVESTIGATION_TIMEZONE = "America/New_York"`) and seeds it as the first entry of the shared evidence feed (`DateTimeGrounding`). This is not a tool call, not a model action, and not in the investigation cap accounting. It is a deterministic constant that preconditions the phase — same constitutional category as the prompt re-anchoring of §8 (no authority gradient because no model decides it). Traces to Anthony's standing principle: ground temporally before acting; session texture is not elapsed real time.
+
+**Collective propose-and-union.** Each model independently receives the prompt and proposes up to `INVESTIGATION_CAP = 3` investigations (search queries it wants answered before generating). No peer visibility during proposal — structurally identical to Phase 1 independence. Proposals are combined by **rule-based exact/structural union**, deduplicated by canonical form, never by semantic-equivalence judgment. Semantic merge would require an adjudicator, reintroducing the authority gradient invariant 1 refuses. Redundant searches are a cost, not an invariant breach.
+
+**Cap.** Each model proposes at most three investigations. Flat, per-model, not differentiated by model identity. Differentiated USE is permitted (Haiku may make three broad probes while Opus makes one deep one); differentiated BUDGET would rebuild the Haiku → Sonnet → Opus pipeline through resource allocation and is refused. The cap is a cost lever, not a contribution lever; the temporal grounding entry is excluded from this count per the locked design.
+
+**Execution.** The orchestrator executes the deduplicated union of queries via a **non-model search executor**. Each successful result becomes a `SearchResult` feed entry; a failed search becomes a typed `FailedSearch` feed entry that all peers see. Failed evidence is itself shared evidence — §8 no-silent-failures. Precondition failures (credit balance, network unavailable at startup) remain orchestrator-layer aborts (`OrchestratorProviderError`), not feed entries.
+
+**Freeze.** The feed is frozen before Phase 1 begins, mapping onto §8's existing freeze discipline. Phase 1 then proceeds: independent generation over prompt PLUS frozen shared feed, identical for all three models.
+
+**Empty union is valid.** If no model proposes investigations, the feed contains only the `DateTimeGrounding` entry. The session proceeds directly to Phase 1 with the minimal feed. Some questions need no investigation; the architecture does not force one (a degenerate-but-clean path, the same way dyad parity returning `None` is a clean state).
+
+**Tool-provenance on `Claim`.** Claims that ground in feed entries carry `tool_provenance` references to those entries. Invariant 4 covers feed-grounded claims identically to prior-grounded — the trace itself is the proof, and what got investigated is part of the trace.
+
+**Tool web extensibility.** Internet search is node 0 of an extensible tool graph. Future tools (file read, code execution, MCP, etc.) are added as new feed-entry types with their own typed schema, not as branches in a fixed list. Any tool's failure mode must produce a typed feed entry; any tool's results must be exact/structural dedup-able.
 
 ### Phase 1 — Independent Generation
 
@@ -133,6 +157,12 @@ Default: `annotated`. The annotation is the proof we did not flatten.
 
 - **Pipeline collapse.** The natural Haiku → Sonnet → Opus pipeline is gravitationally strong. If parity metrics consistently favor Opus across sessions, the protocol has collapsed into pipelining.
   *Mitigation:* Session Memory Graph flagging, periodic audit.
+
+- **Confabulation when evidence is missing.** A model asked a question that requires external evidence may fabricate plausible-sounding content rather than refuse.
+  *Mitigation:* Phase 0 (Investigation) produces a shared evidence feed before independent generation. Models that need information they don't have can propose investigations; results land in the feed all peers see. Surfaced empirically: `session_20260516_065836_1f635cdf` (first live run) produced a co-authored refusal because the lattice could not investigate a GitHub URL — the architecture's integrity property fired, and Phase 0 is the structural remedy.
+
+- **Semantic-merge adjudication of investigation proposals.** Two models proposing similar-but-not-identical searches could in principle be merged "intelligently." Doing so requires a model or rule to judge equivalence, which is the authority gradient invariant 1 refuses.
+  *Mitigation:* Phase 0 union is exact/structural only. Redundant tool calls are a cost, not an invariant breach. The cost is bounded by the per-model cap (3).
 
 ## 9. The Memory Graph
 

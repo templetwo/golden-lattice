@@ -26,6 +26,7 @@ from golden_lattice.memory_graph.base import (
     SynthesisRule,
     claim_id_for,
 )
+from golden_lattice.memory_graph.phase_0 import Phase0Investigation
 from golden_lattice.memory_graph.tagging import Phase2Tagging
 
 __all__ = [
@@ -34,6 +35,7 @@ __all__ = [
     "ModelId",
     "OutputMode",
     "Phase",
+    "Phase0Investigation",
     "SynthesisRule",
     "claim_id_for",
     "Claim",
@@ -60,6 +62,14 @@ class Claim(BaseModel):
     source_phase: Phase
     text: str
     parent_claim_ids: tuple[str, ...] = ()
+    # Phase 0 grounding: feed_entry_ids this claim derives from. Empty tuple
+    # means prior-grounded (the model produced this claim from its own
+    # knowledge, no investigation needed). Non-empty means feed-grounded —
+    # the claim derives from one or more Phase 0 feed entries. Resolution
+    # against Session.phase_0.feed is enforced at the Session validator
+    # boundary; Invariant 4 (irreducibility preservation) covers feed-
+    # grounded claims identically to prior-grounded ones.
+    tool_provenance: tuple[str, ...] = ()
 
     @model_validator(mode="after")
     def _check_phase_lineage(self) -> "Claim":
@@ -449,6 +459,10 @@ class Session(BaseModel):
     prompt_hash: str
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     models_invited: tuple[ModelId, ...]
+    # Phase 0 (Investigation): pre-Phase-1 evidence-gathering. None when the
+    # session ran without investigation (backward-compatible with pre-amendment
+    # sessions; see ARCHITECTURE.md §5.0).
+    phase_0: Optional[Phase0Investigation] = None
     phase_1: dict[ModelId, IndependentResponse]
     phase_2: tuple[CrossReading, ...] = ()
     phase_2_taggings: tuple[Phase2Tagging, ...] = ()
@@ -701,6 +715,54 @@ class Session(BaseModel):
                         f"CrossReading from {cr.reader_model.value} disagrees with "
                         f"unknown target_claim_id {d.target_claim_id}. "
                         "Disagreements must resolve."
+                    )
+        return self
+
+    @model_validator(mode="after")
+    def _tool_provenance_resolves_to_feed(self) -> "Session":
+        """Feed-grounded claims must reference real Phase 0 feed entries.
+
+        Two refusals:
+          - If Session.phase_0 is None, no claim may carry tool_provenance.
+            Feed-grounding without a feed is impossible.
+          - If Session.phase_0 is set, every tool_provenance entry must
+            resolve to a feed_entry_id in the feed. Invariant 4 — the
+            irreducibility trace covers feed-grounded claims, and the trace
+            cannot reference what is not there.
+
+        Invited proposals must come from invited models; that is also
+        checked here to keep symmetric-visibility integrity at the Phase 0
+        boundary.
+        """
+        if self.phase_0 is not None:
+            invited = set(self.models_invited)
+            for proposal in self.phase_0.proposals:
+                if proposal.model_id not in invited:
+                    raise ValueError(
+                        f"Phase 0 proposal from {proposal.model_id.value} "
+                        "but that model is not in models_invited. Symmetric "
+                        "visibility broken at the investigation layer."
+                    )
+        feed_ids: set[str] = (
+            self.phase_0.feed_entry_ids() if self.phase_0 is not None else set()
+        )
+        for claim in self.all_claims():
+            if not claim.tool_provenance:
+                continue
+            if self.phase_0 is None:
+                raise ValueError(
+                    f"Claim {claim.claim_id} has tool_provenance="
+                    f"{list(claim.tool_provenance)} but Session.phase_0 is "
+                    "None. Feed-grounding requires Phase 0 to have run."
+                )
+            for entry_id in claim.tool_provenance:
+                if entry_id not in feed_ids:
+                    raise ValueError(
+                        f"Claim {claim.claim_id} has tool_provenance entry "
+                        f"{entry_id!r} which does not resolve to a Phase 0 "
+                        "feed entry. Provenance must be tamper-evident "
+                        "(invariant 4 — irreducibility preservation covers "
+                        "feed-grounded claims identically to prior-grounded)."
                     )
         return self
 

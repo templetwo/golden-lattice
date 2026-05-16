@@ -16,6 +16,20 @@ EDGE_CASE_DIMENSION = "edge_case"
 STRUCTURAL_PATTERN_DIMENSION = "structural_pattern"
 Dimension = Literal["edge_case", "structural_pattern"]
 
+# Phase 0 (Investigation) — see ARCHITECTURE.md §5.0.
+# Flat per-model cap on proposed investigations. Differentiated USE is
+# permitted; differentiated BUDGET would rebuild the Haiku→Sonnet→Opus
+# pipeline through resource allocation (invariant 1).
+INVESTIGATION_CAP = 3
+
+# Temporal grounding zone for the Phase 0 precondition. Anthony's standing
+# principle: ground temporally before acting; session texture is not elapsed
+# real time. The orchestrator deterministically reads the current time in
+# this zone and seeds it as the first feed entry — no authority gradient
+# because no model decides it (same constitutional category as §8 prompt
+# re-anchoring).
+INVESTIGATION_TIMEZONE = "America/New_York"
+
 
 class ModelId(str, Enum):
     OPUS = "claude-opus-4-7"
@@ -78,4 +92,16 @@ DEFAULT_OUTPUT_MODE: OutputMode = OutputMode.ANNOTATED
 
 def claim_id_for(source_model: ModelId, source_phase: Phase, text: str) -> str:
     payload = f"{source_model.value}|{source_phase.value}|{text}".encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()[:16]
+
+
+def feed_entry_id_for(entry_type: str, *components: str) -> str:
+    """Content-addressed ID for a Phase 0 feed entry.
+
+    Same discipline as claim_id_for — entry_id is derived from canonical
+    content so Claim.tool_provenance references are tamper-evident. Two
+    feed entries with identical content collapse to one entry_id; that's
+    the dedup invariant (rule-based exact union, ARCHITECTURE.md §5.0).
+    """
+    payload = ("|".join((entry_type, *components))).encode("utf-8")
     return hashlib.sha256(payload).hexdigest()[:16]
