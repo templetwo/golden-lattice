@@ -371,20 +371,47 @@ def _build_claim_tags(entries: list[Any]) -> tuple[ClaimTags, ...]:
         if not isinstance(edge_raw, list) or not isinstance(struct_raw, list):
             raise WireParseError("tag arrays must be lists")
 
-        try:
-            edge = tuple(EdgeCaseTag(v) for v in edge_raw)
-        except ValueError as exc:
-            raise WireParseError(f"unknown edge_case tag: {exc}") from exc
-        try:
-            structural = tuple(StructuralPatternTag(v) for v in struct_raw)
-        except ValueError as exc:
-            raise WireParseError(f"unknown structural_pattern tag: {exc}") from exc
+        # Wire-boundary tolerance for vocabulary slips: filter unknown /
+        # cross-vocab string values rather than abort the session. Empirical
+        # trigger 2026-05-16 — Haiku put 'framing_choice' (a StructuralPatternTag
+        # value) into edge_case_tags; the strict parser refused and the
+        # session aborted mid-Phase-2. Same shape of forgiveness as
+        # parse_investigation_proposal_tool_use applies to over-cap / empty /
+        # duplicate proposed queries.
+        #
+        # Type errors (non-string elements) still raise — that's malformed
+        # output structure, not a vocabulary slip the wire should absorb.
+        edge_values = {t.value for t in EdgeCaseTag}
+        struct_values = {t.value for t in StructuralPatternTag}
+        edge: list[EdgeCaseTag] = []
+        for v in edge_raw:
+            if not isinstance(v, str):
+                raise WireParseError(
+                    f"edge_case_tags element must be a string, got {type(v).__name__}"
+                )
+            if v in edge_values:
+                edge.append(EdgeCaseTag(v))
+            # else: filter silently — model emitted an unknown or cross-vocab
+            # string. The Phase 2 prompt explicitly lists the closed vocab;
+            # a slip is the model's, not the architecture's.
+        structural: list[StructuralPatternTag] = []
+        for v in struct_raw:
+            if not isinstance(v, str):
+                raise WireParseError(
+                    f"structural_pattern_tags element must be a string, got {type(v).__name__}"
+                )
+            if v in struct_values:
+                structural.append(StructuralPatternTag(v))
+        # Dedupe in case the model emits the same valid tag twice — substrate
+        # would refuse but wire absorbs.
+        edge = list(dict.fromkeys(edge))
+        structural = list(dict.fromkeys(structural))
 
         out.append(
             ClaimTags(
                 claim_id=claim_id,
-                edge_case_tags=edge,
-                structural_pattern_tags=structural,
+                edge_case_tags=tuple(edge),
+                structural_pattern_tags=tuple(structural),
             )
         )
     return tuple(out)

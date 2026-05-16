@@ -312,7 +312,16 @@ def test_parse_phase_2_tagging_rejects_unknown_claim_id():
         )
 
 
-def test_parse_phase_2_tagging_rejects_unknown_tag_value():
+def test_parse_phase_2_tagging_filters_unknown_tag_value():
+    """Wire-boundary tolerance: unknown tag values get filtered, not raised.
+
+    Empirical trigger 2026-05-16: Haiku put 'framing_choice' (a StructuralPatternTag
+    value) into edge_case_tags. The strict parser refused → session aborted
+    mid-Phase-2 → user lost the run. Same wire-boundary discipline as
+    parse_investigation_proposal_tool_use: graceful filter, not silent failure,
+    let the session survive a model's vocabulary slip. The substrate's strict
+    enum still applies to hand-constructed Sessions in tests.
+    """
     own = _phase1_claim(ModelId.OPUS, "opus alpha")
     tool_input = {
         "peer_tags": [],
@@ -324,7 +333,88 @@ def test_parse_phase_2_tagging_rejects_unknown_tag_value():
             }
         ],
     }
-    with pytest.raises(WireParseError, match="unknown edge_case tag"):
+    tagging = parse_phase_2_tagging_tool_use(
+        tool_input,
+        expected_tagger=ModelId.OPUS,
+        valid_claim_ids={own.claim_id},
+    )
+    assert len(tagging.self_tags) == 1
+    assert tagging.self_tags[0].edge_case_tags == ()
+    assert tagging.self_tags[0].structural_pattern_tags == ()
+
+
+def test_parse_phase_2_tagging_filters_cross_vocab_tag_value():
+    """The bug shape exactly: framing_choice is a valid StructuralPatternTag
+    value but appears in edge_case_tags. The wire parser drops it from
+    edge_case_tags rather than abort. Valid tags in the same dimension
+    are preserved."""
+    own = _phase1_claim(ModelId.OPUS, "opus alpha")
+    tool_input = {
+        "peer_tags": [],
+        "self_tags": [
+            {
+                "claim_id": own.claim_id,
+                "edge_case_tags": [
+                    EdgeCaseTag.BOUNDARY_CONDITION.value,
+                    "framing_choice",  # cross-vocab: belongs in structural_pattern_tags
+                    EdgeCaseTag.FAILURE_MODE.value,
+                ],
+                "structural_pattern_tags": [],
+            }
+        ],
+    }
+    tagging = parse_phase_2_tagging_tool_use(
+        tool_input,
+        expected_tagger=ModelId.OPUS,
+        valid_claim_ids={own.claim_id},
+    )
+    assert tagging.self_tags[0].edge_case_tags == (
+        EdgeCaseTag.BOUNDARY_CONDITION,
+        EdgeCaseTag.FAILURE_MODE,
+    )
+
+
+def test_parse_phase_2_tagging_filters_unknown_structural_pattern_tag():
+    """Same tolerance applied to structural_pattern_tags."""
+    own = _phase1_claim(ModelId.OPUS, "opus alpha")
+    tool_input = {
+        "peer_tags": [],
+        "self_tags": [
+            {
+                "claim_id": own.claim_id,
+                "edge_case_tags": [],
+                "structural_pattern_tags": [
+                    "not_a_real_struct_tag",
+                    StructuralPatternTag.DECOMPOSITION.value,
+                ],
+            }
+        ],
+    }
+    tagging = parse_phase_2_tagging_tool_use(
+        tool_input,
+        expected_tagger=ModelId.OPUS,
+        valid_claim_ids={own.claim_id},
+    )
+    assert tagging.self_tags[0].structural_pattern_tags == (
+        StructuralPatternTag.DECOMPOSITION,
+    )
+
+
+def test_parse_phase_2_tagging_still_rejects_non_string_tag_elements():
+    """Type errors (non-string in tag list) still raise — that's malformed
+    output structure, not a vocabulary slip."""
+    own = _phase1_claim(ModelId.OPUS, "opus alpha")
+    tool_input = {
+        "peer_tags": [],
+        "self_tags": [
+            {
+                "claim_id": own.claim_id,
+                "edge_case_tags": [42, EdgeCaseTag.BOUNDARY_CONDITION.value],
+                "structural_pattern_tags": [],
+            }
+        ],
+    }
+    with pytest.raises(WireParseError):
         parse_phase_2_tagging_tool_use(
             tool_input,
             expected_tagger=ModelId.OPUS,
