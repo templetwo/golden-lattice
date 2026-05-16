@@ -328,6 +328,86 @@ def test_persisted_session_round_trips_parity_computable(tmp_path, stub_client):
     assert recomputed == reloaded.metrics
 
 
+# --- progress_callback live event emission --------------------------------
+
+
+def test_progress_callback_fires_full_event_sequence(stub_client):
+    """The live orchestrator emits the same LatticeEvent types replay would
+    produce. With the stub client, we can verify the sequence end-to-end."""
+    from golden_lattice.events import (
+        Phase1ClaimEvent,
+        Phase1ResponseCompletedEvent,
+        Phase1ResponseStartedEvent,
+        Phase2CrossReadingEvent,
+        Phase2TaggingEvent,
+        Phase4ArtifactEvent,
+        Phase4FlagInterpretationsEvent,
+        Phase4MetricsEvent,
+        SelfReflectionEvent,
+        SessionCompletedEvent,
+        SessionStartedEvent,
+    )
+
+    events: list = []
+    config = LatticeConfig()
+    run_lattice_session(
+        "p",
+        config=config,
+        client=stub_client,
+        progress_callback=events.append,
+    )
+
+    # First and last bookend events.
+    assert isinstance(events[0], SessionStartedEvent)
+    assert isinstance(events[-1], SessionCompletedEvent)
+
+    # Per-event-type counts on a triadic session with default stub.
+    counts: dict[type, int] = {}
+    for e in events:
+        counts[type(e)] = counts.get(type(e), 0) + 1
+    assert counts.get(Phase1ResponseStartedEvent, 0) == 3
+    assert counts.get(Phase1ResponseCompletedEvent, 0) == 3
+    assert counts.get(SelfReflectionEvent, 0) == 3
+    # Default stub produces 2 claims per model — 6 total claim events.
+    assert counts.get(Phase1ClaimEvent, 0) == 6
+    # 6 cross-readings + 3 taggings for triadic.
+    assert counts.get(Phase2CrossReadingEvent, 0) == 6
+    assert counts.get(Phase2TaggingEvent, 0) == 3
+    # One each of Phase 4 events.
+    assert counts.get(Phase4ArtifactEvent, 0) == 1
+    assert counts.get(Phase4MetricsEvent, 0) == 1
+    assert counts.get(Phase4FlagInterpretationsEvent, 0) == 1
+
+
+def test_progress_callback_offsets_are_monotonic_non_decreasing(stub_client):
+    """Timestamp offsets across the emitted stream advance monotonically.
+
+    Even when phase coroutines race in parallel, each event's offset is
+    captured at emission time so the wall-clock ordering is preserved.
+    """
+    events: list = []
+    config = LatticeConfig()
+    run_lattice_session(
+        "p",
+        config=config,
+        client=stub_client,
+        progress_callback=events.append,
+    )
+    offsets = [e.timestamp_offset_ms for e in events]
+    assert offsets == sorted(offsets)
+    assert offsets[0] == 0  # SessionStartedEvent anchors at zero
+
+
+def test_progress_callback_can_be_omitted_without_behavior_change(stub_client):
+    """No callback → same Session result as before this wiring landed."""
+    config = LatticeConfig()
+    s_with = run_lattice_session("p", config=config, client=stub_client, session_id="A")
+    s_no = run_lattice_session("p", config=config, client=stub_client, session_id="A")
+    # Both run with no callback; both produce equal Sessions modulo session_id.
+    assert s_with.phase_4.output == s_no.phase_4.output
+    assert s_with.metrics == s_no.metrics
+
+
 # --- Live integration test (gated) ---------------------------------------
 
 

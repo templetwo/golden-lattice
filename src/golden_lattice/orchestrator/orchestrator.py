@@ -33,8 +33,23 @@ import asyncio
 import hashlib
 import uuid
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Callable, Optional
 
+from golden_lattice.events import (
+    LatticeEvent,
+    Phase1ClaimEvent,
+    Phase1ResponseCompletedEvent,
+    Phase1ResponseStartedEvent,
+    Phase2CrossReadingEvent,
+    Phase2TaggingEvent,
+    Phase3TurnEvent,
+    Phase4ArtifactEvent,
+    Phase4FlagInterpretationsEvent,
+    Phase4MetricsEvent,
+    SelfReflectionEvent,
+    SessionCompletedEvent,
+    SessionStartedEvent,
+)
 from golden_lattice.exchange.phase_1_independent import (
     Phase1WireClient,
     compose_phase_1_with_reflection,
@@ -42,7 +57,10 @@ from golden_lattice.exchange.phase_1_independent import (
 from golden_lattice.exchange.phase_2_cross_reading import Phase2WireClient
 from golden_lattice.exchange.phase_3_dialogue import Phase3WireClient
 from golden_lattice.memory_graph.base import PARITY_THRESHOLD, ModelId
-from golden_lattice.memory_graph.metrics import compute_parity_shares
+from golden_lattice.memory_graph.metrics import (
+    compute_parity_shares,
+    interpret_parity_flags,
+)
 from golden_lattice.memory_graph.schema import (
     Claim,
     CrossReading,
@@ -54,6 +72,48 @@ from golden_lattice.memory_graph.tagging import Phase2Tagging
 from golden_lattice.orchestrator.config import LatticeConfig
 from golden_lattice.orchestrator.errors import OrchestratorTimeoutError
 from golden_lattice.synthesis.engine import synthesize
+
+
+ProgressCallback = Callable[[LatticeEvent], None]
+
+
+class _NullEmitter:
+    """No-op emitter for when progress_callback is None.
+
+    Keeps phase helpers identical between live-streamed and quiet runs.
+    The dispatch is a single attribute lookup; behavior is unchanged.
+    """
+
+    def emit(self, event: LatticeEvent) -> None:
+        return None
+
+    def now_ms(self) -> int:
+        return 0
+
+
+class _Emitter:
+    """Live event emitter — anchored at orchestrator entry, fires through the
+    provided progress_callback. Each emit point computes its own offset_ms
+    relative to that anchor so the event stream matches what
+    replay_session_events would produce against this session post-hoc.
+    """
+
+    def __init__(self, callback: ProgressCallback, started_wall: datetime) -> None:
+        self._callback = callback
+        self._started_wall = started_wall
+
+    def emit(self, event: LatticeEvent) -> None:
+        self._callback(event)
+
+    def now_ms(self) -> int:
+        delta = datetime.now(timezone.utc) - self._started_wall
+        return int(delta.total_seconds() * 1000)
+
+
+def _make_emitter(callback: Optional[ProgressCallback]) -> _Emitter | _NullEmitter:
+    if callback is None:
+        return _NullEmitter()
+    return _Emitter(callback, datetime.now(timezone.utc))
 
 
 DEFAULT_INVITED_MODELS: tuple[ModelId, ...] = (
@@ -89,6 +149,7 @@ async def run_lattice_session_async(
     client,  # satisfies all three wire Protocols
     invited_models: tuple[ModelId, ...] = DEFAULT_INVITED_MODELS,
     session_id: Optional[str] = None,
+    progress_callback: Optional[ProgressCallback] = None,
 ) -> Session:
     """Run a complete Lattice session: Phase 1 → 2 → 3 → 4. Returns Session.
 
@@ -107,10 +168,23 @@ async def run_lattice_session_async(
     Errors propagate. OrchestratorTimeoutError on per-phase timeout.
     OrchestratorProviderError on SDK failures. Substrate ValidationError
     on malformed responses caught at construction. No partial sessions.
+
+    If progress_callback is provided, the orchestrator fires LatticeEvents at
+    each phase boundary as they happen — the same event types replay yields
+    against a persisted Session. One renderer, two sources.
     """
     if session_id is None:
         session_id = _generate_session_id()
     prompt_hash = _prompt_hash(prompt)
+    emitter = _make_emitter(progress_callback)
+
+    emitter.emit(SessionStartedEvent(
+        timestamp_offset_ms=emitter.now_ms(),
+        session_id=session_id,
+        prompt=prompt,
+        prompt_hash=prompt_hash,
+        models_invited=invited_models,
+    ))
 
     # --- Phase 1 + self-reflection (per-model latency-gap utilization) ---
     phase_1_results = await _run_phase_1_with_reflection(
@@ -119,6 +193,7 @@ async def run_lattice_session_async(
         client=client,
         invited_models=invited_models,
         config=config,
+        emitter=emitter,
     )
 
     # --- Phase 2: cross-readings + taggings, all in parallel ----------
@@ -127,6 +202,7 @@ async def run_lattice_session_async(
         client=client,
         phase_1_results=phase_1_results,
         config=config,
+        emitter=emitter,
     )
 
     # All claim_ids that exist by the time Phase 3 runs (Phase 1 + Phase 2 missing).
@@ -146,6 +222,7 @@ async def run_lattice_session_async(
         valid_claim_ids=all_claim_ids,
         invited_models=invited_models,
         config=config,
+        emitter=emitter,
     )
 
     # Build the pre-synthesis Session so synthesize() can compose against it.
@@ -166,14 +243,27 @@ async def run_lattice_session_async(
         mode=config.output_mode,
         confidence_threshold=config.confidence_threshold,
     )
+    emitter.emit(Phase4ArtifactEvent(
+        timestamp_offset_ms=emitter.now_ms(),
+        output_mode=artifact.output_mode,
+        synthesis_rules_applied=artifact.synthesis_rules_applied,
+        output=artifact.output,
+        claim_trace=artifact.claim_trace,
+        elevations=artifact.elevations,
+        surfaced_disagreements=artifact.surfaced_disagreements,
+    ))
 
     # --- Parity metrics: single source of truth at the canonical builder.
     # Pure sync over the tagged Session (no LLM call). None for dyad
     # sessions per ARCHITECTURE.md §5.3 — parity is undefined at N<3.
     metrics = compute_parity_shares(pre_synth_session, threshold=PARITY_THRESHOLD)
+    emitter.emit(Phase4MetricsEvent(
+        timestamp_offset_ms=emitter.now_ms(),
+        metrics=metrics,
+    ))
 
     # Final Session with phase_4 and metrics set.
-    return Session(
+    final = Session(
         session_id=pre_synth_session.session_id,
         prompt=pre_synth_session.prompt,
         prompt_hash=pre_synth_session.prompt_hash,
@@ -186,6 +276,17 @@ async def run_lattice_session_async(
         metrics=metrics,
     )
 
+    emitter.emit(Phase4FlagInterpretationsEvent(
+        timestamp_offset_ms=emitter.now_ms(),
+        interpretations=interpret_parity_flags(final),
+    ))
+    emitter.emit(SessionCompletedEvent(
+        timestamp_offset_ms=emitter.now_ms(),
+        session_id=final.session_id,
+    ))
+
+    return final
+
 
 def run_lattice_session(
     prompt: str,
@@ -194,6 +295,7 @@ def run_lattice_session(
     client,
     invited_models: tuple[ModelId, ...] = DEFAULT_INVITED_MODELS,
     session_id: Optional[str] = None,
+    progress_callback: Optional[ProgressCallback] = None,
 ) -> Session:
     """Sync wrapper around run_lattice_session_async. Canonical CLI entry."""
     return asyncio.run(
@@ -203,6 +305,7 @@ def run_lattice_session(
             client=client,
             invited_models=invited_models,
             session_id=session_id,
+            progress_callback=progress_callback,
         )
     )
 
@@ -219,11 +322,16 @@ async def _run_phase_1_with_reflection(
     client,
     invited_models: tuple[ModelId, ...],
     config: LatticeConfig,
+    emitter: "_Emitter | _NullEmitter",
 ) -> dict[ModelId, IndependentResponse]:
     """Per-model coroutines sequence Phase 1 → self-reflection. Outer gather
     awaits all three. Latency-gap utilization happens inside each coroutine."""
 
     async def _one_model(model: ModelId) -> tuple[ModelId, IndependentResponse]:
+        emitter.emit(Phase1ResponseStartedEvent(
+            timestamp_offset_ms=emitter.now_ms(),
+            model_id=model,
+        ))
         # Phase 1 with timeout.
         try:
             draft = await asyncio.wait_for(
@@ -241,6 +349,23 @@ async def _run_phase_1_with_reflection(
                 timeout_seconds=config.timeout_phase_1_seconds,
             )
 
+        # Phase 1 arrived — emit one claim event per claim, then completed.
+        completed_ms = emitter.now_ms()
+        for claim in draft.claims:
+            emitter.emit(Phase1ClaimEvent(
+                timestamp_offset_ms=completed_ms,
+                model_id=model,
+                claim_id=claim.claim_id,
+                text=claim.text,
+            ))
+        emitter.emit(Phase1ResponseCompletedEvent(
+            timestamp_offset_ms=completed_ms,
+            model_id=model,
+            focus_tag=draft.focus_tag,
+            confidence=draft.confidence,
+            claim_count=len(draft.claims),
+        ))
+
         # Self-reflection with separate timeout.
         try:
             reflection = await asyncio.wait_for(
@@ -257,6 +382,14 @@ async def _run_phase_1_with_reflection(
                 timeout_seconds=config.timeout_self_reflection_seconds,
             )
 
+        emitter.emit(SelfReflectionEvent(
+            timestamp_offset_ms=emitter.now_ms(),
+            model_id=model,
+            strongest_claim_id=reflection.strongest_claim_id,
+            weakest_claim_id=reflection.weakest_claim_id,
+            tag_justification=reflection.tag_justification,
+        ))
+
         folded = compose_phase_1_with_reflection(draft, reflection)
         return model, folded
 
@@ -271,6 +404,7 @@ async def _run_phase_2(
     client,
     phase_1_results: dict[ModelId, IndependentResponse],
     config: LatticeConfig,
+    emitter: "_Emitter | _NullEmitter",
 ) -> tuple[tuple[CrossReading, ...], tuple[Phase2Tagging, ...]]:
     """Phase 2: n*(n-1) cross-readings + n taggings, all in parallel."""
 
@@ -287,7 +421,7 @@ async def _run_phase_2(
             else None
         )
         try:
-            return await asyncio.wait_for(
+            result = await asyncio.wait_for(
                 client.submit_cross_reading(
                     reader_model=reader,
                     target_model=target,
@@ -305,6 +439,15 @@ async def _run_phase_2(
                 phase=f"phase_2_cross_reading_target_{target.value}",
                 timeout_seconds=config.timeout_phase_2_seconds,
             )
+        emitter.emit(Phase2CrossReadingEvent(
+            timestamp_offset_ms=emitter.now_ms(),
+            reader_model=result.reader_model,
+            target_model=result.target_model,
+            agreements_count=len(result.agreements),
+            disagreements_count=len(result.disagreements),
+            missing_count=len(result.missing),
+        ))
+        return result
 
     async def _one_tagging(tagger: ModelId) -> Phase2Tagging:
         own_claims = phase_1_results[tagger].claims
@@ -314,7 +457,7 @@ async def _run_phase_2(
                 continue
             peer_claims.extend(other_response.claims)
         try:
-            return await asyncio.wait_for(
+            result = await asyncio.wait_for(
                 client.submit_phase_2_tagging(
                     tagger_model=tagger,
                     original_prompt=prompt,
@@ -330,6 +473,13 @@ async def _run_phase_2(
                 phase="phase_2_tagging",
                 timeout_seconds=config.timeout_phase_2_seconds,
             )
+        emitter.emit(Phase2TaggingEvent(
+            timestamp_offset_ms=emitter.now_ms(),
+            tagger_model=result.tagger_model,
+            peer_tags_count=len(result.peer_tags),
+            self_tags_count=len(result.self_tags),
+        ))
+        return result
 
     cross_reading_coros = [
         _one_cross_reading(reader, target)
@@ -354,6 +504,7 @@ async def _run_phase_3(
     valid_claim_ids: set[str],
     invited_models: tuple[ModelId, ...],
     config: LatticeConfig,
+    emitter: "_Emitter | _NullEmitter",
 ) -> tuple[DialogueTurn, ...]:
     """Phase 3: each speaker produces a dialogue batch. All in parallel."""
 
@@ -365,7 +516,7 @@ async def _run_phase_3(
             if m is not speaker
         )
         try:
-            return await asyncio.wait_for(
+            turns = await asyncio.wait_for(
                 client.submit_phase_3_dialogue(
                     speaker_model=speaker,
                     original_prompt=prompt,
@@ -381,6 +532,18 @@ async def _run_phase_3(
                 phase="phase_3",
                 timeout_seconds=config.timeout_phase_3_seconds,
             )
+
+        for turn in turns:
+            emitter.emit(Phase3TurnEvent(
+                timestamp_offset_ms=emitter.now_ms(),
+                turn_id=turn.turn_id,
+                speaker_model=turn.speaker_model,
+                channel=turn.channel,
+                target_model=turn.target_model,
+                target_claim_ids=turn.target_claim_ids,
+                content=turn.content,
+            ))
+        return turns
 
     coros = [_one_speaker(m) for m in invited_models]
     per_speaker_turns = await asyncio.gather(*coros)
