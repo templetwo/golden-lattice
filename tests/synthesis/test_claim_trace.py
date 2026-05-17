@@ -28,6 +28,7 @@ from golden_lattice.memory_graph.schema import (
     ClaimRef,
     CrossReading,
     Disagreement,
+    DialogueTurn,
     IndependentResponse,
     SelfReflectionArtifact,
     Session,
@@ -242,6 +243,7 @@ def _build_triad_session(
     haiku_claims: tuple[Claim, ...] = (),
     opus_response_kwargs: dict | None = None,
     phase_2: tuple[CrossReading, ...] = (),
+    phase_3: tuple[DialogueTurn, ...] = (),
 ) -> Session:
     """N=3 session helper. Used by tests of the strict-triadic dispute rule."""
     ok = opus_response_kwargs or {}
@@ -256,6 +258,26 @@ def _build_triad_session(
             ModelId.HAIKU: _response(ModelId.HAIKU, haiku_claims),
         },
         phase_2=phase_2,
+        phase_3=phase_3,
+    )
+
+
+def _critique(
+    *,
+    turn_id: str,
+    speaker: ModelId,
+    target: ModelId,
+    claim_ids: tuple[str, ...],
+    content: str,
+) -> DialogueTurn:
+    """Convenience constructor for Phase 3 critique turns in tests."""
+    return DialogueTurn(
+        turn_id=turn_id,
+        speaker_model=speaker,
+        channel="critique",
+        target_model=target,
+        target_claim_ids=claim_ids,
+        content=content,
     )
 
 
@@ -381,6 +403,212 @@ def test_two_peer_dispute_modification_is_deterministic_under_reordering():
         t1[opus_claim.claim_id].modified_text
         == t2[opus_claim.claim_id].modified_text
     )
+
+
+# --- Two-peer dispute v2: Phase 3 critique consumption -----------------
+
+
+def test_two_peer_dispute_fires_from_phase_3_critique_only():
+    """v2 expansion: claims critiqued in Phase 3 by BOTH non-author peers
+    (with no matching Phase 2 disagreements) are also marked modified.
+    The critique channel carries the same dispute signal as Phase 2
+    cross-reading disagreements; v1's Phase-2-only narrowness was
+    incidental, not architectural."""
+    opus_claim = _claim(ModelId.OPUS, "claim only critiqued in dialogue")
+    sonnet_critiques = _critique(
+        turn_id="t1",
+        speaker=ModelId.SONNET,
+        target=ModelId.OPUS,
+        claim_ids=(opus_claim.claim_id,),
+        content="sonnet's spoken objection.",
+    )
+    haiku_critiques = _critique(
+        turn_id="t2",
+        speaker=ModelId.HAIKU,
+        target=ModelId.OPUS,
+        claim_ids=(opus_claim.claim_id,),
+        content="haiku's spoken objection.",
+    )
+    session = _build_triad_session(
+        opus_claims=(opus_claim,),
+        sonnet_claims=(_claim(ModelId.SONNET, "filler"),),
+        haiku_claims=(_claim(ModelId.HAIKU, "filler"),),
+        phase_3=(sonnet_critiques, haiku_critiques),
+    )
+    trace = build_claim_trace(session)
+    by_id = {e.claim_id: e for e in trace}
+    entry = by_id[opus_claim.claim_id]
+    assert entry.disposition == "modified"
+    assert entry.modified_text is not None
+    assert ModelId.SONNET.value in entry.modified_text
+    assert ModelId.HAIKU.value in entry.modified_text
+
+
+def test_two_peer_dispute_mixed_channels_one_each():
+    """Cross-channel: peer A disagrees in Phase 2, peer B critiques in
+    Phase 3. Still strict-triadic dispute — both non-author peers
+    contested, just through different channels. Modified fires."""
+    opus_claim = _claim(ModelId.OPUS, "mixed-channel disputed claim")
+    sonnet_p2 = CrossReading(
+        reader_model=ModelId.SONNET,
+        target_model=ModelId.OPUS,
+        disagreements=(Disagreement(
+            target_claim_id=opus_claim.claim_id,
+            reason="sonnet via Phase 2.",
+        ),),
+    )
+    haiku_p3 = _critique(
+        turn_id="t1",
+        speaker=ModelId.HAIKU,
+        target=ModelId.OPUS,
+        claim_ids=(opus_claim.claim_id,),
+        content="haiku via Phase 3 critique.",
+    )
+    session = _build_triad_session(
+        opus_claims=(opus_claim,),
+        sonnet_claims=(_claim(ModelId.SONNET, "filler"),),
+        haiku_claims=(_claim(ModelId.HAIKU, "filler"),),
+        phase_2=(sonnet_p2,),
+        phase_3=(haiku_p3,),
+    )
+    trace = build_claim_trace(session)
+    by_id = {e.claim_id: e for e in trace}
+    entry = by_id[opus_claim.claim_id]
+    assert entry.disposition == "modified"
+    assert entry.modified_text is not None
+    assert "sonnet via Phase 2" in entry.modified_text
+    assert "haiku via Phase 3" in entry.modified_text
+
+
+def test_single_peer_phase_3_critique_keeps_present():
+    """One peer critiques in Phase 3, the other is silent in both
+    channels → not strict-triadic dispute, stays present."""
+    opus_claim = _claim(ModelId.OPUS, "only one peer critiquing")
+    sonnet_p3 = _critique(
+        turn_id="t1",
+        speaker=ModelId.SONNET,
+        target=ModelId.OPUS,
+        claim_ids=(opus_claim.claim_id,),
+        content="sonnet alone.",
+    )
+    session = _build_triad_session(
+        opus_claims=(opus_claim,),
+        sonnet_claims=(_claim(ModelId.SONNET, "filler"),),
+        haiku_claims=(_claim(ModelId.HAIKU, "filler"),),
+        phase_3=(sonnet_p3,),
+    )
+    trace = build_claim_trace(session)
+    by_id = {e.claim_id: e for e in trace}
+    assert by_id[opus_claim.claim_id].disposition == "present"
+
+
+def test_augment_and_converge_channels_do_not_count_as_dispute():
+    """Phase 3 channels other than critique are NOT disagreement
+    signals — augment is 'what to add', converge is 'where alignment
+    exists'. Honors the spec's channel semantics rather than inferring
+    disagreement across channels (same boundary Rule 3 enforces)."""
+    opus_claim = _claim(ModelId.OPUS, "claim engaged via non-critique only")
+    sonnet_augment = DialogueTurn(
+        turn_id="t1",
+        speaker_model=ModelId.SONNET,
+        channel="augment",
+        target_model=ModelId.OPUS,
+        target_claim_ids=(opus_claim.claim_id,),
+        content="sonnet would add to this.",
+    )
+    haiku_converge = DialogueTurn(
+        turn_id="t2",
+        speaker_model=ModelId.HAIKU,
+        channel="converge",
+        target_model=ModelId.OPUS,
+        target_claim_ids=(opus_claim.claim_id,),
+        content="haiku aligns with this.",
+    )
+    session = _build_triad_session(
+        opus_claims=(opus_claim,),
+        sonnet_claims=(_claim(ModelId.SONNET, "filler"),),
+        haiku_claims=(_claim(ModelId.HAIKU, "filler"),),
+        phase_3=(sonnet_augment, haiku_converge),
+    )
+    trace = build_claim_trace(session)
+    by_id = {e.claim_id: e for e in trace}
+    assert by_id[opus_claim.claim_id].disposition == "present"
+
+
+def test_phase_3_critique_with_multiple_target_claims_hedges_each():
+    """A critique turn that names ≥2 target_claim_ids contributes a
+    disagreement signal to EACH targeted claim. If both peers do this on
+    overlapping sets, the overlap claims get modified."""
+    a = _claim(ModelId.OPUS, "claim a")
+    b = _claim(ModelId.OPUS, "claim b")
+    c = _claim(ModelId.OPUS, "claim c")  # only one peer critiques c
+    sonnet_p3 = _critique(
+        turn_id="t1",
+        speaker=ModelId.SONNET,
+        target=ModelId.OPUS,
+        claim_ids=(a.claim_id, b.claim_id, c.claim_id),
+        content="sonnet objects to a, b, and c.",
+    )
+    haiku_p3 = _critique(
+        turn_id="t2",
+        speaker=ModelId.HAIKU,
+        target=ModelId.OPUS,
+        claim_ids=(a.claim_id, b.claim_id),  # haiku only objects to a and b
+        content="haiku objects to a and b.",
+    )
+    session = _build_triad_session(
+        opus_claims=(a, b, c),
+        sonnet_claims=(_claim(ModelId.SONNET, "filler"),),
+        haiku_claims=(_claim(ModelId.HAIKU, "filler"),),
+        phase_3=(sonnet_p3, haiku_p3),
+    )
+    trace = build_claim_trace(session)
+    by_id = {e.claim_id: e for e in trace}
+    # a and b have both-peer disputes → modified
+    assert by_id[a.claim_id].disposition == "modified"
+    assert by_id[b.claim_id].disposition == "modified"
+    # c has only one-peer critique → present
+    assert by_id[c.claim_id].disposition == "present"
+
+
+def test_phase_2_disagreement_wins_over_phase_3_for_same_peer():
+    """Determinism rule: when a single peer disagrees in BOTH Phase 2
+    and Phase 3 against the same claim, the hedge excerpts the Phase 2
+    reason (the structured channel scanned first). Locking the priority
+    so reasoning behind a hedge is reproducible."""
+    opus_claim = _claim(ModelId.OPUS, "claim disputed in both phases")
+    sonnet_p2 = CrossReading(
+        reader_model=ModelId.SONNET, target_model=ModelId.OPUS,
+        disagreements=(Disagreement(
+            target_claim_id=opus_claim.claim_id,
+            reason="REASON_FROM_PHASE_2.",
+        ),),
+    )
+    sonnet_p3 = _critique(
+        turn_id="t1", speaker=ModelId.SONNET, target=ModelId.OPUS,
+        claim_ids=(opus_claim.claim_id,),
+        content="REASON_FROM_PHASE_3.",
+    )
+    haiku_p3 = _critique(
+        turn_id="t2", speaker=ModelId.HAIKU, target=ModelId.OPUS,
+        claim_ids=(opus_claim.claim_id,),
+        content="haiku reason.",
+    )
+    session = _build_triad_session(
+        opus_claims=(opus_claim,),
+        sonnet_claims=(_claim(ModelId.SONNET, "filler"),),
+        haiku_claims=(_claim(ModelId.HAIKU, "filler"),),
+        phase_2=(sonnet_p2,),
+        phase_3=(sonnet_p3, haiku_p3),
+    )
+    trace = build_claim_trace(session)
+    by_id = {e.claim_id: e for e in trace}
+    entry = by_id[opus_claim.claim_id]
+    assert entry.disposition == "modified"
+    assert entry.modified_text is not None
+    # Phase 2 reason wins for sonnet; Phase 3 fallback for haiku.
+    assert "REASON_FROM_PHASE_2" in entry.modified_text
+    assert "REASON_FROM_PHASE_3" not in entry.modified_text
 
 
 def test_two_peer_dispute_is_triadic_only():

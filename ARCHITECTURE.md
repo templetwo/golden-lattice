@@ -116,7 +116,7 @@ Models cannot use channels outside this set. The constraint is the feature.
 Synthesis is **rule-based, not model-based**. Running synthesis through a fourth model call would create authority gradient and break invariant 1. Rules:
 
 - Every distinct Phase 1 claim (per the peer-utility test in the Phase 1 prompt) is preserved or has a logged reason for omission (irreducibility preservation)
-- A claim disagreed-with by **both** non-author peers in Phase 2 cross-reading is preserved with an inline `[DISPUTED]` hedge naming both disputers and excerpting their reasons — the symmetric counter to §6's strict-triadic consensus rule, so the cross-reading audit can't be dropped silently at the synthesis seam
+- A claim disagreed-with by **both** non-author peers through any disagreement channel (Phase 2 cross-reading or Phase 3 critique turn) is preserved with an inline `[DISPUTED]` hedge naming both disputers and excerpting their reasons — the symmetric counter to §6's strict-triadic consensus rule, so the cross-reading + dialogue audit can't be dropped silently at the synthesis seam. Phase 2 reasons take priority over Phase 3 when the same peer disputes through both channels
 - Cross-model agreement (appearing in 2+ converge channels) is elevated
 - Productive disagreement (high-confidence conflict) is surfaced, not hidden
 - Output preserves attribution by default; user can request unified mode

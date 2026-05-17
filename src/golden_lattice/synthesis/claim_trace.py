@@ -41,17 +41,25 @@ Open thread on the chronicle (2026-05-03): should the omission_reason
 vocabulary be lifted from engine convention to substrate enum? Defer until
 the v0 vocabulary stabilizes against real session data.
 
-V1 EXPANSION — two-peer-dispute → modified (added 2026-05-16):
+V1+V2 EXPANSION — two-peer-dispute → modified (added 2026-05-16):
 
-When BOTH non-author peers cross-read disagree with a claim in Phase 2,
-the claim is marked `modified` with a templated hedge appended to the
-original text. This is the symmetric counter to §6's strict-triadic
-consensus rule: in N=3, "both non-author peers agree" is the strict
-recognition signal; "both non-author peers disagree" is the strict
-dispute signal. The hedge surfaces the dispute inline so the cross-
-reading audit doesn't get dropped at the synthesis seam — the failure
-mode that produced the 2026-05-16 attention-economy session in which
-9 contested numeric claims survived Phase 2 critique unmodified.
+When BOTH non-author peers disagree with a claim through any disagreement
+channel — Phase 2 cross-reading OR Phase 3 critique turn — the claim is
+marked `modified` with a templated hedge appended to the original text.
+This is the symmetric counter to §6's strict-triadic consensus rule: in
+N=3, "both non-author peers agree" is the strict recognition signal;
+"both non-author peers disagree" is the strict dispute signal. The hedge
+surfaces the dispute inline so the cross-reading + dialogue audit doesn't
+get dropped at the synthesis seam — the failure mode that produced the
+2026-05-16 attention-economy session in which 9+ contested numeric claims
+survived Phase 2/3 critique unmodified.
+
+Channel priority within the rule: Phase 2 cross-reading is scanned first,
+then Phase 3 critique. If a single peer disagrees through BOTH channels,
+the Phase 2 reason wins (it's the more structured signal — reader
+explicitly named what they disagree with and why). Augment and converge
+channels are NOT counted as dispute signals, honoring the spec's channel
+semantics rather than inferring disagreement across channels.
 
 The rule is triadic-only. With N != 3, "both non-author peers" is not
 well-defined; existing dyad behavior is preserved.
@@ -66,12 +74,16 @@ ignored?" and dispute checks "is this strictly contested?" — both can be
 present on the same claim, but in practice they don't conflict because
 dispute implies engagement.
 
-V0 STAGING — what's still deliberately deferred:
+V3 deferred — what's still not consumed:
 
-Phase 3 critique-target signals are NOT yet consumed by Rule 1; a claim
-critiqued in Phase 3 (without matching Phase 2 disagreements) is still
-marked `present`. v2 will look at phase_3 once the v1 fix is validated
-on real session data.
+The two-peer-dispute rule looks at Phase 2 cross-reading disagreements
+and Phase 3 critique turns. It does NOT yet look at:
+  - Phase 2 taggings (peer_tags with edge-case or framing-choice flags
+    naming a contested pattern). Those carry dispute information but
+    through a different mechanism (tag vocabulary, not free-form reason).
+  - Phase 1 self_reflection_artifacts beyond weakest_claim_id (e.g., a
+    model self-flagging "this contradicts the shared evidence" in
+    tag_justification). Self-doubt as a dispute signal is v3+ territory.
 
 Shape A factoring: build_claim_trace is a planning function. It decides
 dispositions but does not produce prose. Prose generation is Rule 4's
@@ -203,23 +215,36 @@ def _two_peer_disputers(
     *,
     author: ModelId,
 ) -> Optional[list[tuple[ModelId, str]]]:
-    """Return [(peer, reason)] for both non-author peers if BOTH have a
-    Phase 2 cross-reading disagreement against this claim. Otherwise None.
+    """Return [(peer, reason)] for both non-author peers if BOTH disagree
+    with the claim through any disagreement channel — Phase 2 cross-reading
+    or Phase 3 critique turn. Otherwise None.
 
     Triadic-only: with N != 3, the strict 'both non-author peers' signal
     is not well-defined, so the rule does not fire. Existing dyad and
     larger-N session behavior is preserved.
 
+    Channel priority: Phase 2 cross-reading scanned first, then Phase 3
+    critique. If a peer disagrees in both, the Phase 2 reason wins (the
+    structured channel where the reader explicitly named the claim and
+    why; Phase 3 critique can be more general dialogue). The priority is
+    locked so the hedge's reasoning is reproducible across runs.
+
+    Augment and converge channels are NOT disagreement signals — same
+    boundary Rule 3 enforces, honoring the spec's channel semantics rather
+    than inferring disagreement across channels.
+
     Peers in the returned list are sorted by model_id.value for
     deterministic downstream formatting. The reason captured per peer is
-    the first matching disagreement encountered (cross-readings within a
-    Session are tuple-ordered by construction).
+    the first matching disagreement encountered (cross-readings and
+    dialogue turns within a Session are tuple-ordered by construction).
     """
     non_author_peers = set(session.models_invited) - {author}
     if len(non_author_peers) != 2:
         return None
 
     found: dict[ModelId, str] = {}
+
+    # Phase 2 cross-reading disagreements — structured channel, scanned first.
     for cr in session.phase_2:
         if cr.target_model is not author:
             continue
@@ -231,6 +256,20 @@ def _two_peer_disputers(
             if d.target_claim_id == claim_id:
                 found[cr.reader_model] = d.reason
                 break
+
+    # Phase 3 critique turns — fill in peers not already disputing via Phase 2.
+    for turn in session.phase_3:
+        if turn.channel != "critique":
+            continue
+        if turn.target_model is not author:
+            continue
+        if turn.speaker_model not in non_author_peers:
+            continue
+        if turn.speaker_model in found:
+            continue  # Phase 2 already captured this peer; preserve channel priority.
+        if claim_id in turn.target_claim_ids:
+            found[turn.speaker_model] = turn.content
+
     if len(found) < 2:
         return None
     return sorted(found.items(), key=lambda kv: kv[0].value)
