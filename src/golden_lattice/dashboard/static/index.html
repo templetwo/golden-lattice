@@ -2,827 +2,936 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Golden Lattice — Dashboard</title>
+<!--
+  Progressive enhancement only: if the Google Fonts CDN is reachable the page
+  renders in Spectral + JetBrains Mono; offline/local it falls back to the
+  system serif/mono stacks below and keeps working. (Self-hosting the woff2
+  files is the documented follow-up; the runtime never hard-depends on the CDN.)
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #0f1115;
-    --panel-bg: #161a21;
-    --panel-border: #2a2f3a;
-    --text: #d8dee9;
-    --dim: #6b7280;
-    --accent: #ffd60a;
-    --opus: #c084fc;
-    --sonnet: #7dd3fc;
-    --haiku: #86efac;
-    --critique: #f87171;
-    --augment: #93c5fd;
-    --converge: #fbbf24;
-    --success: #86efac;
-    --fail: #f87171;
-    --present: #86efac;
-    --modified: #fbbf24;
-    --omitted: #f87171;
-    --feed-marker: #fbbf24;
+    --bg: #0c0d11;
+    --panel: #14161d;
+    --border: #242832;
+    --border-soft: #1c1f27;
+    --text: #d7dbe4;
+    --text-bright: #eef0f4;
+    --text-mid: #aab0bc;
+    --dim: #707682;
+    --dimmer: #5a606c;
+    --opus: oklch(0.72 0.16 308);
+    --sonnet: oklch(0.79 0.12 226);
+    --haiku: oklch(0.81 0.15 158);
+    --gold: oklch(0.84 0.14 88);
+    --critique: oklch(0.67 0.18 25);
+    --augment: oklch(0.74 0.10 250);
+    --present: oklch(0.78 0.13 158);
+    --serif: 'Spectral', Georgia, 'Times New Roman', serif;
+    --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
   }
   * { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; height: 100%; background: var(--bg); color: var(--text); }
+  html, body { margin: 0; padding: 0; background: var(--bg); }
   body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-    font-size: 13px;
-    line-height: 1.5;
-  }
-  .grid {
-    display: grid;
-    height: 100vh;
-    grid-template-rows:
-      auto                /* header */
-      minmax(120px, 220px) /* feed */
-      minmax(220px, 1fr)  /* columns */
-      minmax(180px, 0.8fr) /* loom */
-      minmax(220px, 1fr)  /* phase4 (ledger + parity) */
-      minmax(140px, auto) /* synthesis (capped) */
-      auto;               /* input bar */
-    gap: 8px;
-    padding: 8px;
-  }
-  .panel {
-    background: var(--panel-bg);
-    border: 1px solid var(--panel-border);
-    border-radius: 6px;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    min-height: 0;
-  }
-  .panel-title {
-    padding: 6px 12px;
-    background: rgba(255, 255, 255, 0.03);
-    border-bottom: 1px solid var(--panel-border);
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--dim);
-    flex-shrink: 0;
-  }
-  .panel-body {
-    padding: 8px 12px;
-    overflow-y: auto;
-    flex: 1;
-    min-height: 0;
-  }
-  .columns {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: 8px;
-    min-height: 0;
-  }
-  .phase4 {
-    display: grid;
-    grid-template-columns: 3fr 2fr;
-    gap: 8px;
-    min-height: 0;
-  }
-  .opus { border-top: 2px solid var(--opus); }
-  .sonnet { border-top: 2px solid var(--sonnet); }
-  .haiku { border-top: 2px solid var(--haiku); }
-  .feed { border-top: 2px solid var(--feed-marker); }
-  .synthesis { border-top: 2px solid var(--accent); }
-  .opus-color { color: var(--opus); }
-  .sonnet-color { color: var(--sonnet); }
-  .haiku-color { color: var(--haiku); }
-  .critique-color { color: var(--critique); }
-  .augment-color { color: var(--augment); }
-  .converge-color { color: var(--converge); }
-  .success-icon { color: var(--success); }
-  .fail-icon { color: var(--fail); }
-  .dim { color: var(--dim); }
-  .accent { color: var(--accent); }
-  .header-panel {
-    padding: 10px 14px;
-    background: var(--panel-bg);
-    border: 1px solid var(--panel-border);
-    border-radius: 6px;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-  .header-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-size: 13px;
-  }
-  .header-row .session-id { color: var(--accent); font-weight: 600; font-family: ui-monospace, monospace; }
-  .header-row .status { color: var(--dim); font-family: ui-monospace, monospace; }
-  .header-row .status.completed { color: var(--success); }
-  .prompt-preview {
-    color: var(--dim);
-    font-style: italic;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .claim {
-    margin: 6px 0;
-    padding: 6px 8px;
-    background: rgba(255, 255, 255, 0.02);
-    border-left: 3px solid var(--panel-border);
-    border-radius: 3px;
-  }
-  .claim.opus { border-left-color: var(--opus); }
-  .claim.sonnet { border-left-color: var(--sonnet); }
-  .claim.haiku { border-left-color: var(--haiku); }
-  .claim-id { color: var(--dim); font-family: ui-monospace, monospace; font-size: 11px; }
-  .claim-text { margin-top: 2px; }
-  .strongest-marker { color: var(--accent); font-weight: 700; }
-  .weakest-marker { color: var(--dim); }
-  .reflection {
-    margin-top: 12px;
-    padding: 8px;
-    background: rgba(255, 214, 10, 0.06);
-    border-radius: 4px;
-    color: var(--dim);
-    font-style: italic;
-    font-size: 12px;
-  }
-  .meta-line {
-    color: var(--dim);
-    font-size: 11px;
-    font-family: ui-monospace, monospace;
-    margin-bottom: 6px;
-  }
-  .feed-entry {
-    margin: 6px 0;
-    padding: 6px 8px;
-    background: rgba(255, 255, 255, 0.02);
-    border-left: 3px solid var(--panel-border);
-    border-radius: 3px;
-  }
-  .feed-entry.success { border-left-color: var(--success); }
-  .feed-entry.fail { border-left-color: var(--fail); }
-  .feed-entry .query { font-family: ui-monospace, monospace; color: var(--text); }
-  .feed-entry .summary { color: var(--dim); margin-top: 2px; }
-  .feed-entry details { margin-top: 4px; }
-  .feed-entry details summary { color: var(--dim); cursor: pointer; font-size: 11px; }
-  .feed-entry pre {
-    background: rgba(0, 0, 0, 0.3);
-    padding: 8px;
-    border-radius: 3px;
-    overflow-x: auto;
-    white-space: pre-wrap;
-    word-wrap: break-word;
-    font-size: 11px;
+    -webkit-font-smoothing: antialiased;
     color: var(--text);
-    margin: 4px 0 0 0;
-    max-height: 300px;
-    overflow-y: auto;
+    font-family: var(--serif);
+    font-size: 15px;
+    line-height: 1.6;
+    padding: 0 0 96px 0;
+    position: relative;
+    min-height: 100vh;
   }
-  .turn {
-    margin: 4px 0;
-    padding: 6px 8px;
-    background: rgba(255, 255, 255, 0.02);
-    border-radius: 3px;
-  }
-  .turn.critique { border-left: 3px solid var(--critique); }
-  .turn.augment { border-left: 3px solid var(--augment); }
-  .turn.converge { border-left: 3px solid var(--converge); }
-  .turn.elevated { background: rgba(251, 191, 36, 0.08); }
-  .turn-header { font-size: 11px; font-family: ui-monospace, monospace; margin-bottom: 2px; }
-  .turn-content { font-size: 12px; }
-  .arrow { color: var(--dim); }
-  table.ledger { width: 100%; border-collapse: collapse; font-size: 12px; }
-  table.ledger th { text-align: left; color: var(--dim); font-weight: 500; padding: 4px 6px; border-bottom: 1px solid var(--panel-border); }
-  table.ledger td { padding: 6px; border-bottom: 1px solid rgba(255, 255, 255, 0.03); vertical-align: top; }
-  .disp-present { color: var(--present); }
-  .disp-modified { color: var(--modified); }
-  .disp-omitted { color: var(--omitted); }
-  .grounding-P { color: var(--dim); }
-  .grounding-F { color: var(--accent); }
-  .grounding-Q { color: var(--fail); }
-  .parity-row { margin: 6px 0; }
-  .parity-bar {
-    display: inline-block;
-    width: 120px;
-    height: 8px;
-    background: var(--panel-border);
-    border-radius: 2px;
-    overflow: hidden;
-    vertical-align: middle;
-    margin: 0 6px;
-  }
-  .parity-bar-fill { display: block; height: 100%; background: var(--accent); }
-  .parity-dim-title { color: var(--dim); margin: 10px 0 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
-  .below-threshold { color: var(--fail); margin-left: 4px; }
-  .flag-reading {
-    margin-top: 10px;
-    padding: 8px;
-    background: rgba(248, 113, 113, 0.08);
-    border-radius: 3px;
-    border-left: 3px solid var(--fail);
-  }
-  .flag-reading .reading { font-weight: 600; }
-  .flag-reading .gloss { color: var(--dim); margin-top: 2px; font-size: 11px; }
-  .flag-reading .histogram { font-family: ui-monospace, monospace; font-size: 11px; color: var(--dim); margin-top: 4px; }
-  .synthesis-body { white-space: pre-wrap; font-size: 12px; line-height: 1.6; }
-  .synthesis-body .attr-O { color: var(--opus); }
-  .synthesis-body .attr-S { color: var(--sonnet); }
-  .synthesis-body .attr-H { color: var(--haiku); }
-  .conn-banner {
-    position: fixed;
-    top: 8px;
-    right: 8px;
-    padding: 4px 10px;
-    border-radius: 12px;
-    background: var(--panel-bg);
-    border: 1px solid var(--panel-border);
-    font-size: 11px;
-    color: var(--dim);
-    z-index: 100;
-  }
-  .conn-banner.connected { color: var(--success); border-color: var(--success); }
-  .conn-banner.disconnected { color: var(--fail); border-color: var(--fail); }
-  .empty { color: var(--dim); font-style: italic; }
-
-  /* Input bar (persistent-mode prompt entry) */
-  .input-bar {
-    background: var(--panel-bg);
-    border: 1px solid var(--panel-border);
-    border-radius: 6px;
-    padding: 8px 12px;
-    display: flex;
-    gap: 8px;
-    align-items: center;
-  }
-  .input-bar-label {
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--dim);
-    flex-shrink: 0;
-  }
-  #prompt-input {
-    flex: 1;
-    background: var(--bg);
-    color: var(--text);
-    border: 1px solid var(--panel-border);
-    border-radius: 4px;
-    padding: 6px 10px;
-    font-family: inherit;
-    font-size: 13px;
-    outline: none;
-  }
-  #prompt-input:focus { border-color: var(--accent); }
-  #prompt-input:disabled { color: var(--dim); background: rgba(0, 0, 0, 0.2); }
-  #prompt-submit {
-    background: var(--accent);
-    color: var(--bg);
-    border: none;
-    border-radius: 4px;
-    padding: 6px 18px;
-    font-family: inherit;
-    font-size: 11px;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    cursor: pointer;
-    font-weight: 600;
-  }
-  #prompt-submit:disabled { background: var(--panel-border); color: var(--dim); cursor: not-allowed; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 5px; border: 2px solid var(--bg); }
+  ::-webkit-scrollbar-thumb:hover { background: #323744; }
+  @keyframes glDot { 0%,100% { opacity: 0.4; transform: scale(0.9); } 50% { opacity: 1; transform: scale(1.1); } }
+  .mono { font-family: var(--mono); }
+  .reveal { opacity: 0; transform: translateY(10px); transition: opacity .5s ease, transform .5s ease; }
+  .reveal.refl { transition: opacity .6s ease, transform .6s ease; }
+  /* The phase spine */
+  .spine { display: grid; grid-template-columns: 64px 1fr; gap: 24px; }
+  .spine-num { display: flex; flex-direction: column; align-items: center; }
+  .spine-num .n { font-family: var(--mono); font-size: 13px; font-weight: 600; color: #6b7280; }
+  .spine-num .line { width: 1px; flex: 1; background: var(--border-soft); margin-top: 10px; }
+  /* Transport scrubber */
+  #gl-scrub { -webkit-appearance: none; appearance: none; height: 3px; background: var(--border); border-radius: 2px; outline: none; cursor: pointer; }
+  #gl-scrub::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 13px; height: 13px; border-radius: 50%; background: var(--gold); border: 2px solid var(--bg); cursor: pointer; box-shadow: 0 0 10px -1px oklch(0.84 0.14 88 / 0.6); }
+  #gl-scrub::-moz-range-thumb { width: 13px; height: 13px; border-radius: 50%; background: var(--gold); border: 2px solid var(--bg); cursor: pointer; }
+  .tbtn { font-family: var(--mono); cursor: pointer; display: flex; align-items: center; justify-content: center; }
+  .pill { font-family: var(--mono); cursor: pointer; transition: all .2s ease; white-space: nowrap; }
+  .col-pad { padding: 14px 0 40px 0; }
+  .phase-title { font-family: var(--mono); font-size: 13px; letter-spacing: 0.2em; color: #cdd2db; text-transform: uppercase; }
+  .phase-lead { color: var(--dim); font-size: 14px; margin-top: 8px; max-width: 700px; }
+  a { color: inherit; }
 </style>
 </head>
 <body>
-<div class="conn-banner" id="conn-banner">connecting…</div>
-<div class="grid">
-  <div class="header-panel">
-    <div class="header-row">
-      <div class="session-id" id="session-id">awaiting session_started…</div>
-      <div class="status" id="status">—</div>
-    </div>
-    <div class="prompt-preview" id="prompt-preview"></div>
-  </div>
-  <div class="panel feed">
-    <div class="panel-title">feed (Phase 0)</div>
-    <div class="panel-body" id="feed-body">
-      <div class="empty">no investigation yet</div>
-    </div>
-  </div>
-  <div class="columns">
-    <div class="panel opus">
-      <div class="panel-title opus-color">OPUS</div>
-      <div class="panel-body" id="col-claude-opus-4-7"><div class="empty">waiting…</div></div>
-    </div>
-    <div class="panel sonnet">
-      <div class="panel-title sonnet-color">SONNET</div>
-      <div class="panel-body" id="col-claude-sonnet-4-6"><div class="empty">waiting…</div></div>
-    </div>
-    <div class="panel haiku">
-      <div class="panel-title haiku-color">HAIKU</div>
-      <div class="panel-body" id="col-claude-haiku-4-5"><div class="empty">waiting…</div></div>
-    </div>
-  </div>
-  <div class="panel">
-    <div class="panel-title">loom (Phase 3)</div>
-    <div class="panel-body" id="loom-body"><div class="empty">Phase 3 not yet started…</div></div>
-  </div>
-  <div class="phase4">
-    <div class="panel">
-      <div class="panel-title">trace ledger (Phase 4)</div>
-      <div class="panel-body" id="ledger-body"><div class="empty">Phase 4 trace not yet composed…</div></div>
-    </div>
-    <div class="panel">
-      <div class="panel-title">parity</div>
-      <div class="panel-body" id="parity-body"><div class="empty">parity not yet computed…</div></div>
-    </div>
-  </div>
-  <div class="panel synthesis">
-    <div class="panel-title">synthesis (Phase 4)</div>
-    <div class="panel-body" id="synthesis-body"><div class="empty">synthesis not yet emitted…</div></div>
-  </div>
-  <div class="input-bar">
-    <span class="input-bar-label">ask:</span>
-    <input type="text" id="prompt-input" placeholder="waiting for connection…" autocomplete="off" disabled />
-    <button id="prompt-submit" disabled>send</button>
-  </div>
-</div>
+<div id="app"></div>
 
 <script>
-(function() {
-  // ---- Color and label helpers ----
-  const MODEL_COLOR = {
-    'claude-opus-4-7': 'opus-color',
-    'claude-sonnet-4-6': 'sonnet-color',
-    'claude-haiku-4-5': 'haiku-color',
+(function () {
+  "use strict";
+
+  // ---------- constants ----------
+  var COLOR = {
+    'claude-opus-4-7': 'oklch(0.72 0.16 308)',
+    'claude-sonnet-4-6': 'oklch(0.79 0.12 226)',
+    'claude-haiku-4-5': 'oklch(0.81 0.15 158)'
   };
-  const MODEL_SHORT = {
+  var SHORT = {
     'claude-opus-4-7': 'OPUS',
     'claude-sonnet-4-6': 'SONNET',
-    'claude-haiku-4-5': 'HAIKU',
+    'claude-haiku-4-5': 'HAIKU'
   };
-  const READING_GLOSS = {
-    'not_recognized': 'Genuine recognition asymmetry — peers did not see these claims as dimension-relevant.',
-    'vocabulary_failed': 'The closed vocabulary did not cover these contributions.',
-    'peer_divergence': 'Peers split per-claim on this model’s contributions.',
-    'low_claim_volume': 'Too few claims to compute meaningfully.',
-    'ambiguous': 'Histogram does not match a clean pattern.',
-  };
-  function shortModel(m) { return MODEL_SHORT[m] || m; }
-  function escapeHtml(s) {
-    return String(s)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;').replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
-  }
+  var CH = { critique: 'oklch(0.67 0.18 25)', augment: 'oklch(0.74 0.10 250)', converge: 'oklch(0.84 0.14 88)' };
+  var CHB = { critique: 'oklch(0.67 0.18 25 / 0.4)', augment: 'oklch(0.74 0.10 250 / 0.4)', converge: 'oklch(0.84 0.14 88 / 0.45)' };
+  var GOLD = 'oklch(0.84 0.14 88)';
+  var DISP_COLOR = { present: 'oklch(0.78 0.13 158)', modified: 'oklch(0.84 0.14 88)', omitted: 'oklch(0.67 0.18 25)' };
+  var PLAY_PERIOD_MS = 360;
 
-  // ---- State accumulator (mirrors TuiState semantics) ----
-  const state = {
-    session_id: null,
-    prompt: null,
-    prompt_hash: null,
-    invited_models: [],
-    completed: false,
-    current_offset_ms: 0,
-    phase_0_grounding: null,
-    phase_0_proposals: [],
-    phase_0_search_results: [],
-    phase_0_failed_searches: [],
-    phase_0_feed_frozen: null,
-    phase_1: {},  // model_id -> {focus, confidence, claims, completed_ms, started_ms, reflection}
-    self_reflections: {},
-    cross_readings: [],
-    taggings: [],
-    turns: [],
-    artifact: null,
-    metrics: null,
-    flag_interps: [],
+  function colorOf(m) { return COLOR[m] || '#8b919d'; }
+  function shortOf(m) { return SHORT[m] || (m || '').toUpperCase(); }
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+  function lsGet(k, d) { try { var v = localStorage.getItem(k); return v == null ? d : v; } catch (e) { return d; } }
+  function lsSet(k, v) { try { localStorage.setItem(k, String(v)); } catch (e) {} }
+
+  // ---------- top-level UI state ----------
+  var UI = {
+    sessions: null,
+    sessionIdx: 0,
+    mode: 'replay',          // 'replay' | 'live'
+    live: null,              // normalized live session object
+    liveStatus: 'connecting…',
+    step: 0,
+    playing: false,
+    speed: 1,
+    geom: null,              // measured phase-2 node/anchor positions
+    sessionInFlight: false   // live: between session_started and session_completed
   };
 
-  // ---- Event dispatch ----
-  function applyEvent(ev) {
-    state.current_offset_ms = ev.timestamp_offset_ms;
-    switch (ev.event_type) {
-      case 'session_started':
-        // Full reset so back-to-back persistent-mode sessions render
-        // clean panels instead of accumulating on top of the prior run.
-        state.session_id = ev.session_id;
-        state.prompt = ev.prompt;
-        state.prompt_hash = ev.prompt_hash;
-        state.invited_models = ev.models_invited;
-        state.completed = false;
-        state.current_offset_ms = 0;
-        state.phase_0_grounding = null;
-        state.phase_0_proposals = [];
-        state.phase_0_search_results = [];
-        state.phase_0_failed_searches = [];
-        state.phase_0_feed_frozen = null;
-        state.phase_1 = {};
-        state.self_reflections = {};
-        state.cross_readings = [];
-        state.taggings = [];
-        state.turns = [];
-        state.artifact = null;
-        state.metrics = null;
-        state.flag_interps = [];
-        for (const m of ev.models_invited) {
-          state.phase_1[m] = { claims: [], started_ms: null, completed_ms: null };
-        }
-        break;
-      case 'phase_0_datetime_grounding':
-        state.phase_0_grounding = ev;
-        break;
-      case 'phase_0_proposal_submitted':
-        state.phase_0_proposals.push(ev);
-        break;
-      case 'phase_0_search_result':
-        state.phase_0_search_results.push(ev);
-        break;
-      case 'phase_0_failed_search':
-        state.phase_0_failed_searches.push(ev);
-        break;
-      case 'phase_0_feed_frozen':
-        state.phase_0_feed_frozen = ev;
-        break;
-      case 'phase_1_response_started':
-        state.phase_1[ev.model_id] = state.phase_1[ev.model_id] || { claims: [] };
-        state.phase_1[ev.model_id].started_ms = ev.timestamp_offset_ms;
-        break;
-      case 'phase_1_claim':
-        state.phase_1[ev.model_id] = state.phase_1[ev.model_id] || { claims: [] };
-        state.phase_1[ev.model_id].claims.push(ev);
-        break;
-      case 'phase_1_response_completed':
-        state.phase_1[ev.model_id] = state.phase_1[ev.model_id] || { claims: [] };
-        state.phase_1[ev.model_id].focus = ev.focus_tag;
-        state.phase_1[ev.model_id].confidence = ev.confidence;
-        state.phase_1[ev.model_id].claim_count = ev.claim_count;
-        state.phase_1[ev.model_id].completed_ms = ev.timestamp_offset_ms;
-        break;
-      case 'self_reflection':
-        state.self_reflections[ev.model_id] = ev;
-        break;
-      case 'phase_2_cross_reading':
-        state.cross_readings.push(ev);
-        break;
-      case 'phase_2_tagging':
-        state.taggings.push(ev);
-        break;
-      case 'phase_3_turn':
-        state.turns.push(ev);
-        break;
-      case 'phase_4_artifact':
-        state.artifact = ev;
-        break;
-      case 'phase_4_metrics':
-        state.metrics = ev.metrics;
-        break;
-      case 'phase_4_flag_interpretations':
-        state.flag_interps = ev.interpretations || [];
-        break;
-      case 'session_completed':
-        state.completed = true;
-        break;
+  // Per-session derived data (recomputed by prepare()).
+  var D = null;              // { maps, bounds, N, author, claimText, disagree, elevTurns, elevClaims }
+  var built = null;          // refs into the current DOM: { revealables:[{el,beat}], arcs:[...], svg, p2cont }
+  var timer = null;
+  var ws = null;
+  var retryTimer = null;
+  var liveObj = null;        // mutable live accumulator
+
+  var app = document.getElementById('app');
+
+  // ---------- derivation (port of prototype prepare()) ----------
+  function claimsOf(data, m) { return (data.phase1[m] && data.phase1[m].claims) || []; }
+
+  function prepare(data) {
+    var M = data.models;
+    var k = 0;
+    var p0 = data.phase0;
+    var groundingR = -1, propR = [], frozenR = -1, resultR = [];
+    if (p0) {
+      groundingR = k++;
+      propR = (p0.proposals || []).map(function () { return k++; });
+      frozenR = k++;
+      resultR = (p0.results || []).map(function () { return k++; });
     }
+    var p0End = k - 1;
+    var claimR = {}, reflR = {}, crR = {}, turnR = {};
+    var cols = M.map(function (m) { return claimsOf(data, m); });
+    var maxC = Math.max.apply(null, [1].concat(cols.map(function (c) { return c.length; })));
+    for (var i = 0; i < maxC; i++) {
+      for (var mi = 0; mi < M.length; mi++) {
+        var c = claimsOf(data, M[mi])[i];
+        if (c) claimR[c.id] = k++;
+      }
+    }
+    M.forEach(function (m) { reflR[m] = k++; });
+    var p1End = k - 1;
+    (data.crossreadings || []).forEach(function (cr, idx) { crR[idx] = k++; });
+    var p2Start = p1End + 1, p2End = k - 1;
+    (data.turns || []).forEach(function (t) { turnR[t.id] = k++; });
+    var p3Start = p2End + 1, p3End = k - 1;
+    var ledgerR = k++, parityR = k++;
+    var synthLines = (((data.synthesis && data.synthesis.output) || '').split('\n')).filter(function (l) { return l.trim(); });
+    var synthR = synthLines.map(function () { return k++; });
+    var p4Start = p3End + 1;
+
+    var author = {}, claimText = {};
+    M.forEach(function (m) {
+      claimsOf(data, m).forEach(function (c) { author[c.id] = m; claimText[c.id] = c.text; });
+    });
+    var disagree = {};
+    (data.crossreadings || []).forEach(function (cr) {
+      (cr.disagreements || []).forEach(function (d) {
+        (disagree[d.id] = disagree[d.id] || []).push({ reader: cr.reader, reason: d.reason });
+      });
+    });
+    var elevTurns = {}, elevClaims = {};
+    (data.elevations || []).forEach(function (e) {
+      (e.converge_turn_ids || []).forEach(function (id) { elevTurns[id] = true; });
+      (e.claim_ids || []).forEach(function (id) { elevClaims[id] = true; });
+    });
+
+    D = {
+      maps: { groundingR: groundingR, propR: propR, frozenR: frozenR, resultR: resultR, claimR: claimR, reflR: reflR, crR: crR, turnR: turnR, ledgerR: ledgerR, parityR: parityR, synthR: synthR, synthLines: synthLines },
+      bounds: { p0End: p0End, p1End: p1End, p2Start: p2Start, p2End: p2End, p3Start: p3Start, p3End: p3End, p4Start: p4Start, hasP0: !!p0 },
+      N: Math.max(0, k - 1),
+      author: author, claimText: claimText, disagree: disagree,
+      elevTurns: elevTurns, elevClaims: elevClaims
+    };
   }
 
-  // ---- Renderers ----
-  function elapsedStr() {
-    return 't+' + (state.current_offset_ms / 1000).toFixed(1) + 's';
+  // ---------- DOM building (once per session) ----------
+  function buildSession(data) {
+    prepare(data);
+
+    var parts = [];
+    parts.push(mastheadHtml(data));
+    parts.push('<div style="max-width:1180px;margin:0 auto;padding:0 40px;position:relative;">');
+    parts.push(phase0Html(data));
+    parts.push(phase1Html(data));
+    parts.push(phase2Html(data));
+    parts.push(phase3Html(data));
+    parts.push(phase4Html(data));
+    parts.push('</div>'); // phases column
+    parts.push(transportHtml());
+
+    app.innerHTML = parts.join('');
+
+    // collect refs
+    built = {
+      revealables: [],
+      arcs: [],
+      svg: document.getElementById('gl-svg'),
+      p2cont: document.getElementById('gl-p2')
+    };
+    var nodes = app.querySelectorAll('[data-beat]');
+    for (var i = 0; i < nodes.length; i++) {
+      built.revealables.push({ el: nodes[i], beat: parseInt(nodes[i].getAttribute('data-beat'), 10) });
+    }
+    buildArcs(data);
+
+    UI.geom = null;
+    scheduleMeasure();
+    applyStep();
   }
-  function renderHeader() {
-    document.getElementById('session-id').textContent = state.session_id || 'awaiting session_started…';
-    const statusEl = document.getElementById('status');
-    statusEl.textContent = elapsedStr() + '  •  ' + (state.completed ? 'session_completed' : 'in flight');
-    statusEl.className = 'status' + (state.completed ? ' completed' : '');
-    document.getElementById('prompt-preview').textContent = state.prompt || '';
-  }
-  function renderFeed() {
-    const body = document.getElementById('feed-body');
-    if (!state.phase_0_grounding && state.phase_0_proposals.length === 0 &&
-        state.phase_0_search_results.length === 0 && state.phase_0_failed_searches.length === 0) {
-      body.innerHTML = '<div class="empty">Phase 0 did not run (no investigation).</div>';
-      return;
-    }
-    const parts = [];
-    if (state.phase_0_grounding) {
-      parts.push('<div class="meta-line"><span class="accent">grounding</span> ' +
-                 escapeHtml(state.phase_0_grounding.formatted_text) + '</div>');
-    }
-    if (state.phase_0_proposals.length) {
-      const summary = state.phase_0_proposals.map(p => {
-        const color = MODEL_COLOR[p.model_id] || '';
-        return '<span class="' + color + '">' + shortModel(p.model_id) + '</span>:' + p.queries.length;
-      }).join(' ');
-      const unique = new Set();
-      state.phase_0_proposals.forEach(p => p.queries.forEach(q => unique.add(q)));
-      parts.push('<div class="meta-line"><strong>proposals</strong> ' + summary +
-                 ' <span class="dim">(' + unique.size + ' unique)</span></div>');
-    }
-    const successes = state.phase_0_search_results.length;
-    const failures = state.phase_0_failed_searches.length;
-    if (successes + failures > 0) {
-      parts.push('<div class="meta-line"><strong>entries</strong> <span class="dim">(' +
-                 (successes + failures) + ' total)</span></div>');
-      for (const r of state.phase_0_search_results) {
-        parts.push(
-          '<div class="feed-entry success">' +
-          '<span class="success-icon">✓</span> ' +
-          '<span class="query">' + escapeHtml(r.query) + '</span>' +
-          '<details><summary>preview (' + r.result_text_preview.length + ' chars)</summary>' +
-          '<pre>' + escapeHtml(r.result_text_preview) + '</pre>' +
-          '</details>' +
-          '</div>'
-        );
-      }
-      for (const f of state.phase_0_failed_searches) {
-        parts.push(
-          '<div class="feed-entry fail">' +
-          '<span class="fail-icon">✗</span> ' +
-          '<span class="query">' + escapeHtml(f.query) + '</span>' +
-          '<div class="summary">' + escapeHtml(f.reason) + '</div>' +
-          '</div>'
-        );
-      }
-    }
-    if (state.phase_0_feed_frozen) {
-      parts.push('<div class="meta-line"><span class="accent">frozen</span> ' +
-                 state.phase_0_feed_frozen.entry_count + ' entries; Phase 1 can begin</div>');
-    }
-    body.innerHTML = parts.join('');
-  }
-  function renderColumn(model_id) {
-    const body = document.getElementById('col-' + model_id);
-    if (!body) return;
-    const m = state.phase_1[model_id] || { claims: [] };
-    const reflection = state.self_reflections[model_id];
-    const strongId = reflection ? reflection.strongest_claim_id : null;
-    const weakId = reflection ? reflection.weakest_claim_id : null;
-    const color = MODEL_COLOR[model_id] || '';
-    const parts = [];
-    if (m.focus != null) {
-      const elapsed = m.completed_ms && m.started_ms ? ((m.completed_ms - m.started_ms) / 1000).toFixed(1) + 's' : '';
-      parts.push('<div class="meta-line"><span class="' + color + '">focus:</span> ' + escapeHtml(m.focus) +
-                 ' <span class="' + color + '">conf:</span> ' + (m.confidence != null ? m.confidence.toFixed(2) : '?') +
-                 ' <span class="dim">(' + elapsed + ', ' + (m.claim_count || m.claims.length) + ' claims)</span></div>');
-    } else if (m.started_ms != null) {
-      parts.push('<div class="meta-line ' + color + '">generating…</div>');
-    }
-    for (const c of m.claims) {
-      let marker = '';
-      let markerClass = '';
-      if (c.claim_id === strongId) { marker = '★ '; markerClass = 'strongest-marker'; }
-      else if (c.claim_id === weakId) { marker = '· '; markerClass = 'weakest-marker'; }
-      parts.push(
-        '<div class="claim ' + model_id.split('-')[1] + '">' +
-        '<div class="claim-text"><span class="' + markerClass + '">' + marker + '</span>' + escapeHtml(c.text) + '</div>' +
-        '<div class="claim-id">' + escapeHtml(c.claim_id) + '</div>' +
-        '</div>'
-      );
-    }
-    if (reflection) {
-      parts.push('<div class="reflection">reflection: ' + escapeHtml(reflection.tag_justification) + '</div>');
-    }
-    body.innerHTML = parts.join('') || '<div class="empty">waiting…</div>';
-  }
-  function renderLoom() {
-    const body = document.getElementById('loom-body');
-    if (state.turns.length === 0) {
-      body.innerHTML = '<div class="empty">Phase 3 not yet started…</div>';
-      return;
-    }
-    // Elevation detection: claims targeted by >=2 converge turns from distinct speakers.
-    const convergeByClaim = {};
-    for (const t of state.turns) {
-      if (t.channel !== 'converge') continue;
-      for (const cid of (t.target_claim_ids || [])) {
-        convergeByClaim[cid] = convergeByClaim[cid] || new Set();
-        convergeByClaim[cid].add(t.speaker_model);
-      }
-    }
-    const elevatedTurnIds = new Set();
-    for (const t of state.turns) {
-      if (t.channel !== 'converge') continue;
-      for (const cid of (t.target_claim_ids || [])) {
-        if (convergeByClaim[cid] && convergeByClaim[cid].size >= 2) elevatedTurnIds.add(t.turn_id);
-      }
-    }
-    const parts = [];
-    for (const t of state.turns) {
-      const elev = elevatedTurnIds.has(t.turn_id) ? ' elevated' : '';
-      const speakerColor = MODEL_COLOR[t.speaker_model] || '';
-      const targetColor = t.target_model ? (MODEL_COLOR[t.target_model] || '') : 'dim';
-      const targetLabel = t.target_model ? shortModel(t.target_model) : 'all peers';
-      const tSec = (t.timestamp_offset_ms / 1000).toFixed(1);
-      parts.push(
-        '<div class="turn ' + t.channel + elev + '">' +
-        '<div class="turn-header">' +
-        (elevatedTurnIds.has(t.turn_id) ? '<span class="accent">★</span> ' : '') +
-        '<span class="dim">' + tSec + 's</span> ' +
-        '<span class="' + speakerColor + '">' + shortModel(t.speaker_model) + '</span> ' +
-        '<span class="' + t.channel + '-color">─' + t.channel + '→</span> ' +
-        '<span class="' + targetColor + '">' + targetLabel + '</span>' +
+
+  function mastheadHtml(data) {
+    var live = UI.mode === 'live';
+    var M = data.models;
+    var has = function (m) { return claimsOf(data, m).length; };
+    var meta = function (m) {
+      var conf = (data.phase1[m] && data.phase1[m].conf) || 0;
+      return has(m) + ' claims · conf ' + conf.toFixed(2);
+    };
+    var totalClaims = M.reduce(function (a, m) { return a + has(m); }, 0);
+    var idColor = live ? 'oklch(0.67 0.18 25)' : GOLD;
+
+    var tabs = (UI.sessions || []).map(function (s, i) {
+      var active = UI.mode === 'replay' && i === UI.sessionIdx;
+      var col = active ? GOLD : '#8b919d';
+      var bg = active ? 'oklch(0.84 0.14 88 / 0.1)' : '#14161d';
+      var bd = active ? 'oklch(0.84 0.14 88 / 0.4)' : '#242832';
+      return '<button class="pill" data-act="session" data-i="' + i + '" style="font-size:10.5px;letter-spacing:0.02em;color:' + col + ';background:' + bg + ';border:1px solid ' + bd + ';border-radius:14px;padding:6px 13px;">' + esc(s.title) + '</button>';
+    }).join('');
+
+    var liveCol = live ? 'oklch(0.67 0.18 25)' : '#8b919d';
+    var liveBg = live ? 'oklch(0.67 0.18 25 / 0.1)' : '#14161d';
+    var liveBd = live ? 'oklch(0.67 0.18 25 / 0.4)' : '#242832';
+    var liveLabel = live ? 'Live' : 'Go Live';
+
+    var legend = M.map(function (m) {
+      return '<div style="display:flex;align-items:center;gap:9px;">' +
+        '<span style="width:9px;height:9px;border-radius:50%;background:' + colorOf(m) + ';box-shadow:0 0 10px -1px ' + colorOf(m) + ';"></span>' +
+        '<span class="mono" style="font-size:11px;letter-spacing:0.12em;color:' + colorOf(m) + ';">' + esc(shortOf(m)) + '</span>' +
+        '<span class="mono" style="font-size:10.5px;color:#5a606c;">' + esc(meta(m)) + '</span>' +
+        '</div>';
+    }).join('');
+
+    return '' +
+      '<div style="max-width:1180px;margin:0 auto;padding:40px 40px 26px 40px;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;gap:20px;flex-wrap:wrap;">' +
+          '<div class="mono" style="font-size:11px;letter-spacing:0.34em;color:#707682;text-transform:uppercase;">Golden Lattice · ' + (live ? 'Live Session' : 'Session Replay') + '</div>' +
+          '<div class="mono" style="font-size:11px;color:' + idColor + ';letter-spacing:0.02em;">' + esc(data.id || '') + '</div>' +
         '</div>' +
-        '<div class="turn-content">' + escapeHtml(t.content) + '</div>' +
-        '</div>'
-      );
-    }
-    body.innerHTML = parts.join('');
-  }
-  function renderLedger() {
-    const body = document.getElementById('ledger-body');
-    if (!state.artifact) {
-      body.innerHTML = '<div class="empty">Phase 4 trace not yet composed…</div>';
-      return;
-    }
-    // Build a claim lookup from Phase 1 events.
-    const claimById = {};
-    for (const m of Object.keys(state.phase_1)) {
-      for (const c of state.phase_1[m].claims) {
-        claimById[c.claim_id] = { author: m, text: c.text };
-      }
-    }
-    const trace = state.artifact.claim_trace || [];
-    const nPresent = trace.filter(e => e.disposition === 'present').length;
-    const nModified = trace.filter(e => e.disposition === 'modified').length;
-    const nOmitted = trace.filter(e => e.disposition === 'omitted').length;
-    const total = trace.length;
-    const pct = total ? Math.round((nPresent + nModified + nOmitted) / total * 100) : 0;
-    const parts = [];
-    parts.push('<div class="meta-line"><span class="disp-present">' + nPresent +
-               '</span>/<span class="disp-modified">' + nModified +
-               '</span>/<span class="disp-omitted">' + nOmitted + '</span> of ' + total + ' claims  •  ' + pct + '% coverage</div>');
-    parts.push('<table class="ledger"><thead><tr><th>Author</th><th>Claim</th><th>Disp.</th><th>Detail</th></tr></thead><tbody>');
-    for (const e of trace) {
-      const info = claimById[e.claim_id] || { author: '?', text: e.claim_id };
-      const authorColor = MODEL_COLOR[info.author] || '';
-      const authorLabel = shortModel(info.author);
-      let detail = '';
-      if (e.disposition === 'modified') detail = escapeHtml(e.modified_text || '');
-      else if (e.disposition === 'omitted') detail = '<em>' + escapeHtml(e.omission_reason || '') + '</em>';
-      parts.push(
-        '<tr>' +
-        '<td><span class="' + authorColor + '">' + authorLabel + '</span></td>' +
-        '<td>' + escapeHtml(info.text) + '</td>' +
-        '<td><span class="disp-' + e.disposition + '">' + e.disposition + '</span></td>' +
-        '<td>' + detail + '</td>' +
-        '</tr>'
-      );
-    }
-    parts.push('</tbody></table>');
-    body.innerHTML = parts.join('');
-  }
-  function renderParity() {
-    const body = document.getElementById('parity-body');
-    if (!state.metrics && !state.artifact) {
-      body.innerHTML = '<div class="empty">parity not yet computed…</div>';
-      return;
-    }
-    if (!state.metrics) {
-      body.innerHTML = '<div class="dim">parity undefined (N&lt;3)</div>';
-      return;
-    }
-    const m = state.metrics;
-    const threshold = m.parity_threshold;
-    const parts = [];
-    function dim(label, share_dict) {
-      parts.push('<div class="parity-dim-title">' + escapeHtml(label) + '</div>');
-      for (const [model, share] of Object.entries(share_dict)) {
-        const color = MODEL_COLOR[model] || '';
-        const pct = Math.min(1, share) * 100;
-        const below = share < threshold ? '<span class="below-threshold">&lt;</span>' : '';
-        parts.push(
-          '<div class="parity-row"><span class="' + color + '">' + shortModel(model) + '</span>' +
-          '<span class="parity-bar"><span class="parity-bar-fill" style="width:' + pct + '%"></span></span>' +
-          share.toFixed(3) + below + '</div>'
-        );
-      }
-    }
-    dim('distinct_claim_share', m.distinct_claim_share);
-    dim('edge_case_coverage', m.edge_case_coverage_share);
-    dim('structural_pattern', m.structural_pattern_share);
-    if (state.flag_interps.length === 0 && state.artifact) {
-      parts.push('<div style="margin-top:12px;color:var(--success);">parity holds across all dimensions and models.</div>');
-    }
-    for (const interp of state.flag_interps) {
-      const color = MODEL_COLOR[interp.source_model] || '';
-      parts.push(
-        '<div class="flag-reading">' +
-        '<div><span class="' + color + '">' + shortModel(interp.source_model) + '</span>  ' +
-        '<span class="dim">' + escapeHtml(interp.dimension_label) + '</span>  ' +
-        'share=' + interp.share.toFixed(3) + '  ' +
-        '<span class="reading">→ ' + escapeHtml(interp.reading) + '</span>' +
+        '<div style="display:flex;align-items:center;gap:8px;margin-top:22px;flex-wrap:wrap;">' +
+          tabs +
+          '<div style="flex:1;min-width:20px;"></div>' +
+          '<a href="/explainer" class="pill" style="font-size:10.5px;letter-spacing:0.12em;color:#8b919d;background:#14161d;border:1px solid #242832;border-radius:14px;padding:6px 13px;text-transform:uppercase;text-decoration:none;">Explainer</a>' +
+          '<button class="pill" data-act="toggle-live" style="display:flex;align-items:center;gap:7px;font-size:10.5px;letter-spacing:0.12em;color:' + liveCol + ';background:' + liveBg + ';border:1px solid ' + liveBd + ';border-radius:14px;padding:6px 13px;text-transform:uppercase;">' +
+            '<span style="width:7px;height:7px;border-radius:50%;background:' + liveCol + ';"></span>' + liveLabel +
+          '</button>' +
         '</div>' +
-        '<div class="gloss">' + escapeHtml(READING_GLOSS[interp.reading] || '') + '</div>' +
-        (interp.reading !== 'low_claim_volume'
-          ? '<div class="histogram">n=0: ' + interp.histogram_n_zero +
-            '  n=1: ' + interp.histogram_n_one +
-            '  n=2: ' + interp.histogram_n_two +
-            '  (OTHER-only: ' + interp.other_only_entries + ', claims: ' + interp.total_claims + ')</div>'
-          : '') +
-        '</div>'
-      );
-    }
-    body.innerHTML = parts.join('');
+        '<div style="height:1px;background:linear-gradient(90deg,#242832,transparent);margin:22px 0 26px 0;"></div>' +
+        '<div class="mono" style="font-size:10.5px;letter-spacing:0.26em;color:#5a606c;text-transform:uppercase;margin-bottom:14px;">The Prompt</div>' +
+        '<div style="font-size:30px;line-height:1.34;font-weight:400;color:#eef0f4;max-width:920px;letter-spacing:-0.01em;">' + esc(data.prompt) + '</div>' +
+        '<div style="display:flex;gap:30px;margin-top:34px;flex-wrap:wrap;align-items:center;">' +
+          legend +
+          '<div style="flex:1;"></div>' +
+          '<div class="mono" style="font-size:10.5px;color:#5a606c;letter-spacing:0.04em;">3 models · ' + totalClaims + ' claims · ' + (data.turns || []).length + ' turns</div>' +
+        '</div>' +
+      '</div>';
   }
-  function renderSynthesis() {
-    const body = document.getElementById('synthesis-body');
-    if (!state.artifact) {
-      body.innerHTML = '<div class="empty">synthesis not yet emitted…</div>';
+
+  function phase0Html(data) {
+    var p0 = data.phase0;
+    if (!p0) {
+      return '' +
+        '<div class="spine" style="padding-top:30px;">' +
+          '<div class="spine-num"><div class="n" style="color:#454b57;">00</div><div class="line"></div></div>' +
+          '<div style="padding-bottom:14px;">' +
+            '<div style="display:flex;align-items:baseline;gap:14px;">' +
+              '<div class="mono" style="font-size:13px;letter-spacing:0.2em;color:#8b919d;text-transform:uppercase;">Investigation</div>' +
+              '<div class="mono" style="font-size:10px;letter-spacing:0.16em;color:oklch(0.74 0.10 250);border:1px solid #242832;border-radius:3px;padding:2px 7px;text-transform:uppercase;">skipped</div>' +
+            '</div>' +
+            '<div style="color:#707682;font-size:14px;margin-top:8px;max-width:680px;">No external evidence required. The shared feed holds only the deterministic temporal grounding — the session proceeds directly to independent generation.</div>' +
+          '</div>' +
+        '</div>';
+    }
+    var maps = D.maps;
+    var props = (p0.proposals || []).map(function (pr, i) {
+      var queries = (pr.queries || []).map(function (q) {
+        return '<div class="mono" style="font-size:10px;color:#9aa0ac;background:#14161d;border:1px solid #1f232c;border-radius:4px;padding:5px 8px;margin-bottom:5px;word-break:break-all;line-height:1.4;">' + esc(q) + '</div>';
+      }).join('');
+      return '<div class="reveal" data-beat="' + maps.propR[i] + '">' +
+        '<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">' +
+          '<span style="width:6px;height:6px;border-radius:50%;background:' + colorOf(pr.model) + ';"></span>' +
+          '<span class="mono" style="font-size:10px;letter-spacing:0.1em;color:' + colorOf(pr.model) + ';">' + esc(shortOf(pr.model)) + '</span>' +
+          '<span class="mono" style="font-size:9px;color:#5a606c;">proposes ' + pr.count + '</span>' +
+        '</div>' + queries + '</div>';
+    }).join('');
+
+    var results = '';
+    if ((p0.results || []).length) {
+      results = '<div style="display:flex;flex-direction:column;gap:7px;">' + p0.results.map(function (r, i) {
+        return '<div class="reveal" data-beat="' + maps.resultR[i] + '" style="padding:9px 12px;background:#14161d;border-left:2px solid oklch(0.78 0.13 158 / 0.5);border-radius:0 5px 5px 0;">' +
+          '<div style="display:flex;align-items:center;gap:8px;">' +
+            '<span class="mono" style="color:oklch(0.78 0.13 158);font-size:10px;">✓</span>' +
+            '<span class="mono" style="font-size:11px;color:#cbd0d9;word-break:break-all;">' + esc(r.query) + '</span>' +
+          '</div>' +
+          '<div class="mono" style="font-size:10.5px;color:#6b7280;margin-top:5px;line-height:1.5;">' + esc(r.preview) + '</div>' +
+        '</div>';
+      }).join('') + '</div>';
+    } else {
+      results = '<div class="mono" style="font-size:11px;color:#5a606c;padding:4px 0;">Union proposed, no searches executed this run — the feed froze on grounding alone.</div>';
+    }
+    var failed = (p0.failed || []).map(function (f) {
+      return '<div style="padding:9px 12px;background:#14161d;border-left:2px solid oklch(0.67 0.18 25 / 0.5);border-radius:0 5px 5px 0;margin-top:7px;">' +
+        '<div style="display:flex;align-items:center;gap:8px;">' +
+          '<span class="mono" style="color:oklch(0.67 0.18 25);font-size:10px;">✗</span>' +
+          '<span class="mono" style="font-size:11px;color:#cbd0d9;word-break:break-all;">' + esc(f.query) + '</span>' +
+        '</div>' +
+        '<div class="mono" style="font-size:10.5px;color:#6b7280;margin-top:5px;">' + esc(f.reason) + '</div>' +
+      '</div>';
+    }).join('');
+
+    return '' +
+      '<div class="spine" style="padding-top:30px;">' +
+        '<div class="spine-num"><div class="n" style="color:oklch(0.74 0.10 250);">00</div><div class="line"></div></div>' +
+        '<div style="padding:0 0 40px 0;">' +
+          '<div style="display:flex;align-items:baseline;gap:14px;">' +
+            '<div class="mono" style="font-size:13px;letter-spacing:0.2em;color:#cdd2db;text-transform:uppercase;">Investigation</div>' +
+            '<div class="mono" style="font-size:10px;letter-spacing:0.16em;color:oklch(0.74 0.10 250);border:1px solid oklch(0.74 0.10 250 / 0.4);border-radius:3px;padding:2px 7px;text-transform:uppercase;">ran</div>' +
+          '</div>' +
+          '<div style="color:#707682;font-size:14px;margin-top:8px;max-width:700px;">Each model independently proposes up to three searches — blind, like Phase 1. A non-model executor runs the <span style="color:#cdd2db;">rule-based union</span>, then the evidence feed is <span style="color:oklch(0.84 0.14 88);">frozen</span> before any model generates.</div>' +
+          '<div data-beat="' + maps.groundingR + '" data-grounding="1" style="margin-top:20px;display:flex;align-items:center;gap:10px;transition:opacity 0.5s ease;">' +
+            '<span class="mono" style="font-size:9px;letter-spacing:0.14em;color:oklch(0.84 0.14 88);text-transform:uppercase;border:1px solid oklch(0.84 0.14 88 / 0.3);border-radius:3px;padding:2px 6px;">grounding</span>' +
+            '<span class="mono" style="font-size:11px;color:#8b919d;">' + esc(p0.grounding) + '</span>' +
+            '<span class="mono" style="font-size:10px;color:#454b57;">deterministic · not a model action</span>' +
+          '</div>' +
+          '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:18px;align-items:start;">' + props + '</div>' +
+          '<div data-beat="' + maps.frozenR + '" data-grounding="1" style="display:flex;justify-content:center;margin:14px 0;transition:opacity 0.5s ease;">' +
+            '<div style="display:flex;align-items:center;gap:12px;background:oklch(0.84 0.14 88 / 0.06);border:1px solid oklch(0.84 0.14 88 / 0.2);border-radius:7px;padding:9px 18px;">' +
+              '<span class="mono" style="font-size:10px;letter-spacing:0.08em;color:#8b919d;text-transform:uppercase;">rule-based union</span>' +
+              '<span class="mono" style="font-size:11px;color:#cdd2db;">' + p0.unique + ' unique</span>' +
+              '<span style="color:#454b57;">→</span>' +
+              '<span class="mono" style="font-size:11px;color:oklch(0.84 0.14 88);">feed frozen · ' + p0.frozen + ' entries</span>' +
+            '</div>' +
+          '</div>' +
+          results + failed +
+        '</div>' +
+      '</div>';
+  }
+
+  function tint(m, a) {
+    // model color at given alpha — derive oklch(... / a) from the base.
+    var base = colorOf(m);
+    if (base.indexOf('oklch(') !== 0) return base;
+    var inner = base.replace(/^oklch\(/, '').replace(/\)$/, '');
+    return 'oklch(' + inner + ' / ' + a + ')';
+  }
+
+  function phase1Html(data) {
+    var maps = D.maps;
+    var cols = data.models.map(function (m) {
+      var refl = data.reflections[m] || {};
+      var claims = claimsOf(data, m).map(function (c) {
+        var mark = '';
+        if (c.id === refl.strong) mark = '✦ '; else if (c.id === refl.weak) mark = '· ';
+        return '<div class="reveal" data-beat="' + maps.claimR[c.id] + '" style="margin-bottom:9px;padding:9px 11px;background:' + tint(m, 0.05) + ';border-left:2px solid ' + tint(m, 0.55) + ';border-radius:0 4px 4px 0;">' +
+          '<div style="font-size:13.5px;line-height:1.5;color:#dde1e9;"><span class="mono" style="color:oklch(0.84 0.14 88);font-size:11px;">' + mark + '</span>' + esc(c.text) + '</div>' +
+          '<div class="mono" style="font-size:9.5px;color:#454b57;margin-top:6px;letter-spacing:0.04em;">' + esc(c.id.slice(0, 12)) + '</div>' +
+        '</div>';
+      }).join('');
+      var focus = (data.phase1[m] && data.phase1[m].focus) || '';
+      return '<div>' +
+        '<div style="display:flex;justify-content:space-between;align-items:baseline;border-bottom:1px solid ' + tint(m, 0.32) + ';padding-bottom:8px;margin-bottom:12px;">' +
+          '<span class="mono" style="font-size:11px;letter-spacing:0.14em;color:' + colorOf(m) + ';">' + esc(shortOf(m)) + '</span>' +
+          '<span class="mono" style="font-size:10px;color:#5a606c;">' + esc(focus) + '</span>' +
+        '</div>' + claims +
+        '<div class="reveal refl" data-beat="' + maps.reflR[m] + '" style="margin-top:12px;padding:11px 12px;background:oklch(0.84 0.14 88 / 0.05);border:1px solid oklch(0.84 0.14 88 / 0.16);border-radius:5px;">' +
+          '<div class="mono" style="font-size:9px;letter-spacing:0.18em;color:oklch(0.84 0.14 88 / 0.8);text-transform:uppercase;margin-bottom:6px;">Self-reflection</div>' +
+          '<div style="font-size:12px;line-height:1.55;color:#9aa0ac;font-style:italic;">' + esc(refl.just || '') + '</div>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+
+    return '' +
+      '<div class="spine">' +
+        '<div class="spine-num"><div class="n">01</div><div class="line"></div></div>' +
+        '<div class="col-pad">' +
+          '<div class="phase-title">Independent Generation</div>' +
+          '<div class="phase-lead">All three models answer the same prompt simultaneously — blind to one another. Each marks its own strongest <span style="color:oklch(0.84 0.14 88);">✦</span> and weakest claim before any peer output arrives.</div>' +
+          '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-top:26px;align-items:start;">' + cols + '</div>' +
+        '</div>' +
+      '</div>';
+  }
+
+  function phase2Html(data) {
+    var cols = data.models.map(function (m) {
+      var nodes = claimsOf(data, m).map(function (c) {
+        return '<div data-claim="' + esc(c.id) + '" data-p2node="1" style="margin-bottom:8px;padding:8px 10px;background:#14161d;border:1px solid #242832;border-radius:5px;transition:opacity 0.5s ease,border-color 0.5s ease;">' +
+          '<div style="font-size:12px;line-height:1.45;color:#b9bec9;">' + esc(c.text.length > 90 ? c.text.slice(0, 88) + '…' : c.text) + '</div>' +
+          '<div class="mono" style="font-size:9px;color:#454b57;margin-top:5px;display:flex;justify-content:space-between;"><span>' + esc(c.id.slice(0, 10)) + '</span><span data-contest="' + esc(c.id) + '"></span></div>' +
+        '</div>';
+      }).join('');
+      return '<div>' +
+        '<div data-anchor="' + esc(m) + '" style="display:inline-flex;align-items:center;gap:7px;margin-bottom:14px;padding:5px 10px;background:' + tint(m, 0.1) + ';border:1px solid ' + tint(m, 0.4) + ';border-radius:14px;">' +
+          '<span style="width:7px;height:7px;border-radius:50%;background:' + colorOf(m) + ';"></span>' +
+          '<span class="mono" style="font-size:10px;letter-spacing:0.1em;color:' + colorOf(m) + ';">' + esc(shortOf(m)) + ' reads →</span>' +
+        '</div>' + nodes + '</div>';
+    }).join('');
+
+    return '' +
+      '<div class="spine">' +
+        '<div class="spine-num"><div class="n">02</div><div class="line"></div></div>' +
+        '<div class="col-pad">' +
+          '<div class="phase-title">Cross-Reading</div>' +
+          '<div class="phase-lead">Each model now reads its peers. Lines connect every claim a model <span style="color:#cdd2db;">endorses</span> in another\'s column — <span style="color:oklch(0.84 0.14 88);">gold where the lattice converges on the same claim.</span> Red rings mark contested claims.</div>' +
+          '<div id="gl-p2" style="position:relative;margin-top:26px;">' +
+            '<svg id="gl-svg" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;overflow:visible;z-index:0;" preserveAspectRatio="none"></svg>' +
+            '<div style="position:relative;z-index:1;display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;align-items:start;">' + cols + '</div>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+  }
+
+  function phase3Html(data) {
+    var maps = D.maps;
+    var turns = (data.turns || []).map(function (t) {
+      var isConv = t.channel === 'converge';
+      var elevated = !!D.elevTurns[t.id];
+      var bg = isConv ? 'oklch(0.84 0.14 88 / 0.05)' : '#14161d';
+      var glow = elevated ? 'box-shadow:0 0 24px -6px oklch(0.84 0.14 88 / 0.4);border-left-color:oklch(0.84 0.14 88);' : '';
+      var target = t.target ? shortOf(t.target) : 'ALL PEERS';
+      var targetColor = t.target ? colorOf(t.target) : '#5a606c';
+      var channelColor = CH[t.channel] || '#5a606c';
+      var channelBorder = CHB[t.channel] || '#242832';
+      return '<div class="reveal" data-beat="' + maps.turnR[t.id] + '" style="padding:12px 15px;background:' + bg + ';border-left:2px solid ' + channelColor + ';border-radius:0 5px 5px 0;' + glow + '">' +
+        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap;">' +
+          '<span class="mono" style="font-size:10.5px;letter-spacing:0.08em;color:' + colorOf(t.speaker) + ';">' + esc(shortOf(t.speaker)) + '</span>' +
+          '<span class="mono" style="font-size:10px;letter-spacing:0.1em;color:' + channelColor + ';text-transform:uppercase;padding:1px 7px;border:1px solid ' + channelBorder + ';border-radius:3px;">' + esc(t.channel) + '</span>' +
+          '<span class="mono" style="font-size:10px;color:#454b57;">→</span>' +
+          '<span class="mono" style="font-size:10.5px;letter-spacing:0.08em;color:' + targetColor + ';">' + esc(target) + '</span>' +
+          (elevated ? '<span class="mono" style="font-size:10px;color:oklch(0.84 0.14 88);letter-spacing:0.1em;">✦ ELEVATED</span>' : '') +
+        '</div>' +
+        '<div style="font-size:13.5px;line-height:1.55;color:#cbd0d9;">' + esc(t.content) + '</div>' +
+      '</div>';
+    }).join('');
+
+    return '' +
+      '<div class="spine">' +
+        '<div class="spine-num"><div class="n">03</div><div class="line"></div></div>' +
+        '<div class="col-pad">' +
+          '<div class="phase-title">Structured Dialogue</div>' +
+          '<div class="phase-lead">One round, three channels, hard caps. <span style="color:oklch(0.67 0.18 25);">Critique</span> what is weak, <span style="color:oklch(0.74 0.10 250);">augment</span> what is missing, <span style="color:oklch(0.84 0.14 88);">converge</span> where alignment is real. <span style="color:oklch(0.84 0.14 88);">✦ Elevated</span> = the same claim affirmed across the lattice.</div>' +
+          '<div style="margin-top:24px;display:flex;flex-direction:column;gap:10px;">' + turns + '</div>' +
+        '</div>' +
+      '</div>';
+  }
+
+  function phase4Html(data) {
+    var maps = D.maps;
+    var trace = (data.synthesis && data.synthesis.trace) || [];
+    var present = trace.filter(function (e) { return e.disp === 'present'; }).length;
+    var modified = trace.filter(function (e) { return e.disp === 'modified'; }).length;
+    var omitted = trace.filter(function (e) { return e.disp === 'omitted'; }).length;
+    var coverage = trace.length ? Math.round((present + modified) / trace.length * 100) + '%' : '—';
+
+    var chips = trace.map(function (e) {
+      var title = (shortOf(D.author[e.id]) || '?') + ' · ' + e.disp + ' — ' + (D.claimText[e.id] || e.id);
+      return '<span data-chip="1" title="' + esc(title) + '" style="width:13px;height:13px;border-radius:3px;background:' + (DISP_COLOR[e.disp] || '#454b57') + ';opacity:0.1;transition:opacity 0.4s ease;"></span>';
+    }).join('');
+
+    var parityVerdict = '—', parityFoot = 'metrics pending', dims = '';
+    if (data.metrics) {
+      var thr = data.metrics.parity_threshold || 0.15;
+      var defs = [
+        ['distinct claim', data.metrics.distinct_claim_share],
+        ['edge-case coverage', data.metrics.edge_case_coverage_share],
+        ['structural pattern', data.metrics.structural_pattern_share]
+      ];
+      dims = defs.map(function (d) {
+        var label = d[0], shares = d[1] || {};
+        var rows = data.models.map(function (m) {
+          var sv = shares[m] || 0;
+          return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">' +
+            '<span class="mono" style="font-size:9.5px;color:' + colorOf(m) + ';width:52px;">' + esc(shortOf(m)) + '</span>' +
+            '<span style="flex:1;height:5px;background:#1c1f27;border-radius:3px;overflow:hidden;position:relative;"><span data-bar="' + (Math.min(1, sv) * 100).toFixed(0) + '" style="display:block;height:100%;width:0%;background:' + colorOf(m) + ';transition:width 0.8s ease;"></span></span>' +
+            '<span class="mono" style="font-size:9.5px;color:#8b919d;width:38px;text-align:right;">' + sv.toFixed(2) + '</span>' +
+          '</div>';
+        }).join('');
+        return '<div style="margin-bottom:12px;"><div class="mono" style="font-size:9px;letter-spacing:0.1em;color:#5a606c;text-transform:uppercase;margin-bottom:6px;">' + esc(label) + '</div>' + rows + '</div>';
+      }).join('');
+      parityVerdict = (data.metrics.irreducibility_violations || []).length === 0 ? 'HOLDS' : 'FLAGGED';
+      parityFoot = 'threshold ' + thr + ' · all dimensions clear';
+    }
+
+    var synth = maps.synthLines.map(function (line, i) {
+      var tagM = line.match(/^\[([OSH])\]\s*/);
+      var tag = tagM ? tagM[1] : '';
+      var tagColor = tag === 'O' ? COLOR['claude-opus-4-7'] : tag === 'S' ? COLOR['claude-sonnet-4-6'] : tag === 'H' ? COLOR['claude-haiku-4-5'] : '#8b919d';
+      var rest = tagM ? line.slice(tagM[0].length) : line;
+      var text = rest, disputeHtml = '';
+      var di = rest.indexOf('[DISPUTED');
+      if (di >= 0) {
+        text = rest.slice(0, di).trim();
+        var disputeText = rest.slice(di).replace(/^\[|\]$/g, '');
+        disputeHtml = '<span style="display:inline-block;margin-top:6px;font-size:11.5px;line-height:1.5;color:oklch(0.67 0.18 25 / 0.92);font-family:var(--mono);background:oklch(0.67 0.18 25 / 0.07);border-left:2px solid oklch(0.67 0.18 25 / 0.5);padding:5px 10px;border-radius:0 3px 3px 0;">' + esc(disputeText) + '</span>';
+      }
+      return '<div class="reveal" data-beat="' + maps.synthR[i] + '" style="display:flex;gap:12px;margin-bottom:15px;">' +
+        '<span class="mono" style="font-size:11px;font-weight:600;color:' + tagColor + ';flex-shrink:0;width:20px;padding-top:3px;">[' + tag + ']</span>' +
+        '<div style="flex:1;"><span style="font-size:15.5px;line-height:1.6;color:#e4e7ed;">' + esc(text) + '</span>' + disputeHtml + '</div>' +
+      '</div>';
+    }).join('');
+
+    return '' +
+      '<div class="spine">' +
+        '<div class="spine-num"><div class="n" style="color:oklch(0.84 0.14 88);">04</div><div class="line" style="background:linear-gradient(#1c1f27,transparent);"></div></div>' +
+        '<div style="padding:14px 0 60px 0;">' +
+          '<div class="phase-title" style="color:oklch(0.84 0.14 88);">Synthesis</div>' +
+          '<div class="phase-lead">Rule-based, not model-based — no fourth model judges the other three. Every Phase 1 claim is preserved or omitted-with-reason. Each line carries its author; disputed claims keep their dissent inline.</div>' +
+          '<div data-ledger="1" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:26px;opacity:0.15;transition:opacity 0.6s ease;">' +
+            '<div style="padding:16px 18px;background:#14161d;border:1px solid #242832;border-radius:7px;">' +
+              '<div class="mono" style="font-size:10px;letter-spacing:0.16em;color:#8b919d;text-transform:uppercase;margin-bottom:14px;">Trace Ledger · Irreducibility</div>' +
+              '<div style="display:flex;gap:18px;margin-bottom:14px;">' +
+                ledgerStat(present, 'present', 'oklch(0.78 0.13 158)') +
+                ledgerStat(modified, 'modified', 'oklch(0.84 0.14 88)') +
+                ledgerStat(omitted, 'omitted', 'oklch(0.67 0.18 25)') +
+                '<div style="flex:1;"></div>' +
+                '<div style="text-align:right;"><div class="mono" style="font-size:22px;color:#eef0f4;">' + coverage + '</div><div class="mono" style="font-size:9px;color:#5a606c;letter-spacing:0.1em;text-transform:uppercase;margin-top:2px;">traced</div></div>' +
+              '</div>' +
+              '<div style="display:flex;flex-wrap:wrap;gap:4px;">' + chips + '</div>' +
+            '</div>' +
+            '<div style="padding:16px 18px;background:#14161d;border:1px solid #242832;border-radius:7px;">' +
+              '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:14px;">' +
+                '<span class="mono" style="font-size:10px;letter-spacing:0.16em;color:#8b919d;text-transform:uppercase;">Contribution Parity</span>' +
+                '<span class="mono" style="font-size:10px;color:oklch(0.78 0.13 158);letter-spacing:0.06em;">' + parityVerdict + '</span>' +
+              '</div>' + dims +
+              '<div class="mono" style="font-size:9px;color:#454b57;margin-top:4px;">' + esc(parityFoot) + '</div>' +
+            '</div>' +
+          '</div>' +
+          '<div style="margin-top:24px;padding:30px 34px;background:linear-gradient(160deg,oklch(0.84 0.14 88 / 0.04),#14161d 40%);border:1px solid oklch(0.84 0.14 88 / 0.18);border-radius:9px;">' +
+            '<div class="mono" style="font-size:10px;letter-spacing:0.2em;color:oklch(0.84 0.14 88);text-transform:uppercase;margin-bottom:20px;">Co-authored output</div>' +
+            synth +
+          '</div>' +
+        '</div>' +
+      '</div>';
+  }
+
+  function ledgerStat(n, label, color) {
+    return '<div><div class="mono" style="font-size:22px;color:' + color + ';">' + n + '</div><div class="mono" style="font-size:9px;color:#5a606c;letter-spacing:0.1em;text-transform:uppercase;margin-top:2px;">' + label + '</div></div>';
+  }
+
+  function transportHtml() {
+    if (UI.mode === 'live') {
+      return '' +
+        '<div style="position:fixed;bottom:0;left:0;right:0;background:rgba(12,13,17,0.9);backdrop-filter:blur(14px);border-top:1px solid oklch(0.67 0.18 25 / 0.35);z-index:50;">' +
+          '<div style="max-width:1180px;margin:0 auto;padding:13px 40px;display:flex;align-items:center;gap:14px;">' +
+            '<span style="width:9px;height:9px;border-radius:50%;background:oklch(0.67 0.18 25);animation:glDot 1.4s ease-in-out infinite;"></span>' +
+            '<span class="mono" style="font-size:11px;letter-spacing:0.16em;color:oklch(0.67 0.18 25);text-transform:uppercase;">Live</span>' +
+            '<span class="mono" id="gl-livestatus" style="font-size:10.5px;color:#8b919d;">' + esc(UI.liveStatus) + '</span>' +
+            '<input id="gl-prompt" type="text" placeholder="question for the lattice — Enter to submit" autocomplete="off" style="flex:1;background:#0c0d11;color:#d7dbe4;border:1px solid #242832;border-radius:6px;padding:7px 11px;font-family:var(--serif);font-size:14px;outline:none;" />' +
+            '<button class="tbtn" data-act="send-prompt" style="font-family:var(--mono);font-size:10px;letter-spacing:0.1em;color:#0c0d11;background:oklch(0.84 0.14 88);border:none;border-radius:6px;padding:8px 16px;text-transform:uppercase;font-weight:600;">send</button>' +
+            '<button class="tbtn" data-act="toggle-live" style="font-size:10px;letter-spacing:0.1em;color:#8b919d;background:#181b23;border:1px solid #242832;border-radius:6px;padding:7px 14px;text-transform:uppercase;">exit live</button>' +
+          '</div>' +
+        '</div>';
+    }
+    return '' +
+      '<div style="position:fixed;bottom:0;left:0;right:0;background:rgba(12,13,17,0.86);backdrop-filter:blur(14px);border-top:1px solid #242832;z-index:50;">' +
+        '<div style="max-width:1180px;margin:0 auto;padding:13px 40px;display:flex;align-items:center;gap:18px;">' +
+          '<div style="display:flex;gap:8px;">' +
+            '<button class="tbtn" data-act="restart" style="width:32px;height:32px;border-radius:6px;background:#181b23;border:1px solid #242832;color:#8b919d;font-size:13px;">↺</button>' +
+            '<button class="tbtn" data-act="toggle" id="gl-play" style="width:32px;height:32px;border-radius:6px;background:oklch(0.84 0.14 88 / 0.14);border:1px solid oklch(0.84 0.14 88 / 0.45);color:oklch(0.84 0.14 88);font-size:12px;">' + (UI.playing ? '❚❚' : '▶') + '</button>' +
+          '</div>' +
+          '<span class="mono" id="gl-phaselabel" style="font-size:10.5px;letter-spacing:0.14em;text-transform:uppercase;width:148px;flex-shrink:0;"></span>' +
+          '<input id="gl-scrub" type="range" min="0" max="' + D.N + '" value="' + UI.step + '" style="flex:1;" />' +
+          '<span class="mono" id="gl-steplabel" style="font-size:10px;color:#5a606c;width:74px;text-align:right;flex-shrink:0;"></span>' +
+          '<button class="tbtn" data-act="speed" style="height:24px;padding:0 9px;border-radius:5px;background:#181b23;border:1px solid #242832;color:#8b919d;font-size:10px;">' + UI.speed + '×</button>' +
+        '</div>' +
+      '</div>';
+  }
+
+  // ---------- arcs ----------
+  function buildArcs(data) {
+    built.arcs = [];
+    if (!built.svg) return;
+    var svgNs = 'http://www.w3.org/2000/svg';
+    (data.crossreadings || []).forEach(function (cr, i) {
+      (cr.agreements || []).forEach(function (cid) {
+        var gold = !!D.elevClaims[cid];
+        var path = document.createElementNS(svgNs, 'path');
+        path.setAttribute('fill', 'none');
+        path.setAttribute('stroke', gold ? GOLD : colorOf(cr.reader));
+        path.setAttribute('stroke-width', gold ? '1.5' : '1');
+        path.setAttribute('pathLength', '1');
+        path.setAttribute('stroke-dasharray', '1');
+        path.style.strokeDashoffset = '1';
+        path.style.opacity = '0';
+        path.style.transition = 'stroke-dashoffset 0.7s ease, opacity 0.5s ease';
+        built.svg.appendChild(path);
+        built.arcs.push({ el: path, reader: cr.reader, cid: cid, gold: gold, beat: D.maps.crR[i] });
+      });
+    });
+  }
+
+  function scheduleMeasure() {
+    requestAnimationFrame(function () { requestAnimationFrame(measure); });
+    [250, 700, 1400].forEach(function (ms) { setTimeout(measure, ms); });
+  }
+
+  function measure() {
+    var cont = built && built.p2cont;
+    if (!cont) return;
+    var nodes = {}, anchors = {};
+    cont.querySelectorAll('[data-claim]').forEach(function (el) {
+      nodes[el.getAttribute('data-claim')] = { x: el.offsetLeft + el.offsetWidth / 2, y: el.offsetTop + el.offsetHeight / 2 };
+    });
+    cont.querySelectorAll('[data-anchor]').forEach(function (el) {
+      anchors[el.getAttribute('data-anchor')] = { x: el.offsetLeft + el.offsetWidth / 2, y: el.offsetTop + el.offsetHeight };
+    });
+    if (Object.keys(nodes).length === 0) return;
+    UI.geom = { nodes: nodes, anchors: anchors };
+    built.arcs.forEach(function (arc) {
+      var a = UI.geom.anchors[arc.reader], n = UI.geom.nodes[arc.cid];
+      if (!a || !n) { arc.el.setAttribute('d', ''); return; }
+      var dx = n.x - a.x;
+      var cx = a.x + dx * 0.5;
+      var cy = Math.min(a.y, n.y) - 26 - Math.abs(dx) * 0.06;
+      arc.el.setAttribute('d', 'M ' + a.x + ' ' + a.y + ' Q ' + cx + ' ' + cy + ' ' + n.x + ' ' + n.y);
+    });
+    applyStep();
+  }
+
+  // ---------- per-step visibility ----------
+  function applyStep() {
+    if (!D || !built) return;
+    var step = UI.step;
+
+    built.revealables.forEach(function (r) {
+      var on = r.beat >= 0 && step >= r.beat;
+      if (r.el.hasAttribute('data-grounding')) {
+        r.el.style.opacity = on ? '1' : '0';
+      } else if (r.el.hasAttribute('data-ledger')) {
+        r.el.style.opacity = on ? '1' : '0.15';
+      } else {
+        r.el.style.opacity = on ? '1' : '0';
+        r.el.style.transform = on ? 'translateY(0)' : 'translateY(10px)';
+      }
+    });
+
+    var p2on = step >= D.bounds.p2Start;
+    if (built.p2cont) {
+      built.p2cont.querySelectorAll('[data-p2node]').forEach(function (el) {
+        el.style.opacity = p2on ? '1' : '0.12';
+      });
+      built.p2cont.querySelectorAll('[data-contest]').forEach(function (span) {
+        var cid = span.getAttribute('data-contest');
+        var node = span.closest('[data-claim]');
+        var dis = D.disagree[cid];
+        var contested = dis && p2on;
+        var elevated = D.elevClaims[cid] && p2on;
+        var ring = '#242832';
+        if (contested) ring = 'oklch(0.67 0.18 25 / 0.55)';
+        if (elevated) ring = 'oklch(0.84 0.14 88 / 0.6)';
+        if (node) node.style.borderColor = ring;
+        if (contested) { span.textContent = 'contested ×' + dis.length; span.style.color = 'oklch(0.67 0.18 25)'; }
+        else if (elevated) { span.textContent = '✦ converged'; span.style.color = 'oklch(0.84 0.14 88)'; }
+        else { span.textContent = ''; }
+      });
+    }
+
+    built.arcs.forEach(function (arc) {
+      var revealed = step >= arc.beat;
+      arc.el.style.opacity = revealed ? (arc.gold ? '0.6' : '0.32') : '0';
+      arc.el.style.strokeDashoffset = revealed ? '0' : '1';
+    });
+
+    var ledgerOn = step >= D.maps.ledgerR;
+    app.querySelectorAll('[data-chip]').forEach(function (c) { c.style.opacity = ledgerOn ? '1' : '0.1'; });
+
+    var parityOn = step >= D.maps.parityR;
+    app.querySelectorAll('[data-bar]').forEach(function (b) { b.style.width = parityOn ? (b.getAttribute('data-bar') + '%') : '0%'; });
+
+    updateTransport();
+  }
+
+  function phaseLabel() {
+    var b = D.bounds, step = UI.step;
+    var label = '01 · Independent', color = '#cdd2db';
+    if (b.hasP0 && step <= b.p0End) { label = '00 · Investigation'; color = 'oklch(0.74 0.10 250)'; }
+    else if (step <= b.p1End) { label = '01 · Independent'; color = '#cdd2db'; }
+    if (step >= b.p2Start && step <= b.p2End) { label = '02 · Cross-reading'; color = '#cdd2db'; }
+    if (step >= b.p3Start && step <= b.p3End) { label = '03 · Dialogue'; color = '#cdd2db'; }
+    if (step >= b.p4Start) { label = '04 · Synthesis'; color = GOLD; }
+    return { label: label, color: color };
+  }
+
+  function updateTransport() {
+    if (UI.mode === 'live') {
+      var ls = document.getElementById('gl-livestatus');
+      if (ls) ls.textContent = UI.liveStatus;
       return;
     }
-    // Color [O] [S] [H] attribution markers inline.
-    let text = escapeHtml(state.artifact.output);
-    text = text.replace(/\[O\]/g, '<span class="attr-O">[O]</span>');
-    text = text.replace(/\[S\]/g, '<span class="attr-S">[S]</span>');
-    text = text.replace(/\[H\]/g, '<span class="attr-H">[H]</span>');
-    body.innerHTML = '<div class="synthesis-body">' + text + '</div>';
-  }
-  function renderAll() {
-    renderHeader();
-    renderFeed();
-    for (const m of state.invited_models) renderColumn(m);
-    renderLoom();
-    renderLedger();
-    renderParity();
-    renderSynthesis();
+    var pl = document.getElementById('gl-phaselabel');
+    if (pl) { var p = phaseLabel(); pl.textContent = p.label; pl.style.color = p.color; }
+    var sl = document.getElementById('gl-steplabel');
+    if (sl) sl.textContent = UI.step + ' / ' + D.N;
+    var scrubEl = document.getElementById('gl-scrub');
+    if (scrubEl && document.activeElement !== scrubEl) scrubEl.value = UI.step;
+    var play = document.getElementById('gl-play');
+    if (play) play.textContent = UI.playing ? '❚❚' : '▶';
   }
 
-  // ---- WebSocket connection ----
-  const banner = document.getElementById('conn-banner');
-  function setStatus(text, cls) {
-    banner.textContent = text;
-    banner.className = 'conn-banner ' + cls;
+  // ---------- playback ----------
+  function startTimer() {
+    stopTimer();
+    timer = setInterval(function () {
+      if (UI.step >= D.N) { stopTimer(); UI.playing = false; updateTransport(); return; }
+      UI.step += 1;
+      lsSet('gl-replay-step', UI.step);
+      applyStep();
+    }, PLAY_PERIOD_MS / UI.speed);
+  }
+  function stopTimer() { if (timer) { clearInterval(timer); timer = null; } }
+
+  function toggle() {
+    if (UI.playing) { stopTimer(); UI.playing = false; }
+    else { if (UI.step >= D.N) UI.step = 0; UI.playing = true; startTimer(); }
+    updateTransport();
+  }
+  function restart() { UI.step = 0; lsSet('gl-replay-step', 0); UI.playing = true; applyStep(); startTimer(); updateTransport(); }
+  function scrub(v) { stopTimer(); UI.playing = false; UI.step = v; lsSet('gl-replay-step', v); applyStep(); }
+  function cycleSpeed() {
+    UI.speed = UI.speed >= 4 ? 1 : UI.speed * 2;
+    if (timer) { startTimer(); }
+    var b = app.querySelector('[data-act="speed"]'); if (b) b.textContent = UI.speed + '×';
   }
 
-  // Hoisted so the input bar's submit handler can use the live socket
-  // across reconnects.
-  let ws = null;
-
-  // ---- Input bar ----
-  const promptInput = document.getElementById('prompt-input');
-  const promptSubmit = document.getElementById('prompt-submit');
-
-  function setInputEnabled(enabled, placeholder) {
-    promptInput.disabled = !enabled;
-    promptSubmit.disabled = !enabled;
-    if (placeholder !== undefined) promptInput.placeholder = placeholder;
+  // ---------- session selection ----------
+  function selectSession(i) {
+    if (i === UI.sessionIdx && UI.mode === 'replay') { restart(); return; }
+    stopTimer();
+    closeLive();
+    UI.sessionIdx = i; UI.mode = 'replay'; UI.step = 0; UI.playing = true;
+    lsSet('gl-sess', i); lsSet('gl-replay-step', 0);
+    buildSession(UI.sessions[i]);
+    startTimer();
   }
 
-  function submitPrompt() {
-    if (promptInput.disabled) return;
+  // ---------- live mode ----------
+  function toggleLive() {
+    if (UI.mode === 'live') { exitLive(); return; }
+    stopTimer();
+    liveObj = null;
+    UI.mode = 'live'; UI.live = null; UI.liveStatus = 'connecting…'; UI.step = 0; UI.sessionInFlight = false;
+    renderShell();
+    connectLive();
+  }
+  function exitLive() {
+    closeLive();
+    UI.mode = 'replay'; UI.step = 0; UI.playing = true;
+    if (UI.sessions && UI.sessions.length) {
+      buildSession(UI.sessions[UI.sessionIdx]);
+      startTimer();
+    } else {
+      renderShell();
+    }
+  }
+  function closeLive() {
+    if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
+    if (ws) { try { ws.onclose = null; ws.close(); } catch (e) {} ws = null; }
+  }
+  function connectLive() {
+    if (UI.mode !== 'live') return;
+    var sock;
+    try {
+      var proto = location.protocol === 'https:' ? 'wss' : 'ws';
+      sock = new WebSocket(proto + '://' + location.host + '/ws');
+    } catch (e) { UI.liveStatus = 'live transport unavailable'; renderShell(); return; }
+    ws = sock;
+    sock.onopen = function () { UI.liveStatus = 'connected · waiting for a run'; updateTransport(); syncPromptInput(); };
+    sock.onmessage = function (e) { try { applyLiveEvent(JSON.parse(e.data)); } catch (err) {} };
+    sock.onclose = function () {
+      ws = null;
+      if (UI.mode === 'live') { UI.liveStatus = 'no lattice detected on this host · retrying'; updateTransport(); syncPromptInput(); retryTimer = setTimeout(connectLive, 2800); }
+    };
+    sock.onerror = function () {};
+  }
+
+  function ensureP0(L) {
+    L.phase0 = L.phase0 || { grounding: '', proposals: [], unique: 0, frozen: 0, results: [], failed: [] };
+    return L.phase0;
+  }
+
+  function applyLiveEvent(ev) {
+    var t = ev.event_type;
+    if (t === 'session_started') {
+      liveObj = {
+        id: ev.session_id, title: 'LIVE', prompt: ev.prompt, models: ev.models_invited,
+        phase0: null, phase1: {}, reflections: {}, crossreadings: [], turns: [],
+        synthesis: { output: '', trace: [] }, metrics: null, elevations: []
+      };
+      (ev.models_invited || []).forEach(function (m) { liveObj.phase1[m] = { focus: '', conf: 0, claims: [] }; liveObj.reflections[m] = {}; });
+      UI.sessionInFlight = true;
+    }
+    var L = liveObj;
+    if (!L) return;
+    if (t === 'phase_0_datetime_grounding') { ensureP0(L).grounding = ev.formatted_text; }
+    else if (t === 'phase_0_proposal_submitted') { var p0 = ensureP0(L); p0.proposals.push({ model: ev.model_id, count: (ev.queries || []).length, queries: ev.queries || [] }); var u = {}; p0.proposals.forEach(function (p) { (p.queries || []).forEach(function (q) { u[q] = 1; }); }); p0.unique = Object.keys(u).length; }
+    else if (t === 'phase_0_search_result') { ensureP0(L).results.push({ query: ev.query, preview: ev.result_text_preview }); }
+    else if (t === 'phase_0_failed_search') { ensureP0(L).failed.push({ query: ev.query, reason: ev.reason }); }
+    else if (t === 'phase_0_feed_frozen') { if (L.phase0) L.phase0.frozen = ev.entry_count; }
+    else if (t === 'phase_1_claim') { (L.phase1[ev.model_id] = L.phase1[ev.model_id] || { claims: [] }).claims.push({ id: ev.claim_id, text: ev.text }); }
+    else if (t === 'phase_1_response_completed') { var p = L.phase1[ev.model_id] = L.phase1[ev.model_id] || { claims: [] }; p.focus = ev.focus_tag; p.conf = ev.confidence; }
+    else if (t === 'self_reflection') { L.reflections[ev.model_id] = { strong: ev.strongest_claim_id, weak: ev.weakest_claim_id, just: ev.tag_justification || '' }; }
+    else if (t === 'phase_2_cross_reading') { L.crossreadings.push({ reader: ev.reader_model, target: ev.target_model, agreements: (ev.agreements || []).map(function (a) { return a.claim_id || a; }), disagreements: (ev.disagreements || []).map(function (d) { return { id: d.target_claim_id || d.id, reason: d.reason }; }) }); }
+    else if (t === 'phase_3_turn') { L.turns.push({ id: ev.turn_id, speaker: ev.speaker_model, channel: ev.channel, target: ev.target_model, content: ev.content }); }
+    else if (t === 'phase_4_artifact') { L.synthesis = { output: ev.output, trace: (ev.claim_trace || []).map(function (e) { return { id: e.claim_id, disp: e.disposition }; }) }; L.elevations = ev.elevations || []; }
+    else if (t === 'phase_4_metrics') { L.metrics = ev.metrics; }
+    else if (t === 'session_completed') { UI.sessionInFlight = false; }
+
+    UI.live = L;
+    // Rebuild from the grown live object, then show everything (step = N).
+    buildSession(L);
+    UI.step = D.N;
+    UI.liveStatus = 'streaming · ' + (L.id || 'session');
+    applyStep();
+    syncPromptInput();
+  }
+
+  function syncPromptInput() {
+    var input = document.getElementById('gl-prompt');
+    var btn = app.querySelector('[data-act="send-prompt"]');
+    if (!input) return;
+    var disabled = UI.sessionInFlight || !ws || ws.readyState !== WebSocket.OPEN;
+    input.disabled = disabled;
+    if (btn) btn.disabled = disabled;
+    input.placeholder = UI.sessionInFlight ? 'session in flight…' : (disabled ? 'connecting…' : 'question for the lattice — Enter to submit');
+  }
+
+  function sendPrompt() {
+    var input = document.getElementById('gl-prompt');
+    if (!input || input.disabled) return;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    const text = promptInput.value;
+    var text = input.value;
     if (!text.trim()) return;
     ws.send(JSON.stringify({ type: 'prompt', text: text }));
-    promptInput.value = '';
-    setInputEnabled(false, 'session in flight…');
+    input.value = '';
+    UI.sessionInFlight = true;
+    syncPromptInput();
   }
 
-  promptSubmit.addEventListener('click', submitPrompt);
-  promptInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      submitPrompt();
+  // ---------- shells (empty / waiting states) ----------
+  function renderShell() {
+    if (UI.mode === 'live' && !UI.live) {
+      app.innerHTML =
+        '<div style="height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:22px;padding:40px;">' +
+          '<div style="display:flex;align-items:center;gap:11px;">' +
+            '<span style="width:11px;height:11px;border-radius:50%;background:oklch(0.67 0.18 25);animation:glDot 1.4s ease-in-out infinite;"></span>' +
+            '<span class="mono" style="font-size:13px;letter-spacing:0.28em;color:oklch(0.67 0.18 25);text-transform:uppercase;">Live</span>' +
+          '</div>' +
+          '<div style="font-size:23px;color:#eef0f4;text-align:center;max-width:560px;">Listening for a lattice run on this host.</div>' +
+          '<div class="mono" id="gl-livestatus" style="font-size:12px;color:#707682;letter-spacing:0.04em;">' + esc(UI.liveStatus) + '</div>' +
+          '<div style="display:flex;gap:8px;align-items:center;width:min(560px,90%);">' +
+            '<input id="gl-prompt" type="text" placeholder="question for the lattice — Enter to submit" autocomplete="off" style="flex:1;background:#0c0d11;color:#d7dbe4;border:1px solid #242832;border-radius:6px;padding:8px 12px;font-family:var(--serif);font-size:14px;outline:none;" />' +
+            '<button class="tbtn" data-act="send-prompt" style="font-family:var(--mono);font-size:10px;letter-spacing:0.1em;color:#0c0d11;background:oklch(0.84 0.14 88);border:none;border-radius:6px;padding:9px 16px;text-transform:uppercase;font-weight:600;">send</button>' +
+          '</div>' +
+          '<button class="tbtn" data-act="toggle-live" style="margin-top:6px;font-family:var(--mono);font-size:11px;letter-spacing:0.12em;color:#8b919d;background:#181b23;border:1px solid #242832;border-radius:6px;padding:9px 18px;text-transform:uppercase;">← Back to replay</button>' +
+        '</div>';
+      syncPromptInput();
+      return;
     }
-  });
-
-  function connect() {
-    const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
-    ws = new WebSocket(proto + '://' + window.location.host + '/ws');
-    ws.onopen = () => {
-      setStatus('connected', 'connected');
-      // Re-enable input on connect, unless a session is currently in
-      // flight (between session_started and session_completed).
-      const inFlight = state.session_id && !state.completed;
-      if (inFlight) {
-        setInputEnabled(false, 'session in flight…');
-      } else {
-        setInputEnabled(true, 'question for the lattice — Enter to submit');
-      }
-      promptInput.focus();
-    };
-    ws.onclose = () => {
-      setStatus('disconnected — retrying…', 'disconnected');
-      setInputEnabled(false, 'reconnecting…');
-      setTimeout(connect, 1500);
-    };
-    ws.onerror = () => setStatus('error', 'disconnected');
-    ws.onmessage = (e) => {
-      try {
-        const ev = JSON.parse(e.data);
-        applyEvent(ev);
-        // Session lifecycle drives input enable/disable.
-        if (ev.event_type === 'session_started') {
-          setInputEnabled(false, 'session in flight…');
-        } else if (ev.event_type === 'session_completed') {
-          setInputEnabled(true, 'question for the lattice — Enter to submit');
-          promptInput.focus();
-        }
-        renderAll();
-      } catch (err) {
-        console.error('failed to parse event', err, e.data);
-      }
-    };
+    if (!UI.sessions || UI.sessions.length === 0) {
+      app.innerHTML =
+        '<div style="height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px;">' +
+          '<div class="mono" style="font-size:11px;letter-spacing:0.3em;color:#707682;text-transform:uppercase;">Golden Lattice</div>' +
+          '<div class="mono" style="font-size:13px;color:#8b919d;">no completed sessions to replay yet</div>' +
+          '<button class="tbtn" data-act="toggle-live" style="margin-top:6px;font-family:var(--mono);font-size:11px;letter-spacing:0.12em;color:#8b919d;background:#181b23;border:1px solid #242832;border-radius:6px;padding:9px 18px;text-transform:uppercase;">Go Live →</button>' +
+        '</div>';
+    }
   }
-  connect();
-  renderAll();
+
+  // ---------- event wiring (delegation; attached once) ----------
+  document.addEventListener('click', function (e) {
+    var t = e.target.closest('[data-act]');
+    if (!t) return;
+    var act = t.getAttribute('data-act');
+    if (act === 'session') selectSession(parseInt(t.getAttribute('data-i'), 10));
+    else if (act === 'toggle-live') toggleLive();
+    else if (act === 'toggle') toggle();
+    else if (act === 'restart') restart();
+    else if (act === 'speed') cycleSpeed();
+    else if (act === 'send-prompt') sendPrompt();
+  });
+  document.addEventListener('input', function (e) {
+    if (e.target && e.target.id === 'gl-scrub') scrub(parseInt(e.target.value, 10) || 0);
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && e.target && e.target.id === 'gl-prompt') { e.preventDefault(); sendPrompt(); }
+  });
+  window.addEventListener('resize', measure);
+
+  // ---------- boot ----------
+  function boot() {
+    fetch('/sessions').then(function (r) { return r.json(); }).then(function (sessions) {
+      UI.sessions = Array.isArray(sessions) ? sessions : [];
+      if (UI.sessions.length === 0) { renderShell(); return; }
+      var idx = parseInt(lsGet('gl-sess', '0'), 10) || 0;
+      if (idx < 0 || idx >= UI.sessions.length) idx = 0;
+      UI.sessionIdx = idx;
+      buildSession(UI.sessions[idx]);
+      var saved = parseInt(lsGet('gl-replay-step', '0'), 10) || 0;
+      if (saved > D.N || saved < 0) saved = 0;
+      UI.step = saved;
+      UI.playing = saved < D.N;
+      applyStep();
+      if (UI.playing) startTimer();
+    }).catch(function (err) {
+      console.error('sessions load failed', err);
+      UI.sessions = [];
+      renderShell();
+    });
+  }
+  boot();
 })();
 </script>
 </body>

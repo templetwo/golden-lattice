@@ -22,20 +22,34 @@ from typing import Set
 
 from aiohttp import WSMsgType, web
 
+from golden_lattice.dashboard.normalize import normalized_sessions
 from golden_lattice.events import LatticeEvent
 
 
 _STATIC_DIR = Path(__file__).parent / "static"
 _INDEX_PATH = _STATIC_DIR / "index.html"
+_EXPLAINER_PATH = _STATIC_DIR / "explainer.html"
+
+
+def _default_sessions_dir() -> Path:
+    """The repo's sessions/ directory, resolved from this module's location."""
+    return Path(__file__).resolve().parents[3] / "sessions"
 
 
 class DashboardServer:
     """aiohttp-based WebSocket server with event log buffering."""
 
-    def __init__(self) -> None:
+    def __init__(self, sessions_dir: Path | None = None) -> None:
         self.app = web.Application()
         self.app.router.add_get("/", self._handle_index)
+        self.app.router.add_get("/explainer", self._handle_explainer)
+        self.app.router.add_get("/sessions", self._handle_sessions)
         self.app.router.add_get("/ws", self._handle_ws)
+        # Directory the replay bundle is built from. The /sessions endpoint
+        # normalizes every complete session here into the dashboard's render
+        # shape, keeping replay and live identical (both feed one render layer).
+        self.sessions_dir = sessions_dir or _default_sessions_dir()
+        self._sessions_cache: list | None = None
         self.clients: Set[web.WebSocketResponse] = set()
         self.event_log: list[str] = []
         # Inbound prompt queue: persistent-mode dashboard input. WebSocket
@@ -84,6 +98,32 @@ class DashboardServer:
                 "Slice 2 lands the HTML.</p></body></html>"
             )
         return web.Response(text=body, content_type="text/html")
+
+    async def _handle_explainer(self, request: web.Request) -> web.Response:
+        if _EXPLAINER_PATH.exists():
+            body = _EXPLAINER_PATH.read_text(encoding="utf-8")
+        else:
+            body = (
+                "<html><body><h1>Golden Lattice — Explainer</h1>"
+                "<p>Explainer page not yet built.</p></body></html>"
+            )
+        return web.Response(text=body, content_type="text/html")
+
+    async def _handle_sessions(self, request: web.Request) -> web.Response:
+        """Return every complete session, normalized into the render shape.
+
+        Cached on first build (the viewer is a single process). Reads run in a
+        thread so session-file IO and metric recomputation don't block the
+        event loop / live broadcast.
+        """
+        if self._sessions_cache is None:
+            try:
+                self._sessions_cache = await asyncio.to_thread(
+                    normalized_sessions, self.sessions_dir
+                )
+            except Exception:
+                self._sessions_cache = []
+        return web.json_response(self._sessions_cache)
 
     async def _handle_ws(self, request: web.Request) -> web.WebSocketResponse:
         ws = web.WebSocketResponse()

@@ -35,7 +35,7 @@ def _default_sessions_dir() -> Path:
 async def _serve_replay(session_id: str, sessions_dir: Path, port: int, speed: float, open_browser: bool) -> int:
     store = JsonFileSessionStore(sessions_dir)
     session = store.load(session_id)
-    server = DashboardServer()
+    server = DashboardServer(sessions_dir=sessions_dir)
     runner = web.AppRunner(server.app)
     await runner.setup()
     site = web.TCPSite(runner, "127.0.0.1", port)
