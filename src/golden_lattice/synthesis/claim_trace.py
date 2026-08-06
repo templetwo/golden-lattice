@@ -43,16 +43,15 @@ the v0 vocabulary stabilizes against real session data.
 
 V1+V2 EXPANSION — two-peer-dispute → modified (added 2026-05-16):
 
-When BOTH non-author peers disagree with a claim through any disagreement
-channel — Phase 2 cross-reading OR Phase 3 critique turn — the claim is
-marked `modified` with a templated hedge appended to the original text.
-This is the symmetric counter to §6's strict-triadic consensus rule: in
-N=3, "both non-author peers agree" is the strict recognition signal;
-"both non-author peers disagree" is the strict dispute signal. The hedge
-surfaces the dispute inline so the cross-reading + dialogue audit doesn't
-get dropped at the synthesis seam — the failure mode that produced the
-2026-05-16 attention-economy session in which 9+ contested numeric claims
-survived Phase 2/3 critique unmodified.
+When at least two distinct non-author peers disagree with a claim through
+any disagreement channel — Phase 2 cross-reading OR Phase 3 critique turn
+— the claim is marked `modified` with a templated hedge appended to the
+original text. This is the symmetric counter to §6's consensus rule: the
+recognition threshold is ≥2 of (n-1) peers, and the dispute threshold is
+the same. The hedge surfaces the dispute inline so the cross-reading +
+dialogue audit doesn't get dropped at the synthesis seam — the failure
+mode that produced the 2026-05-16 attention-economy session in which 9+
+contested numeric claims survived Phase 2/3 critique unmodified.
 
 Channel priority within the rule: Phase 2 cross-reading is scanned first,
 then Phase 3 critique. If a single peer disagrees through BOTH channels,
@@ -61,8 +60,10 @@ explicitly named what they disagree with and why). Augment and converge
 channels are NOT counted as dispute signals, honoring the spec's channel
 semantics rather than inferring disagreement across channels.
 
-The rule is triadic-only. With N != 3, "both non-author peers" is not
-well-defined; existing dyad behavior is preserved.
+Threshold is ≥2 distinct non-author peers at any roster size. At N=2 only
+one non-author peer exists, so the rule cannot fire (dyad behavior
+preserved). At N=4+ a silent additional peer is not a veto — matching
+§6's "≥2 of (n-1)" consensus scaling for the default four-seat roster.
 
 Engagement-as-corroboration: a claim is "isolated" iff no peer references
 it in EITHER agreements OR disagreements during Phase 2. Disagreement is
@@ -120,10 +121,10 @@ def build_claim_trace(session: Session) -> tuple[ClaimTraceEntry, ...]:
       1. low_confidence_isolated: claim is omitted iff its author flagged it
          as weakest_claim_id in their self-reflection AND no peer's
          CrossReading engages with it (neither agreement nor disagreement).
-      2. two_peer_dispute (triadic only): claim is modified iff both non-
-         author peers' Phase 2 cross-readings disagree with it. The hedge
-         is templated prose appended to the original claim text. Symmetric
-         counter to §6's strict-triadic consensus rule.
+      2. two_peer_dispute: claim is modified iff ≥2 distinct non-author
+         peers disagree with it (Phase 2 cross-reading and/or Phase 3
+         critique). The hedge is templated prose appended to the original
+         claim text. Symmetric counter to §6's ≥2-of-(n-1) consensus rule.
       3. Default: present.
 
     Returns one ClaimTraceEntry per Phase 1 claim, in the order claims appear
@@ -215,13 +216,13 @@ def _two_peer_disputers(
     *,
     author: ModelId,
 ) -> Optional[list[tuple[ModelId, str]]]:
-    """Return [(peer, reason)] for both non-author peers if BOTH disagree
+    """Return [(peer, reason), ...] when ≥2 distinct non-author peers disagree
     with the claim through any disagreement channel — Phase 2 cross-reading
     or Phase 3 critique turn. Otherwise None.
 
-    Triadic-only: with N != 3, the strict 'both non-author peers' signal
-    is not well-defined, so the rule does not fire. Existing dyad and
-    larger-N session behavior is preserved.
+    Threshold matches ARCHITECTURE.md §5.4 / §6: at least two distinct
+    non-author peers. At N=2 only one non-author peer exists, so the rule
+    cannot fire. At N=4+ a silent additional peer is not a veto.
 
     Channel priority: Phase 2 cross-reading scanned first, then Phase 3
     critique. If a peer disagrees in both, the Phase 2 reason wins (the
@@ -239,8 +240,6 @@ def _two_peer_disputers(
     dialogue turns within a Session are tuple-ordered by construction).
     """
     non_author_peers = set(session.models_invited) - {author}
-    if len(non_author_peers) != 2:
-        return None
 
     found: dict[ModelId, str] = {}
 
@@ -287,7 +286,8 @@ def _format_dispute_hedge(
 ) -> str:
     """Templated hedge prose. No LLM, deterministic.
 
-    Format: "{claim.text} [DISPUTED — {peer_a}: '{excerpt_a}'; {peer_b}: '{excerpt_b}']"
+    Format: "{claim.text} [DISPUTED — {peer}: '{excerpt}'; ...]"
+    Peer order follows the already-sorted disputers list (≥2 entries).
 
     The excerpt is the first sentence of the reason (up to '. ', '! ', or
     '? '), truncated at _DISPUTE_HEDGE_EXCERPT_CHARS characters with an
@@ -295,12 +295,10 @@ def _format_dispute_hedge(
     on session.phase_2[*].disagreements — the hedge surfaces the dispute
     inline without flooding the rendered output.
     """
-    (peer_a, reason_a), (peer_b, reason_b) = disputers
-    return (
-        f"{claim.text} [DISPUTED — "
-        f"{peer_a.value}: \"{_excerpt(reason_a)}\"; "
-        f"{peer_b.value}: \"{_excerpt(reason_b)}\"]"
+    parts = "; ".join(
+        f'{peer.value}: "{_excerpt(reason)}"' for peer, reason in disputers
     )
+    return f"{claim.text} [DISPUTED — {parts}]"
 
 
 def _excerpt(reason: str, max_chars: int = _DISPUTE_HEDGE_EXCERPT_CHARS) -> str:

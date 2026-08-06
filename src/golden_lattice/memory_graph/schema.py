@@ -19,6 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from golden_lattice.memory_graph.base import (
     DEFAULT_OUTPUT_MODE,
     PARITY_THRESHOLD,
+    CommitmentState,
     FocusTag,
     ModelId,
     OutputMode,
@@ -31,6 +32,9 @@ from golden_lattice.memory_graph.tagging import Phase2Tagging
 
 __all__ = [
     "PARITY_THRESHOLD",
+    "ALLOWED_COMMITMENT_TRANSITIONS",
+    "CommitmentState",
+    "CommitmentTransition",
     "FocusTag",
     "ModelId",
     "OutputMode",
@@ -49,6 +53,8 @@ __all__ = [
     "Elevation",
     "SurfacedDisagreement",
     "SynthesisArtifact",
+    "ClaimCommitmentTrajectory",
+    "CommitmentObservations",
     "SessionMetrics",
     "Session",
 ]
@@ -318,6 +324,119 @@ class ClaimTraceEntry(BaseModel):
         return self
 
 
+# Commitment dynamics state machine (Phase 1 Task 4).
+#
+# Structural allowance only — not a psychological model of conviction.
+# Self-transitions are never allowed (enforced on the artifact). WITHDRAWN
+# is terminal: a fresh claim_id is required to re-enter the lattice rather
+# than silently resurrecting a withdrawn commitment. Transitions are never
+# inferred from changed claim prose; only explicit CommitmentTransition
+# artifacts record movement.
+_COMMITMENT_EDGES: tuple[tuple[CommitmentState, CommitmentState], ...] = (
+    # from proposed
+    (CommitmentState.PROPOSED, CommitmentState.DEFENDED),
+    (CommitmentState.PROPOSED, CommitmentState.CHALLENGED),
+    (CommitmentState.PROPOSED, CommitmentState.REVISED),
+    (CommitmentState.PROPOSED, CommitmentState.WITHDRAWN),
+    (CommitmentState.PROPOSED, CommitmentState.REAFFIRMED),
+    (CommitmentState.PROPOSED, CommitmentState.UNRESOLVED),
+    # from defended
+    (CommitmentState.DEFENDED, CommitmentState.CHALLENGED),
+    (CommitmentState.DEFENDED, CommitmentState.REAFFIRMED),
+    (CommitmentState.DEFENDED, CommitmentState.REVISED),
+    (CommitmentState.DEFENDED, CommitmentState.WITHDRAWN),
+    (CommitmentState.DEFENDED, CommitmentState.UNRESOLVED),
+    # from challenged
+    (CommitmentState.CHALLENGED, CommitmentState.DEFENDED),
+    (CommitmentState.CHALLENGED, CommitmentState.REVISED),
+    (CommitmentState.CHALLENGED, CommitmentState.WITHDRAWN),
+    (CommitmentState.CHALLENGED, CommitmentState.REAFFIRMED),
+    (CommitmentState.CHALLENGED, CommitmentState.UNRESOLVED),
+    # from revised
+    (CommitmentState.REVISED, CommitmentState.DEFENDED),
+    (CommitmentState.REVISED, CommitmentState.CHALLENGED),
+    (CommitmentState.REVISED, CommitmentState.WITHDRAWN),
+    (CommitmentState.REVISED, CommitmentState.REAFFIRMED),
+    (CommitmentState.REVISED, CommitmentState.UNRESOLVED),
+    # from reaffirmed
+    (CommitmentState.REAFFIRMED, CommitmentState.CHALLENGED),
+    (CommitmentState.REAFFIRMED, CommitmentState.REVISED),
+    (CommitmentState.REAFFIRMED, CommitmentState.WITHDRAWN),
+    (CommitmentState.REAFFIRMED, CommitmentState.UNRESOLVED),
+    (CommitmentState.REAFFIRMED, CommitmentState.DEFENDED),
+    # from unresolved
+    (CommitmentState.UNRESOLVED, CommitmentState.CHALLENGED),
+    (CommitmentState.UNRESOLVED, CommitmentState.REVISED),
+    (CommitmentState.UNRESOLVED, CommitmentState.WITHDRAWN),
+    (CommitmentState.UNRESOLVED, CommitmentState.REAFFIRMED),
+    (CommitmentState.UNRESOLVED, CommitmentState.DEFENDED),
+    (CommitmentState.UNRESOLVED, CommitmentState.PROPOSED),
+    # withdrawn: terminal — no outgoing edges
+)
+
+ALLOWED_COMMITMENT_TRANSITIONS: frozenset[tuple[CommitmentState, CommitmentState]] = (
+    frozenset(_COMMITMENT_EDGES)
+)
+
+
+class CommitmentTransition(BaseModel):
+    """Explicit commitment state change for one claim under perturbation.
+
+    Never inferred from changed claim text. Requires a non-empty source_event
+    (perturbation / source event id) and at least one of reason or
+    supporting_artifact_ref. Ordering is dual-keyed: sequence_index for
+    deterministic session order, occurred_at for wall-clock audit.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    claim_id: str
+    source_model: ModelId
+    prior_state: CommitmentState
+    next_state: CommitmentState
+    source_event: str
+    reason: Optional[str] = None
+    supporting_artifact_ref: Optional[str] = None
+    sequence_index: int = Field(ge=0)
+    occurred_at: datetime
+
+    @model_validator(mode="after")
+    def _explicit_evidence_and_legal_edge(self) -> "CommitmentTransition":
+        if not self.claim_id.strip():
+            raise ValueError(
+                "claim_id must be a non-empty string. "
+                "Commitment transitions address a specific claim."
+            )
+        if not self.source_event.strip():
+            raise ValueError(
+                "source_event must be a non-empty string naming the "
+                "perturbation or source event that produced this transition."
+            )
+        reason_ok = self.reason is not None and bool(self.reason.strip())
+        ref_ok = (
+            self.supporting_artifact_ref is not None
+            and bool(self.supporting_artifact_ref.strip())
+        )
+        if not reason_ok and not ref_ok:
+            raise ValueError(
+                "CommitmentTransition requires a non-empty reason or "
+                "supporting_artifact_ref — empty evidence is refused. "
+                "Transitions are never inferred from changed claim prose."
+            )
+        if self.prior_state is self.next_state:
+            raise ValueError(
+                f"self-transition refused: prior_state and next_state are both "
+                f"{self.prior_state.value}. Record movement only when state changes."
+            )
+        edge = (self.prior_state, self.next_state)
+        if edge not in ALLOWED_COMMITMENT_TRANSITIONS:
+            raise ValueError(
+                f"({self.prior_state.value} → {self.next_state.value}) is not an "
+                f"allowed commitment transition. See ALLOWED_COMMITMENT_TRANSITIONS."
+            )
+        return self
+
+
 class Elevation(BaseModel):
     """A Phase 4 elevation — content elevated due to cross-model agreement.
 
@@ -399,6 +518,101 @@ class SynthesisArtifact(BaseModel):
     surfaced_disagreements: tuple[SurfacedDisagreement, ...] = ()
 
 
+class ClaimCommitmentTrajectory(BaseModel):
+    """Ordered commitment states for one claim, from explicit transitions only.
+
+    `states` is the path (first transition's prior_state, then each next_state
+    in sequence_index order). Empty trajectories are never emitted — only
+    claims that have at least one CommitmentTransition appear.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    claim_id: str
+    source_model: ModelId
+    states: tuple[CommitmentState, ...]
+
+    @model_validator(mode="after")
+    def _non_empty_path(self) -> "ClaimCommitmentTrajectory":
+        if len(self.states) < 2:
+            raise ValueError(
+                "ClaimCommitmentTrajectory.states must contain at least "
+                "prior_state and one next_state from an explicit transition."
+            )
+        return self
+
+
+class CommitmentObservations(BaseModel):
+    """Deterministic persistence/reversal observations over commitment history.
+
+    Observational only — not a claim of cognition, conviction, or intent.
+    All counts are over explicit CommitmentTransition artifacts attached to
+    a Session. Changed claim prose never contributes. Replay-safe: pure
+    function of the ordered transition tuple.
+
+    Operational formulas (also ARCHITECTURE.md §10):
+
+    - transition_count: |commitment_transitions|
+    - reaffirmation_count: |{ t | t.next_state = REAFFIRMED }|
+    - unresolved_rate: among claims with ≥1 transition, fraction whose
+      latest next_state is UNRESOLVED. 0.0 when no such claims.
+    - reversal: a later transition whose next_state was already occupied
+      earlier on that claim's path (prior_state of the first transition
+      and every subsequent next_state). Self-transitions are refused by
+      schema; prose is never consulted.
+    - reversal_count: number of such reversal transitions across claims.
+    - persistence_after_reversal: among reversal transitions, fraction
+      for which the restored next_state remains the claim's final observed
+      state. Denominator = reversal_count. None when reversal_count = 0
+      (undefined; not silently zero).
+    - session_trajectories / per_model_trajectories: per-claim state paths
+      ordered by first sequence_index (then claim_id); per-model groups by
+      transition.source_model.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    transition_count: int = 0
+    reversal_count: int = 0
+    reaffirmation_count: int = 0
+    unresolved_rate: float = 0.0
+    persistence_after_reversal: Optional[float] = None
+    session_trajectories: tuple[ClaimCommitmentTrajectory, ...] = ()
+    per_model_trajectories: dict[ModelId, tuple[ClaimCommitmentTrajectory, ...]] = Field(
+        default_factory=dict
+    )
+
+    @model_validator(mode="after")
+    def _counts_and_rates_are_well_formed(self) -> "CommitmentObservations":
+        for label, value in (
+            ("transition_count", self.transition_count),
+            ("reversal_count", self.reversal_count),
+            ("reaffirmation_count", self.reaffirmation_count),
+        ):
+            if value < 0:
+                raise ValueError(f"{label} must be >= 0, got {value}.")
+        if not 0.0 <= self.unresolved_rate <= 1.0:
+            raise ValueError(
+                f"unresolved_rate must be in [0, 1], got {self.unresolved_rate}."
+            )
+        if self.persistence_after_reversal is not None:
+            if not 0.0 <= self.persistence_after_reversal <= 1.0:
+                raise ValueError(
+                    "persistence_after_reversal must be in [0, 1] or None, "
+                    f"got {self.persistence_after_reversal}."
+                )
+            if self.reversal_count == 0:
+                raise ValueError(
+                    "persistence_after_reversal must be None when "
+                    "reversal_count is 0 (no qualifying observations)."
+                )
+        elif self.reversal_count > 0:
+            raise ValueError(
+                "persistence_after_reversal is required when reversal_count > 0."
+            )
+        return self
+
+
 class SessionMetrics(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -407,6 +621,11 @@ class SessionMetrics(BaseModel):
     structural_pattern_share: dict[ModelId, float]
     parity_threshold: float = PARITY_THRESHOLD
     irreducibility_violations: tuple[str, ...] = ()
+    # Phase 1 Task 6: nested default so existing SessionMetrics(...) constructors
+    # and parity semantics stay intact; empty observations when history is empty.
+    commitment_observations: CommitmentObservations = Field(
+        default_factory=CommitmentObservations
+    )
 
     @model_validator(mode="after")
     def _shares_are_valid(self) -> "SessionMetrics":
@@ -469,6 +688,10 @@ class Session(BaseModel):
     phase_3: tuple[DialogueTurn, ...] = ()
     phase_4: Optional[SynthesisArtifact] = None
     metrics: Optional[SessionMetrics] = None
+    # Phase 1 Task 5: explicit commitment history. Empty by default so legacy
+    # sessions remain valid. Never inferred from changed claim prose — only
+    # from CommitmentTransition artifacts attached by the caller/observer.
+    commitment_transitions: tuple[CommitmentTransition, ...] = ()
 
     @field_validator("models_invited")
     @classmethod
@@ -764,6 +987,48 @@ class Session(BaseModel):
                         "(invariant 4 — irreducibility preservation covers "
                         "feed-grounded claims identically to prior-grounded)."
                     )
+        return self
+
+    @model_validator(mode="after")
+    def _commitment_transitions_are_well_formed(self) -> "Session":
+        """Explicit commitment history must address known Phase 1 claims.
+
+        Empty history is the legacy default. Non-empty history fails closed:
+        unknown claim_ids are refused (never normalized away), sequence_index
+        values must be unique and strictly ascending in tuple order. Order is
+        the authoritative timeline for replay; silent re-sort is refused.
+        """
+        if not self.commitment_transitions:
+            return self
+
+        phase_1_claim_ids = {
+            claim.claim_id
+            for response in self.phase_1.values()
+            for claim in response.claims
+        }
+        seen_indices: set[int] = set()
+        prev_index: Optional[int] = None
+        for transition in self.commitment_transitions:
+            if transition.claim_id not in phase_1_claim_ids:
+                raise ValueError(
+                    f"commitment_transitions references unknown claim_id "
+                    f"{transition.claim_id!r}. Commitment history addresses "
+                    f"Phase 1 claims only; invalid references are refused."
+                )
+            idx = transition.sequence_index
+            if idx in seen_indices:
+                raise ValueError(
+                    f"commitment_transitions has duplicate sequence_index "
+                    f"{idx}. Each transition needs a unique sequence_index."
+                )
+            seen_indices.add(idx)
+            if prev_index is not None and idx <= prev_index:
+                raise ValueError(
+                    "commitment_transitions must be ordered by ascending "
+                    f"sequence_index; found {prev_index} then {idx}. "
+                    "Silent re-sort is refused."
+                )
+            prev_index = idx
         return self
 
     def all_claims(self) -> list[Claim]:

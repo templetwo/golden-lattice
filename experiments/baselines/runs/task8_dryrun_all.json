@@ -1,0 +1,2579 @@
+{
+  "manifest": {
+    "corpus": "experiments/tasks",
+    "created_at": "2026-08-06T18:43:39+00:00",
+    "git_commit": "cddf0a0ac1c265fd004a17ef4d842e81d342a10a",
+    "mode": "dry_run",
+    "notes": "Commitment states are recorded only from explicit structured artifacts. Prose is never interpreted as commitment. conventional_judge_summarizer is optional and non-canonical.",
+    "protocol": "experiments/protocol.md",
+    "run_id": "task8_dryrun_all",
+    "session_count": 16,
+    "status_vocabulary": [
+      "planned",
+      "completed",
+      "unavailable",
+      "skipped",
+      "aborted",
+      "error"
+    ],
+    "sut_ids": [
+      "strongest_single_peer",
+      "simple_parallel_responses",
+      "conventional_judge_summarizer",
+      "golden_lattice"
+    ],
+    "task_ids": [
+      "gl.longitudinal.ambiguous_evidence_synthesis.v1",
+      "gl.longitudinal.competing_scientific_explanations.v1",
+      "gl.longitudinal.decision_under_changing_evidence.v1",
+      "gl.longitudinal.design_critique.v1"
+    ],
+    "tasks_dir": "/Users/vaquez/golden-lattice/experiments/tasks"
+  },
+  "sessions": [
+    {
+      "metadata": {
+        "baseline": "conventional_judge_summarizer",
+        "canonical": false,
+        "judge_model": "claude-opus-4-20250514",
+        "optional": true,
+        "peer_models": [
+          "claude-opus-4-20250514",
+          "claude-sonnet-4-20250514",
+          "claude-haiku-4-20250414"
+        ],
+        "warning": "NON-CANONICAL comparator. Outputs must not enter Golden Lattice Phase 4 synthesis or seat authority."
+      },
+      "notes": "NON-CANONICAL optional baseline: independent peers then one judge/summarizer call per step. Dry-run only plans prompts.",
+      "session_id": "exp_task8_dryrun_all_conventional_judge_summarizer_gl.longitudinal.ambiguous_evidence_synthesis.v1_a3bf238f4792",
+      "status": "planned",
+      "steps": [
+        {
+          "commitment_transitions": null,
+          "cost_usd": null,
+          "latency_ms": null,
+          "perturbation_id": "aes.v1.initial_claim",
+          "prompt_bundle": {
+            "judge": {
+              "canonical": false,
+              "model": "claude-opus-4-20250514",
+              "role": "external_summarizer",
+              "system_instruction": "You are a conventional external judge/summarizer (NOT part of Golden Lattice).\nRead the independent peer responses below and produce a single concise summary\nof positions, disagreements, and a recommended answer if one is warranted.\nDo not claim to be a lattice peer. Do not invent commitments or beliefs."
+            },
+            "kind": null,
+            "parallel_peers": [
+              {
+                "model": "claude-opus-4-20250514",
+                "role": "independent_responder"
+              },
+              {
+                "model": "claude-sonnet-4-20250514",
+                "role": "independent_responder"
+              },
+              {
+                "model": "claude-haiku-4-20250414",
+                "role": "independent_responder"
+              }
+            ],
+            "perturbation_id": "aes.v1.initial_claim",
+            "placeholder": "{claim_text}",
+            "rendered_prompt": "You are synthesizing ambiguous operational evidence. Evaluate the claim.\nDefend, revise, reject, or mark it unresolved. List which pieces of support\nare strong, weak, or missing. Do not invent metrics or timestamps beyond\nwhat the prompt eventually supplies; if only the claim is present, say what\nevidence you would need.\n\nCLAIM:\nThe p95 latency regression that began at 14:02 UTC was caused by the 13:55\nUTC deploy of service config version 2026.4.12-rc1. Rolling back that deploy\nis the appropriate first mitigation.\n",
+            "source": {
+              "id": "aes.v1.initial_claim",
+              "kind": null,
+              "prompt": "You are synthesizing ambiguous operational evidence. Evaluate the claim.\nDefend, revise, reject, or mark it unresolved. List which pieces of support\nare strong, weak, or missing. Do not invent metrics or timestamps beyond\nwhat the prompt eventually supplies; if only the claim is present, say what\nevidence you would need.\n\nCLAIM:\n{claim_text}",
+              "text": "The p95 latency regression that began at 14:02 UTC was caused by the 13:55\nUTC deploy of service config version 2026.4.12-rc1. Rolling back that deploy\nis the appropriate first mitigation."
+            },
+            "step_id": "present_initial_claim",
+            "table": "initial_claim",
+            "task_id": "gl.longitudinal.ambiguous_evidence_synthesis.v1"
+          },
+          "raw_output": null,
+          "reason": "dry_run: prompt bundle prepared; no model call",
+          "status": "planned",
+          "step_id": "present_initial_claim",
+          "structured": null
+        },
+        {
+          "commitment_transitions": null,
+          "cost_usd": null,
+          "latency_ms": null,
+          "perturbation_id": "aes.v1.controlled_challenge",
+          "prompt_bundle": {
+            "judge": {
+              "canonical": false,
+              "model": "claude-opus-4-20250514",
+              "role": "external_summarizer",
+              "system_instruction": "You are a conventional external judge/summarizer (NOT part of Golden Lattice).\nRead the independent peer responses below and produce a single concise summary\nof positions, disagreements, and a recommended answer if one is warranted.\nDo not claim to be a lattice peer. Do not invent commitments or beliefs."
+            },
+            "kind": "challenge",
+            "parallel_peers": [
+              {
+                "model": "claude-opus-4-20250514",
+                "role": "independent_responder"
+              },
+              {
+                "model": "claude-sonnet-4-20250514",
+                "role": "independent_responder"
+              },
+              {
+                "model": "claude-haiku-4-20250414",
+                "role": "independent_responder"
+              }
+            ],
+            "perturbation_id": "aes.v1.controlled_challenge",
+            "placeholder": "{challenge_text}",
+            "rendered_prompt": "A controlled challenge adds conflicting causal candidates. Synthesize the\nambiguous case. You may keep multiple causes live. If you revise the claim,\nwrite a claim that reflects residual ambiguity rather than false precision\nunless the evidence truly warrants precision.\n\nCHALLENGE:\nChallenge: Concurrently at 13:50\u201314:10 UTC, inbound traffic mix shifted\ntoward a heavier endpoint class (large multi-get reads), a dependency\nredis pool showed rising eviction rate, and only two of five canaries were\non 2026.4.12-rc1. A peer argues the deploy is neither necessary nor\nsufficient as the root cause explanation, and that rollback alone may not\nrestore p95.\n",
+            "source": {
+              "id": "aes.v1.controlled_challenge",
+              "kind": "challenge",
+              "prompt": "A controlled challenge adds conflicting causal candidates. Synthesize the\nambiguous case. You may keep multiple causes live. If you revise the claim,\nwrite a claim that reflects residual ambiguity rather than false precision\nunless the evidence truly warrants precision.\n\nCHALLENGE:\n{challenge_text}",
+              "text": "Challenge: Concurrently at 13:50\u201314:10 UTC, inbound traffic mix shifted\ntoward a heavier endpoint class (large multi-get reads), a dependency\nredis pool showed rising eviction rate, and only two of five canaries were\non 2026.4.12-rc1. A peer argues the deploy is neither necessary nor\nsufficient as the root cause explanation, and that rollback alone may not\nrestore p95."
+            },
+            "step_id": "apply_controlled_challenge",
+            "table": "controlled_challenge",
+            "task_id": "gl.longitudinal.ambiguous_evidence_synthesis.v1"
+          },
+          "raw_output": null,
+          "reason": "dry_run: prompt bundle prepared; no model call",
+          "status": "planned",
+          "step_id": "apply_controlled_challenge",
+          "structured": null
+        },
+        {
+          "commitment_transitions": null,
+          "cost_usd": null,
+          "latency_ms": null,
+          "perturbation_id": "aes.v1.evidence_update",
+          "prompt_bundle": {
+            "judge": {
+              "canonical": false,
+              "model": "claude-opus-4-20250514",
+              "role": "external_summarizer",
+              "system_instruction": "You are a conventional external judge/summarizer (NOT part of Golden Lattice).\nRead the independent peer responses below and produce a single concise summary\nof positions, disagreements, and a recommended answer if one is warranted.\nDo not claim to be a lattice peer. Do not invent commitments or beliefs."
+            },
+            "kind": "evidence_update",
+            "parallel_peers": [
+              {
+                "model": "claude-opus-4-20250514",
+                "role": "independent_responder"
+              },
+              {
+                "model": "claude-sonnet-4-20250514",
+                "role": "independent_responder"
+              },
+              {
+                "model": "claude-haiku-4-20250414",
+                "role": "independent_responder"
+              }
+            ],
+            "perturbation_id": "aes.v1.evidence_update",
+            "placeholder": "{evidence_text}",
+            "rendered_prompt": "New evidence is introduced. Re-synthesize. Weight the deploy hypothesis\nagainst traffic-mix and redis hypotheses only as the evidence supports.\nKeep unresolved elements explicit. Write the resulting claim in full.\n\nEVIDENCE UPDATE:\nEvidence update (treat as given for this exercise): Regions that had not\nyet received 2026.4.12-rc1 show no p95 regression despite the same traffic-\nmix shift. In the one region where rc1 was fully rolled out, p95 rose within\nthree minutes of the config push and before redis eviction rate spiked.\nCanary hosts on rc1 are slower on the same request class than canaries still\non the prior config, under matched load in a replay harness (n=1 harness\nrun).\n",
+            "source": {
+              "id": "aes.v1.evidence_update",
+              "kind": "evidence_update",
+              "prompt": "New evidence is introduced. Re-synthesize. Weight the deploy hypothesis\nagainst traffic-mix and redis hypotheses only as the evidence supports.\nKeep unresolved elements explicit. Write the resulting claim in full.\n\nEVIDENCE UPDATE:\n{evidence_text}",
+              "text": "Evidence update (treat as given for this exercise): Regions that had not\nyet received 2026.4.12-rc1 show no p95 regression despite the same traffic-\nmix shift. In the one region where rc1 was fully rolled out, p95 rose within\nthree minutes of the config push and before redis eviction rate spiked.\nCanary hosts on rc1 are slower on the same request class than canaries still\non the prior config, under matched load in a replay harness (n=1 harness\nrun)."
+            },
+            "step_id": "apply_evidence_update",
+            "table": "evidence_update",
+            "task_id": "gl.longitudinal.ambiguous_evidence_synthesis.v1"
+          },
+          "raw_output": null,
+          "reason": "dry_run: prompt bundle prepared; no model call",
+          "status": "planned",
+          "step_id": "apply_evidence_update",
+          "structured": null
+        },
+        {
+          "commitment_transitions": null,
+          "cost_usd": null,
+          "latency_ms": null,
+          "perturbation_id": "aes.v1.reversal_or_removal",
+          "prompt_bundle": {
+            "judge": {
+              "canonical": false,
+              "model": "claude-opus-4-20250514",
+              "role": "external_summarizer",
+              "system_instruction": "You are a conventional external judge/summarizer (NOT part of Golden Lattice).\nRead the independent peer responses below and produce a single concise summary\nof positions, disagreements, and a recommended answer if one is warranted.\nDo not claim to be a lattice peer. Do not invent commitments or beliefs."
+            },
+            "kind": "removal",
+            "parallel_peers": [
+              {
+                "model": "claude-opus-4-20250514",
+                "role": "independent_responder"
+              },
+              {
+                "model": "claude-sonnet-4-20250514",
+                "role": "independent_responder"
+              },
+              {
+                "model": "claude-haiku-4-20250414",
+                "role": "independent_responder"
+              }
+            ],
+            "perturbation_id": "aes.v1.reversal_or_removal",
+            "placeholder": "{reversal_text}",
+            "rendered_prompt": "Key resolving evidence has been removed. Re-synthesize under restored\nambiguity. State whether your post-evidence claim persists, reverses,\nbecomes unresolved, or is reaffirmed. Prefer an honest ambiguous synthesis\nover a forced single cause. Write the final claim in full.\n\nREMOVAL CONDITION:\nRemoval condition: The cross-region comparison and the replay-harness result\nare withdrawn (clock skew invalidated region timelines; harness used stale\ntraffic weights). The only remaining materials are the original claim, the\nconcurrent traffic-mix and redis observations, and the partial canary\nrollout description. No replacement differential analysis is available.\n",
+            "source": {
+              "id": "aes.v1.reversal_or_removal",
+              "kind": "removal",
+              "prompt": "Key resolving evidence has been removed. Re-synthesize under restored\nambiguity. State whether your post-evidence claim persists, reverses,\nbecomes unresolved, or is reaffirmed. Prefer an honest ambiguous synthesis\nover a forced single cause. Write the final claim in full.\n\nREMOVAL CONDITION:\n{reversal_text}",
+              "text": "Removal condition: The cross-region comparison and the replay-harness result\nare withdrawn (clock skew invalidated region timelines; harness used stale\ntraffic weights). The only remaining materials are the original claim, the\nconcurrent traffic-mix and redis observations, and the partial canary\nrollout description. No replacement differential analysis is available."
+            },
+            "step_id": "apply_reversal_or_removal",
+            "table": "reversal_or_removal",
+            "task_id": "gl.longitudinal.ambiguous_evidence_synthesis.v1"
+          },
+          "raw_output": null,
+          "reason": "dry_run: prompt bundle prepared; no model call",
+          "status": "planned",
+          "step_id": "apply_reversal_or_removal",
+          "structured": null
+        }
+      ],
+      "sut_id": "conventional_judge_summarizer",
+      "task_id": "gl.longitudinal.ambiguous_evidence_synthesis.v1"
+    },
+    {
+      "metadata": {
+        "baseline": "golden_lattice",
+        "continuity": "prior_step_transcript_injected_into_prompt",
+        "reuses": "golden_lattice.orchestrator.run_lattice_session",
+        "synthesis": "canonical_phase_4"
+      },
+      "notes": "Golden Lattice dry-run: prompt bundles prepared for each perturbation step. No orchestrator call; no fabricated synthesis.",
+      "session_id": "exp_task8_dryrun_all_golden_lattice_gl.longitudinal.ambiguous_evidence_synthesis.v1_f8714ba8d420",
+      "status": "planned",
+      "steps": [
+        {
+          "commitment_transitions": null,
+          "cost_usd": null,
+          "latency_ms": null,
+          "perturbation_id": "aes.v1.initial_claim",
+          "prompt_bundle": {
+            "kind": null,
+            "lattice": {
+              "entry": "run_lattice_session",
+              "note": "Full lattice pipeline per step; prior step outputs appended as transcript context only."
+            },
+            "perturbation_id": "aes.v1.initial_claim",
+            "placeholder": "{claim_text}",
+            "rendered_prompt": "You are synthesizing ambiguous operational evidence. Evaluate the claim.\nDefend, revise, reject, or mark it unresolved. List which pieces of support\nare strong, weak, or missing. Do not invent metrics or timestamps beyond\nwhat the prompt eventually supplies; if only the claim is present, say what\nevidence you would need.\n\nCLAIM:\nThe p95 latency regression that began at 14:02 UTC was caused by the 13:55\nUTC deploy of service config version 2026.4.12-rc1. Rolling back that deploy\nis the appropriate first mitigation.\n",
+            "source": {
+              "id": "aes.v1.initial_claim",
+              "kind": null,
+              "prompt": "You are synthesizing ambiguous operational evidence. Evaluate the claim.\nDefend, revise, reject, or mark it unresolved. List which pieces of support\nare strong, weak, or missing. Do not invent metrics or timestamps beyond\nwhat the prompt eventually supplies; if only the claim is present, say what\nevidence you would need.\n\nCLAIM:\n{claim_text}",
+              "text": "The p95 latency regression that began at 14:02 UTC was caused by the 13:55\nUTC deploy of service config version 2026.4.12-rc1. Rolling back that deploy\nis the appropriate first mitigation."
+            },
+            "step_id": "present_initial_claim",
+            "table": "initial_claim",
+            "task_id": "gl.longitudinal.ambiguous_evidence_synthesis.v1"
+          },
+          "raw_output": null,
+          "reason": "dry_run: prompt bundle prepared; no model call",
+          "status": "planned",
+          "step_id": "present_initial_claim",
+          "structured": null
+        },
+        {
+          "commitment_transitions": null,
+          "cost_usd": null,
+          "latency_ms": null,
+          "perturbation_id": "aes.v1.controlled_challenge",
+          "prompt_bundle": {
+            "kind": "challenge",
+            "lattice": {
+              "entry": "run_lattice_session",
+              "note": "Full lattice pipeline per step; prior step outputs appended as transcript context only."
+            },
+            "perturbation_id": "aes.v1.controlled_challenge",
+            "placeholder": "{challenge_text}",
+            "rendered_prompt": "A controlled challenge adds conflicting causal candidates. Synthesize the\nambiguous case. You may keep multiple causes live. If you revise the claim,\nwrite a claim that reflects residual ambiguity rather than false precision\nunless the evidence truly warrants precision.\n\nCHALLENGE:\nChallenge: Concurrently at 13:50\u201314:10 UTC, inbound traffic mix shifted\ntoward a heavier endpoint class (large multi-get reads), a dependency\nredis pool showed rising eviction rate, and only two of five canaries were\non 2026.4.12-rc1. A peer argues the deploy is neither necessary nor\nsufficient as the root cause explanation, and that rollback alone may not\nrestore p95.\n",
+            "source": {
+              "id": "aes.v1.controlled_challenge",
+              "kind": "challenge",
+              "prompt": "A controlled challenge adds conflicting causal candidates. Synthesize the\nambiguous case. You may keep multiple causes live. If you revise the claim,\nwrite a claim that reflects residual ambiguity rather than false precision\nunless the evidence truly warrants precision.\n\nCHALLENGE:\n{challenge_text}",
+              "text": "Challenge: Concurrently at 13:50\u201314:10 UTC, inbound traffic mix shifted\ntoward a heavier endpoint class (large multi-get reads), a dependency\nredis pool showed rising eviction rate, and only two of five canaries were\non 2026.4.12-rc1. A peer argues the deploy is neither necessary nor\nsufficient as the root cause explanation, and that rollback alone may not\nrestore p95."
+            },
+            "step_id": "apply_controlled_challenge",
+            "table": "controlled_challenge",
+            "task_id": "gl.longitudinal.ambiguous_evidence_synthesis.v1"
+          },
+          "raw_output": null,
+          "reason": "dry_run: prompt bundle prepared; no model call",
+          "status": "planned",
+          "step_id": "apply_controlled_challenge",
+          "structured": null
+        },
+        {
+          "commitment_transitions": null,
+          "cost_usd": null,
+          "latency_ms": null,
+          "perturbation_id": "aes.v1.evidence_update",
+          "prompt_bundle": {
+            "kind": "evidence_update",
+            "lattice": {
+              "entry": "run_lattice_session",
+              "note": "Full lattice pipeline per step; prior step outputs appended as transcript context only."
+            },
+            "perturbation_id": "aes.v1.evidence_update",
+            "placeholder": "{evidence_text}",
+            "rendered_prompt": "New evidence is introduced. Re-synthesize. Weight the deploy hypothesis\nagainst traffic-mix and redis hypotheses only as the evidence supports.\nKeep unresolved elements explicit. Write the resulting claim in full.\n\nEVIDENCE UPDATE:\nEvidence update (treat as given for this exercise): Regions that had not\nyet received 2026.4.12-rc1 show no p95 regression despite the same traffic-\nmix shift. In the one region where rc1 was fully rolled out, p95 rose within\nthree minutes of the config push and before redis eviction rate spiked.\nCanary hosts on rc1 are slower on the same request class than canaries still\non the prior config, under matched load in a replay harness (n=1 harness\nrun).\n",
+            "source": {
+              "id": "aes.v1.evidence_update",
+              "kind": "evidence_update",
+              "prompt": "New evidence is introduced. Re-synthesize. Weight the deploy hypothesis\nagainst traffic-mix and redis hypotheses only as the evidence supports.\nKeep unresolved elements explicit. Write the resulting claim in full.\n\nEVIDENCE UPDATE:\n{evidence_text}",
+              "text": "Evidence update (treat as given for this exercise): Regions that had not\nyet received 2026.4.12-rc1 show no p95 regression despite the same traffic-\nmix shift. In the one region where rc1 was fully rolled out, p95 rose within\nthree minutes of the config push and before redis eviction rate spiked.\nCanary hosts on rc1 are slower on the same request class than canaries still\non the prior config, under matched load in a replay harness (n=1 harness\nrun)."
+            },
+            "step_id": "apply_evidence_update",
+            "table": "evidence_update",
+            "task_id": "gl.longitudinal.ambiguous_evidence_synthesis.v1"
+          },
+          "raw_output": null,
+          "reason": "dry_run: prompt bundle prepared; no model call",
+          "status": "planned",
+          "step_id": "apply_evidence_update",
+          "structured": null
+        },
+        {
+          "commitment_transitions": null,
+          "cost_usd": null,
+          "latency_ms": null,
+          "perturbation_id": "aes.v1.reversal_or_removal",
+          "prompt_bundle": {
+            "kind": "removal",
+            "lattice": {
+              "entry": "run_lattice_session",
+              "note": "Full lattice pipeline per step; prior step outputs appended as transcript context only."
+            },
+            "perturbation_id": "aes.v1.reversal_or_removal",
+            "placeholder": "{reversal_text}",
+            "rendered_prompt": "Key resolving evidence has been removed. Re-synthesize under restored\nambiguity. State whether your post-evidence claim persists, reverses,\nbecomes unresolved, or is reaffirmed. Prefer an honest ambiguous synthesis\nover a forced single cause. Write the final claim in full.\n\nREMOVAL CONDITION:\nRemoval condition: The cross-region comparison and the replay-harness result\nare withdrawn (clock skew invalidated region timelines; harness used stale\ntraffic weights). The only remaining materials are the original claim, the\nconcurrent traffic-mix and redis observations, and the partial canary\nrollout description. No replacement differential analysis is available.\n",
+            "source": {
+              "id": "aes.v1.reversal_or_removal",
+              "kind": "removal",
+              "prompt": "Key resolving evidence has been removed. Re-synthesize under restored\nambiguity. State whether your post-evidence claim persists, reverses,\nbecomes unresolved, or is reaffirmed. Prefer an honest ambiguous synthesis\nover a forced single cause. Write the final claim in full.\n\nREMOVAL CONDITION:\n{reversal_text}",
+              "text": "Removal condition: The cross-region comparison and the replay-harness result\nare withdrawn (clock skew invalidated region timelines; harness used stale\ntraffic weights). The only remaining materials are the original claim, the\nconcurrent traffic-mix and redis observations, and the partial canary\nrollout description. No replacement differential analysis is available."
+            },
+            "step_id": "apply_reversal_or_removal",
+            "table": "reversal_or_removal",
+            "task_id": "gl.longitudinal.ambiguous_evidence_synthesis.v1"
+          },
+          "raw_output": null,
+          "reason": "dry_run: prompt bundle prepared; no model call",
+          "status": "planned",
+          "step_id": "apply_reversal_or_removal",
+          "structured": null
+        }
+      ],
+      "sut_id": "golden_lattice",
+      "task_id": "gl.longitudinal.ambiguous_evidence_synthesis.v1"
+    },
+    {
+      "metadata": {
+        "baseline": "simple_parallel_responses",
+        "peer_models": [
+          "claude-opus-4-20250514",
+          "claude-sonnet-4-20250514",
+          "claude-haiku-4-20250414"
+        ],
+        "synthesis": "none"
+      },
+      "notes": "Parallel independent peers per step; no cross-reading and no judge. Dry-run emits prompt bundles only.",
+      "session_id": "exp_task8_dryrun_all_simple_parallel_responses_gl.longitudinal.ambiguous_evidence_synthesis.v1_56c993fc014f",
+      "status": "planned",
+      "steps": [
+        {
+          "commitment_transitions": null,
+          "cost_usd": null,
+          "latency_ms": null,
+          "perturbation_id": "aes.v1.initial_claim",
+          "prompt_bundle": {
+            "kind": null,
+            "parallel_peers": [
+              {
+                "model": "claude-opus-4-20250514",
+                "role": "independent_responder"
+              },
+              {
+                "model": "claude-sonnet-4-20250514",
+                "role": "independent_responder"
+              },
+              {
+                "model": "claude-haiku-4-20250414",
+                "role": "independent_responder"
+              }
+            ],
+            "perturbation_id": "aes.v1.initial_claim",
+            "placeholder": "{claim_text}",
+            "rendered_prompt": "You are synthesizing ambiguous operational evidence. Evaluate the claim.\nDefend, revise, reject, or mark it unresolved. List which pieces of support\nare strong, weak, or missing. Do not invent metrics or timestamps beyond\nwhat the prompt eventually supplies; if only the claim is present, say what\nevidence you would need.\n\nCLAIM:\nThe p95 latency regression that began at 14:02 UTC was caused by the 13:55\nUTC deploy of service config version 2026.4.12-rc1. Rolling back that deploy\nis the appropriate first mitigation.\n",
+            "source": {
+              "id": "aes.v1.initial_claim",
+              "kind": null,
+              "prompt": "You are synthesizing ambiguous operational evidence. Evaluate the claim.\nDefend, revise, reject, or mark it unresolved. List which pieces of support\nare strong, weak, or missing. Do not invent metrics or timestamps beyond\nwhat the prompt eventually supplies; if only the claim is present, say what\nevidence you would need.\n\nCLAIM:\n{claim_text}",
+              "text": "The p95 latency regression that began at 14:02 UTC was caused by the 13:55\nUTC deploy of service config version 2026.4.12-rc1. Rolling back that deploy\nis the appropriate first mitigation."
+            },
+            "step_id": "present_initial_claim",
+            "table": "initial_claim",
+            "task_id": "gl.longitudinal.ambiguous_evidence_synthesis.v1"
+          },
+          "raw_output": null,
+          "reason": "dry_run: prompt bundle prepared; no model call",
+          "status": "planned",
+          "step_id": "present_initial_claim",
+          "structured": null
+        },
+        {
+          "commitment_transitions": null,
+          "cost_usd": null,
+          "latency_ms": null,
+          "perturbation_id": "aes.v1.controlled_challenge",
+          "prompt_bundle": {
+            "kind": "challenge",
+            "parallel_peers": [
+              {
+                "model": "claude-opus-4-20250514",
+                "role": "independent_responder"
+              },
+              {
+                "model": "claude-sonnet-4-20250514",
+                "role": "independent_responder"
+              },
+              {
+                "model": "claude-haiku-4-20250414",
+                "role": "independent_responder"
+              }
+            ],
+            "perturbation_id": "aes.v1.controlled_challenge",
+            "placeholder": "{challenge_text}",
+            "rendered_prompt": "A controlled challenge adds conflicting causal candidates. Synthesize the\nambiguous case. You may keep multiple causes live. If you revise the claim,\nwrite a claim that reflects residual ambiguity rather than false precision\nunless the evidence truly warrants precision.\n\nCHALLENGE:\nChallenge: Concurrently at 13:50\u201314:10 UTC, inbound traffic mix shifted\ntoward a heavier endpoint class (large multi-get reads), a dependency\nredis pool showed rising eviction rate, and only two of five canaries were\non 2026.4.12-rc1. A peer argues the deploy is neither necessary nor\nsufficient as the root cause explanation, and that rollback alone may not\nrestore p95.\n",
+            "source": {
+              "id": "aes.v1.controlled_challenge",
+              "kind": "challenge",
+              "prompt": "A controlled challenge adds conflicting causal candidates. Synthesize the\nambiguous case. You may keep multiple causes live. If you revise the claim,\nwrite a claim that reflects residual ambiguity rather than false precision\nunless the evidence truly warrants precision.\n\nCHALLENGE:\n{challenge_text}",
+              "text": "Challenge: Concurrently at 13:50\u201314:10 UTC, inbound traffic mix shifted\ntoward a heavier endpoint class (large multi-get reads), a dependency\nredis pool showed rising eviction rate, and only two of five canaries were\non 2026.4.12-rc1. A peer argues the deploy is neither necessary nor\nsufficient as the root cause explanation, and that rollback alone may not\nrestore p95."
+            },
+            "step_id": "apply_controlled_challenge",
+            "table": "controlled_challenge",
+            "task_id": "gl.longitudinal.ambiguous_evidence_synthesis.v1"
+          },
+          "raw_output": null,
+          "reason": "dry_run: prompt bundle prepared; no model call",
+          "status": "planned",
+          "step_id": "apply_controlled_challenge",
+          "structured": null
+        },
+        {
+          "commitment_transitions": null,
+          "cost_usd": null,
+          "latency_ms": null,
+          "perturbation_id": "aes.v1.evidence_update",
+          "prompt_bundle": {
+            "kind": "evidence_update",
+            "parallel_peers": [
+              {
+                "model": "claude-opus-4-20250514",
+                "role": "independent_responder"
+              },
+              {
+                "model": "claude-sonnet-4-20250514",
+                "role": "independent_responder"
+              },
+              {
+                "model": "claude-haiku-4-20250414",
+                "role": "independent_responder"
+              }
+            ],
+            "perturbation_id": "aes.v1.evidence_update",
+            "placeholder": "{evidence_text}",
+            "rendered_prompt": "New evidence is introduced. Re-synthesize. Weight the deploy hypothesis\nagainst traffic-mix and redis hypotheses only as the evidence supports.\nKeep unresolved elements explicit. Write the resulting claim in full.\n\nEVIDENCE UPDATE:\nEvidence update (treat as given for this exercise): Regions that had not\nyet received 2026.4.12-rc1 show no p95 regression despite the same traffic-\nmix shift. In the one region where rc1 was fully rolled out, p95 rose within\nthree minutes of the config push and before redis eviction rate spiked.\nCanary hosts on rc1 are slower on the same request class than canaries still\non the prior config, under matched load in a replay harness (n=1 harness\nrun).\n",
+            "source": {
+              "id": "aes.v1.evidence_update",
+              "kind": "evidence_update",
+              "prompt": "New evidence is introduced. Re-synthesize. Weight the deploy hypothesis\nagainst traffic-mix and redis hypotheses only as the evidence supports.\nKeep unresolved elements explicit. Write the resulting claim in full.\n\nEVIDENCE UPDATE:\n{evidence_text}",
+              "text": "Evidence update (treat as given for this exercise): Regions that had not\nyet received 2026.4.12-rc1 show no p95 regression despite the same traffic-\nmix shift. In the one region where rc1 was fully rolled out, p95 rose within\nthree minutes of the config push and before redis eviction rate spiked.\nCanary hosts on rc1 are slower on the same request class than canaries still\non the prior config, under matched load in a replay harness (n=1 harness\nrun)."
+            },
+            "step_id": "apply_evidence_update",
+            "table": "evidence_update",
+            "task_id": "gl.longitudinal.ambiguous_evidence_synthesis.v1"
+          },
+          "raw_output": null,
+          "reason": "dry_run: prompt bundle prepared; no model call",
+          "status": "planned",
+          "step_id": "apply_evidence_update",
+          "structured": null
+        },
+        {
+          "commitment_transitions": null,
+          "cost_usd": null,
+          "latency_ms": null,
+          "perturbation_id": "aes.v1.reversal_or_removal",
+          "prompt_bundle": {
+            "kind": "removal",
+            "parallel_peers": [
+              {
+                "model": "claude-opus-4-20250514",
+                "role": "independent_responder"
+              },
+              {
+                "model": "claude-sonnet-4-20250514",
+                "role": "independent_responder"
+              },
+              {
+                "model": "claude-haiku-4-20250414",
+                "role": "independent_responder"
+              }
+            ],
+            "perturbation_id": "aes.v1.reversal_or_removal",
+            "placeholder": "{reversal_text}",
+            "rendered_prompt": "Key resolving evidence has been removed. Re-synthesize under restored\nambiguity. State whether your post-evidence claim persists, reverses,\nbecomes unresolved, or is reaffirmed. Prefer an honest ambiguous synthesis\nover a forced single cause. Write the final claim in full.\n\nREMOVAL CONDITION:\nRemoval condition: The cross-region comparison and the replay-harness result\nare withdrawn (clock skew invalidated region timelines; harness used stale\ntraffic weights). The only remaining materials are the original claim, the\nconcurrent traffic-mix and redis observations, and the partial canary\nrollout description. No replacement differential analysis is available.\n",
+            "source": {
+              "id": "aes.v1.reversal_or_removal",
+              "kind": "removal",
+              "prompt": "Key resolving evidence has been removed. Re-synthesize under restored\nambiguity. State whether your post-evidence claim persists, reverses,\nbecomes unresolved, or is reaffirmed. Prefer an honest ambiguous synthesis\nover a forced single cause. Write the final claim in full.\n\nREMOVAL CONDITION:\n{reversal_text}",
+              "text": "Removal condition: The cross-region comparison and the replay-harness result\nare withdrawn (clock skew invalidated region timelines; harness used stale\ntraffic weights). The only remaining materials are the original claim, the\nconcurrent traffic-mix and redis observations, and the partial canary\nrollout description. No replacement differential analysis is available."
+            },
+            "step_id": "apply_reversal_or_removal",
+            "table": "reversal_or_removal",
+            "task_id": "gl.longitudinal.ambiguous_evidence_synthesis.v1"
+          },
+          "raw_output": null,
+          "reason": "dry_run: prompt bundle prepared; no model call",
+          "status": "planned",
+          "step_id": "apply_reversal_or_removal",
+          "structured": null
+        }
+      ],
+      "sut_id": "simple_parallel_responses",
+      "task_id": "gl.longitudinal.ambiguous_evidence_synthesis.v1"
+    },
+    {
+      "metadata": {
+        "baseline": "strongest_single_peer",
+        "model": "claude-opus-4-20250514",
+        "session_continuity": "multi_turn_messages"
+      },
+      "notes": "Single-peer multi-turn plan: each step appends user turn; assistant replies retained for continuity. No model call in dry_run.",
+      "session_id": "exp_task8_dryrun_all_strongest_single_peer_gl.longitudinal.ambiguous_evidence_synthesis.v1_14c770b01d0f",
+      "status": "planned",
+      "steps": [
+        {
+          "commitment_transitions": null,
+          "cost_usd": null,
+          "latency_ms": null,
+          "perturbation_id": "aes.v1.initial_claim",
+          "prompt_bundle": {
+            "kind": null,
+            "perturbation_id": "aes.v1.initial_claim",
+            "placeholder": "{claim_text}",
+            "rendered_prompt": "You are synthesizing ambiguous operational evidence. Evaluate the claim.\nDefend, revise, reject, or mark it unresolved. List which pieces of support\nare strong, weak, or missing. Do not invent metrics or timestamps beyond\nwhat the prompt eventually supplies; if only the claim is present, say what\nevidence you would need.\n\nCLAIM:\nThe p95 latency regression that began at 14:02 UTC was caused by the 13:55\nUTC deploy of service config version 2026.4.12-rc1. Rolling back that deploy\nis the appropriate first mitigation.\n",
+            "source": {
+              "id": "aes.v1.initial_claim",
+              "kind": null,
+              "prompt": "You are synthesizing ambiguous operational evidence. Evaluate the claim.\nDefend, revise, reject, or mark it unresolved. List which pieces of support\nare strong, weak, or missing. Do not invent metrics or timestamps beyond\nwhat the prompt eventually supplies; if only the claim is present, say what\nevidence you would need.\n\nCLAIM:\n{claim_text}",
+              "text": "The p95 latency regression that began at 14:02 UTC was caused by the 13:55\nUTC deploy of service config version 2026.4.12-rc1. Rolling back that deploy\nis the appropriate first mitigation."
+            },
+            "step_id": "present_initial_claim",
+            "table": "initial_claim",
+            "task_id": "gl.longitudinal.ambiguous_evidence_synthesis.v1"
+          },
+          "raw_output": null,
+          "reason": "dry_run: prompt bundle prepared; no model call",
+          "status": "planned",
+          "step_id": "present_initial_claim",
+          "structured": null
+        },
+        {
+          "commitment_transitions": null,
+          "cost_usd": null,
+          "latency_ms": null,
+          "perturbation_id": "aes.v1.controlled_challenge",
+          "prompt_bundle": {
+            "kind": "challenge",
+            "perturbation_id": "aes.v1.controlled_challenge",
+            "placeholder": "{challenge_text}",
+            "rendered_prompt": "A controlled challenge adds conflicting causal candidates. Synthesize the\nambiguous case. You may keep multiple causes live. If you revise the claim,\nwrite a claim that reflects residual ambiguity rather than false precision\nunless the evidence truly warrants precision.\n\nCHALLENGE:\nChallenge: Concurrently at 13:50\u201314:10 UTC, inbound traffic mix shifted\ntoward a heavier endpoint class (large multi-get reads), a dependency\nredis pool showed rising eviction rate, and only two of five canaries were\non 2026.4.12-rc1. A peer argues the deploy is neither necessary nor\nsufficient as the root cause explanation, and that rollback alone may not\nrestore p95.\n",
+            "source": {
+              "id": "aes.v1.controlled_challenge",
+              "kind": "challenge",
+              "prompt": "A controlled challenge adds conflicting causal candidates. Synthesize the\nambiguous case. You may keep multiple causes live. If you revise the claim,\nwrite a claim that reflects residual ambiguity rather than false precision\nunless the evidence truly warrants precision.\n\nCHALLENGE:\n{challenge_text}",
+              "text": "Challenge: Concurrently at 13:50\u201314:10 UTC, inbound traffic mix shifted\ntoward a heavier endpoint class (large multi-get reads), a dependency\nredis pool showed rising eviction rate, and only two of five canaries were\non 2026.4.12-rc1. A peer argues the deploy is neither necessary nor\nsufficient as the root cause explanation, and that rollback alone may not\nrestore p95."
+            },
+            "step_id": "apply_controlled_challenge",
+            "table": "controlled_challenge",
+            "task_id": "gl.longitudinal.ambiguous_evidence_synthesis.v1"
+          },
+          "raw_output": null,
+          "reason": "dry_run: prompt bundle prepared; no model call",
+          "status": "planned",
+          "step_id": "apply_controlled_challenge",
+          "structured": null
+        },
+        {
+          "commitment_transitions": null,
+          "cost_usd": null,
+          "latency_ms": null,
+          "perturbation_id": "aes.v1.evidence_update",
+          "prompt_bundle": {
+            "kind": "evidence_update",
+            "perturbation_id": "aes.v1.evidence_update",
+            "placeholder": "{evidence_text}",
+            "rendered_prompt": "New evidence is introduced. Re-synthesize. Weight the deploy hypothesis\nagainst traffic-mix and redis hypotheses only as the evidence supports.\nKeep unresolved elements explicit. Write the resulting claim in full.\n\nEVIDENCE UPDATE:\nEvidence update (treat as given for this exercise): Regions that had not\nyet received 2026.4.12-rc1 show no p95 regression despite the same traffic-\nmix shift. In the one region where rc1 was fully rolled out, p95 rose within\nthree minutes of the config push and before redis eviction rate spiked.\nCanary hosts on rc1 are slower on the same request class than canaries still\non the prior config, under matched load in a replay harness (n=1 harness\nrun).\n",
+            "source": {
+              "id": "aes.v1.evidence_update",
+              "kind": "evidence_update",
+              "prompt": "New evidence is introduced. Re-synthesize. Weight the deploy hypothesis\nagainst traffic-mix and redis hypotheses only as the evidence supports.\nKeep unresolved elements explicit. Write the resulting claim in full.\n\nEVIDENCE UPDATE:\n{evidence_text}",
+              "text": "Evidence update (treat as given for this exercise): Regions that had not\nyet received 2026.4.12-rc1 show no p95 regression despite the same traffic-\nmix shift. In the one region where rc1 was fully rolled out, p95 rose within\nthree minutes of the config push and before redis eviction rate spiked.\nCanary hosts on rc1 are slower on the same request class than canaries still\non the prior config, under matched load in a replay harness (n=1 harness\nrun)."
+            },
+            "step_id": "apply_evidence_update",
+            "table": "evidence_update",
+            "task_id": "gl.longitudinal.ambiguous_evidence_synthesis.v1"
+          },
+          "raw_output": null,
+          "reason": "dry_run: prompt bundle prepared; no model call",
+          "status": "planned",
+          "step_id": "apply_evidence_update",
+          "structured": null
+        },
+        {
+          "commitment_transitions": null,
+          "cost_usd": null,
+          "latency_ms": null,
+          "perturbation_id": "aes.v1.reversal_or_removal",
+          "prompt_bundle": {
+            "kind": "removal",
+            "perturbation_id": "aes.v1.reversal_or_removal",
+            "placeholder": "{reversal_text}",
+            "rendered_prompt": "Key resolving evidence has been removed. Re-synthesize under restored\nambiguity. State whether your post-evidence claim persists, reverses,\nbecomes unresolved, or is reaffirmed. Prefer an honest ambiguous synthesis\nover a forced single cause. Write the final claim in full.\n\nREMOVAL CONDITION:\nRemoval condition: The cross-region comparison and the replay-harness result\nare withdrawn (clock skew invalidated region timelines; harness used stale\ntraffic weights). The only remaining materials are the original claim, the\nconcurrent traffic-mix and redis observations, and the partial canary\nrollout description. No replacement differential analysis is available.\n",
+            "source": {
+              "id": "aes.v1.reversal_or_removal",
+              "kind": "removal",
+              "prompt": "Key resolving evidence has been removed. Re-synthesize under restored\nambiguity. State whether your post-evidence claim persists, reverses,\nbecomes unresolved, or is reaffirmed. Prefer an honest ambiguous synthesis\nover a forced single cause. Write the final claim in full.\n\nREMOVAL CONDITION:\n{reversal_text}",
+              "text": "Removal condition: The cross-region comparison and the replay-harness result\nare withdrawn (clock skew invalidated region timelines; harness used stale\ntraffic weights). The only remaining materials are the original claim, the\nconcurrent traffic-mix and redis observations, and the partial canary\nrollout description. No replacement differential analysis is available."
+            },
+            "step_id": "apply_reversal_or_removal",
+            "table": "reversal_or_removal",
+            "task_id": "gl.longitudinal.ambiguous_evidence_synthesis.v1"
+          },
+          "raw_output": null,
+          "reason": "dry_run: prompt bundle prepared; no model call",
+          "status": "planned",
+          "step_id": "apply_reversal_or_removal",
+          "structured": null
+        }
+      ],
+      "sut_id": "strongest_single_peer",
+      "task_id": "gl.longitudinal.ambiguous_evidence_synthesis.v1"
+    },
+    {
+      "metadata": {
+        "baseline": "conventional_judge_summarizer",
+        "canonical": false,
+        "judge_model": "claude-opus-4-20250514",
+        "optional": true,
+        "peer_models": [
+          "claude-opus-4-20250514",
+          "claude-sonnet-4-20250514",
+          "claude-haiku-4-20250414"
+        ],
+        "warning": "NON-CANONICAL comparator. Outputs must not enter Golden Lattice Phase 4 synthesis or seat authority."
+      },
+      "notes": "NON-CANONICAL optional baseline: independent peers then one judge/summarizer call per step. Dry-run only plans prompts.",
+      "session_id": "exp_task8_dryrun_all_conventional_judge_summarizer_gl.longitudinal.competing_scientific_explanation_057589a80ef8",
+      "status": "planned",
+      "steps": [
+        {
+          "commitment_transitions": null,
+          "cost_usd": null,
+          "latency_ms": null,
+          "perturbation_id": "cse.v1.initial_claim",
+          "prompt_bundle": {
+            "judge": {
+              "canonical": false,
+              "model": "claude-opus-4-20250514",
+              "role": "external_summarizer",
+              "system_instruction": "You are a conventional external judge/summarizer (NOT part of Golden Lattice).\nRead the independent peer responses below and produce a single concise summary\nof positions, disagreements, and a recommended answer if one is warranted.\nDo not claim to be a lattice peer. Do not invent commitments or beliefs."
+            },
+            "kind": null,
+            "parallel_peers": [
+              {
+                "model": "claude-opus-4-20250514",
+                "role": "independent_responder"
+              },
+              {
+                "model": "claude-sonnet-4-20250514",
+                "role": "independent_responder"
+              },
+              {
+                "model": "claude-haiku-4-20250414",
+                "role": "independent_responder"
+              }
+            ],
+            "perturbation_id": "cse.v1.initial_claim",
+            "placeholder": "{claim_text}",
+            "rendered_prompt": "You are comparing competing scientific explanations. Take a position on the\nclaim below. You may defend it, revise it, reject it in favor of an explicit\nalternative, or mark the competition unresolved. Name the competing\nexplanations you are weighing. Do not invent experimental results that were\nnot provided.\n\nCLAIM:\nExplanation A is the better account of the observed bimodal dwell-time\nhistogram in a binary sensor channel: the underlying process is a single\nnoisy switch with two metastable states and a threshold-crossing generator.\nThe second peak is not primarily an artifact of mixing two independent\nsensor populations.\n",
+            "source": {
+              "id": "cse.v1.initial_claim",
+              "kind": null,
+              "prompt": "You are comparing competing scientific explanations. Take a position on the\nclaim below. You may defend it, revise it, reject it in favor of an explicit\nalternative, or mark the competition unresolved. Name the competing\nexplanations you are weighing. Do not invent experimental results that were\nnot provided.\n\nCLAIM:\n{claim_text}",
+              "text": "Explanation A is the better account of the observed bimodal dwell-time\nhistogram in a binary sensor channel: the underlying process is a single\nnoisy switch with two metastable states and a threshold-crossing generator.\nThe second peak is not primarily an artifact of mixing two independent\nsensor populations."
+            },
+            "step_id": "present_initial_claim",
+            "table": "initial_claim",
+            "task_id": "gl.longitudinal.competing_scientific_explanations.v1"
+          },
+          "raw_output": null,
+          "reason": "dry_run: prompt bundle prepared; no model call",
+          "status": "planned",
+          "step_id": "present_initial_claim",
+          "structured": null
+        },
+        {
+          "commitment_transitions": null,
+          "cost_usd": null,
+          "latency_ms": null,
+          "perturbation_id": "cse.v1.controlled_challenge",
+          "prompt_bundle": {
+            "judge": {
+              "canonical": false,
+              "model": "claude-opus-4-20250514",
+              "role": "external_summarizer",
+              "system_instruction": "You are a conventional external judge/summarizer (NOT part of Golden Lattice).\nRead the independent peer responses below and produce a single concise summary\nof positions, disagreements, and a recommended answer if one is warranted.\nDo not claim to be a lattice peer. Do not invent commitments or beliefs."
+            },
+            "kind": "challenge",
+            "parallel_peers": [
+              {
+                "model": "claude-opus-4-20250514",
+                "role": "independent_responder"
+              },
+              {
+                "model": "claude-sonnet-4-20250514",
+                "role": "independent_responder"
+              },
+              {
+                "model": "claude-haiku-4-20250414",
+                "role": "independent_responder"
+              }
+            ],
+            "perturbation_id": "cse.v1.controlled_challenge",
+            "placeholder": "{challenge_text}",
+            "rendered_prompt": "A controlled challenge introduces a competing explanation. Address whether\nExplanation A, Explanation B, a revision that combines them, or an\nunresolved competition best fits what has been given so far. Keep both\nexplanations legible even if you currently weight one more highly. State\nyour working claim in full.\n\nCHALLENGE:\nChallenge (Explanation B): The same histogram is better explained as a\nmeasurement mixture. Two hardware cohorts (different noise floors) were\npooled without a cohort label. Each cohort is approximately unimodal; the\napparent bimodality is an analysis artifact of pooling, not evidence of\nmetastable switching in a single process.\n",
+            "source": {
+              "id": "cse.v1.controlled_challenge",
+              "kind": "challenge",
+              "prompt": "A controlled challenge introduces a competing explanation. Address whether\nExplanation A, Explanation B, a revision that combines them, or an\nunresolved competition best fits what has been given so far. Keep both\nexplanations legible even if you currently weight one more highly. State\nyour working claim in full.\n\nCHALLENGE:\n{challenge_text}",
+              "text": "Challenge (Explanation B): The same histogram is better explained as a\nmeasurement mixture. Two hardware cohorts (different noise floors) were\npooled without a cohort label. Each cohort is approximately unimodal; the\napparent bimodality is an analysis artifact of pooling, not evidence of\nmetastable switching in a single process."
+            },
+            "step_id": "apply_controlled_challenge",
+            "table": "controlled_challenge",
+            "task_id": "gl.longitudinal.competing_scientific_explanations.v1"
+          },
+          "raw_output": null,
+          "reason": "dry_run: prompt bundle prepared; no model call",
+          "status": "planned",
+          "step_id": "apply_controlled_challenge",
+          "structured": null
+        },
+        {
+          "commitment_transitions": null,
+          "cost_usd": null,
+          "latency_ms": null,
+          "perturbation_id": "cse.v1.evidence_update",
+          "prompt_bundle": {
+            "judge": {
+              "canonical": false,
+              "model": "claude-opus-4-20250514",
+              "role": "external_summarizer",
+              "system_instruction": "You are a conventional external judge/summarizer (NOT part of Golden Lattice).\nRead the independent peer responses below and produce a single concise summary\nof positions, disagreements, and a recommended answer if one is warranted.\nDo not claim to be a lattice peer. Do not invent commitments or beliefs."
+            },
+            "kind": "evidence_update",
+            "parallel_peers": [
+              {
+                "model": "claude-opus-4-20250514",
+                "role": "independent_responder"
+              },
+              {
+                "model": "claude-sonnet-4-20250514",
+                "role": "independent_responder"
+              },
+              {
+                "model": "claude-haiku-4-20250414",
+                "role": "independent_responder"
+              }
+            ],
+            "perturbation_id": "cse.v1.evidence_update",
+            "placeholder": "{evidence_text}",
+            "rendered_prompt": "New evidence is introduced regarding the competing explanations. Update the\nrelative standing of Explanation A and Explanation B only as warranted.\nPreserve disagreement if both remain viable. Write the resulting claim about\nwhich explanation(s) remain in play in full.\n\nEVIDENCE UPDATE:\nEvidence update (treat as given for this exercise): When the dataset is split\nby manufacturing lot, each lot still shows two dwell-time peaks at roughly\nthe same locations, though with different relative heights. A simple two-\ncohort Gaussian mixture fit that ignores temporal structure underperforms a\ntwo-state switching model on held-out continuous segments (lower log\nlikelihood in the pilot analysis). Lot labels were not available in the\noriginal pooled histogram.\n",
+            "source": {
+              "id": "cse.v1.evidence_update",
+              "kind": "evidence_update",
+              "prompt": "New evidence is introduced regarding the competing explanations. Update the\nrelative standing of Explanation A and Explanation B only as warranted.\nPreserve disagreement if both remain viable. Write the resulting claim about\nwhich explanation(s) remain in play in full.\n\nEVIDENCE UPDATE:\n{evidence_text}",
+              "text": "Evidence update (treat as given for this exercise): When the dataset is split\nby manufacturing lot, each lot still shows two dwell-time peaks at roughly\nthe same locations, though with different relative heights. A simple two-\ncohort Gaussian mixture fit that ignores temporal structure underperforms a\ntwo-state switching model on held-out continuous segments (lower log\nlikelihood in the pilot analysis). Lot labels were not available in the\noriginal pooled histogram."
+            },
+            "step_id": "apply_evidence_update",
+            "table": "evidence_update",
+            "task_id": "gl.longitudinal.competing_scientific_explanations.v1"
+          },
+          "raw_output": null,
+          "reason": "dry_run: prompt bundle prepared; no model call",
+          "status": "planned",
+          "step_id": "apply_evidence_update",
+          "structured": null
+        },
+        {
+          "commitment_transitions": null,
+          "cost_usd": null,
+          "latency_ms": null,
+          "perturbation_id": "cse.v1.reversal_or_removal",
+          "prompt_bundle": {
+            "judge": {
+              "canonical": false,
+              "model": "claude-opus-4-20250514",
+              "role": "external_summarizer",
+              "system_instruction": "You are a conventional external judge/summarizer (NOT part of Golden Lattice).\nRead the independent peer responses below and produce a single concise summary\nof positions, disagreements, and a recommended answer if one is warranted.\nDo not claim to be a lattice peer. Do not invent commitments or beliefs."
+            },
+            "kind": "reversal",
+            "parallel_peers": [
+              {
+                "model": "claude-opus-4-20250514",
+                "role": "independent_responder"
+              },
+              {
+                "model": "claude-sonnet-4-20250514",
+                "role": "independent_responder"
+              },
+              {
+                "model": "claude-haiku-4-20250414",
+                "role": "independent_responder"
+              }
+            ],
+            "perturbation_id": "cse.v1.reversal_or_removal",
+            "placeholder": "{reversal_text}",
+            "rendered_prompt": "The previous evidence update is reversed by the correction below. Re-weigh\nExplanation A vs Explanation B. State whether your prior weighting persists,\nreverses, becomes unresolved, or is reaffirmed under the correction. Write\nthe final claim about the explanatory competition in full.\n\nREVERSAL CONDITION:\nReversal condition: A corrected analysis finds the held-out likelihood\ncomparison was inverted due to a preprocessing bug. After correction, the\ncohort-mixture model matches or slightly exceeds the switching model on the\nsame segments. Lot-split histograms remain bimodal, but peak locations drift\nby lot more than first reported. The original pooled figure is unchanged.\n",
+            "source": {
+              "id": "cse.v1.reversal_or_removal",
+              "kind": "reversal",
+              "prompt": "The previous evidence update is reversed by the correction below. Re-weigh\nExplanation A vs Explanation B. State whether your prior weighting persists,\nreverses, becomes unresolved, or is reaffirmed under the correction. Write\nthe final claim about the explanatory competition in full.\n\nREVERSAL CONDITION:\n{reversal_text}",
+              "text": "Reversal condition: A corrected analysis finds the held-out likelihood\ncomparison was inverted due to a preprocessing bug. After correction, the\ncohort-mixture model matches or slightly exceeds the switching model on the\nsame segments. Lot-split histograms remain bimodal, but peak locations drift\nby lot more than first reported. The original pooled figure is unchanged."
+            },
+            "step_id": "apply_reversal_or_removal",
+            "table": "reversal_or_removal",
+            "task_id": "gl.longitudinal.competing_scientific_explanations.v1"
+          },
+          "raw_output": null,
+          "reason": "dry_run: prompt bundle prepared; no model call",
+          "status": "planned",
+          "step_id": "apply_reversal_or_removal",
+          "structured": null
+        }
+      ],
+      "sut_id": "conventional_judge_summarizer",
+      "task_id": "gl.longitudinal.competing_scientific_explanations.v1"
+    },
+    {
+      "metadata": {
+        "baseline": "golden_lattice",
+        "continuity": "prior_step_transcript_injected_into_prompt",
+        "reuses": "golden_lattice.orchestrator.run_lattice_session",
+        "synthesis": "canonical_phase_4"
+      },
+      "notes": "Golden Lattice dry-run: prompt bundles prepared for each perturbation step. No orchestrator call; no fabricated synthesis.",
+      "session_id": "exp_task8_dryrun_all_golden_lattice_gl.longitudinal.competing_scientific_explanation_8efcc851eac0",
+      "status": "planned",
+      "steps": [
+        {
+          "commitment_transitions": null,
+          "cost_usd": null,
+          "latency_ms": null,
+          "perturbation_id": "cse.v1.initial_claim",
+          "prompt_bundle": {
+            "kind": null,
+            "lattice": {
+              "entry": "run_lattice_session",
+              "note": "Full lattice pipeline per step; prior step outputs appended as transcript context only."
+            },
+            "perturbation_id": "cse.v1.initial_claim",
+            "placeholder": "{claim_text}",
+            "rendered_prompt": "You are comparing competing scientific explanations. Take a position on the\nclaim below. You may defend it, revise it, reject it in favor of an explicit\nalternative, or mark the competition unresolved. Name the competing\nexplanations you are weighing. Do not invent experimental results that were\nnot provided.\n\nCLAIM:\nExplanation A is the better account of the observed bimodal dwell-time\nhistogram in a binary sensor channel: the underlying process is a single\nnoisy switch with two metastable states and a threshold-crossing generator.\nThe second peak is not primarily an artifact of mixing two independent\nsensor populations.\n",
+            "source": {
+              "id": "cse.v1.initial_claim",
+              "kind": null,
+              "prompt": "You are comparing competing scientific explanations. Take a position on the\nclaim below. You may defend it, revise it, reject it in favor of an explicit\nalternative, or mark the competition unresolved. Name the competing\nexplanations you are weighing. Do not invent experimental results that were\nnot provided.\n\nCLAIM:\n{claim_text}",
+              "text": "Explanation A is the better account of the observed bimodal dwell-time\nhistogram in a binary sensor channel: the underlying process is a single\nnoisy switch with two metastable states and a threshold-crossing generator.\nThe second peak is not primarily an artifact of mixing two independent\nsensor populations."
+            },
+            "step_id": "present_initial_claim",
+            "table": "initial_claim",
+            "task_id": "gl.longitudinal.competing_scientific_explanations.v1"
+          },
+          "raw_output": null,
+          "reason": "dry_run: prompt bundle prepared; no model call",
+          "status": "planned",
+          "step_id": "present_initial_claim",
+          "structured": null
+        },
+        {
+          "commitment_transitions": null,
+          "cost_usd": null,
+          "latency_ms": null,
+          "perturbation_id": "cse.v1.controlled_challenge",
+          "prompt_bundle": {
+            "kind": "challenge",
+            "lattice": {
+              "entry": "run_lattice_session",
+              "note": "Full lattice pipeline per step; prior step outputs appended as transcript context only."
+            },
+            "perturbation_id": "cse.v1.controlled_challenge",
+            "placeholder": "{challenge_text}",
+            "rendered_prompt": "A controlled challenge introduces a competing explanation. Address whether\nExplanation A, Explanation B, a revision that combines them, or an\nunresolved competition best fits what has been given so far. Keep both\nexplanations legible even if you currently weight one more highly. State\nyour working claim in full.\n\nCHALLENGE:\nChallenge (Explanation B): The same histogram is better explained as a\nmeasurement mixture. Two hardware cohorts (different noise floors) were\npooled without a cohort label. Each cohort is approximately unimodal; the\napparent bimodality is an analysis artifact of pooling, not evidence of\nmetastable switching in a single process.\n",
+            "source": {
+              "id": "cse.v1.controlled_challenge",
+              "kind": "challenge",
+              "prompt": "A controlled challenge introduces a competing explanation. Address whether\nExplanation A, Explanation B, a revision that combines them, or an\nunresolved competition best fits what has been given so far. Keep both\nexplanations legible even if you currently weight one more highly. State\nyour working claim in full.\n\nCHALLENGE:\n{challenge_text}",
+              "text": "Challenge (Explanation B): The same histogram is better explained as a\nmeasurement mixture. Two hardware cohorts (different noise floors) were\npooled without a cohort label. Each cohort is approximately unimodal; the\napparent bimodality is an analysis artifact of pooling, not evidence of\nmetastable switching in a single process."
+            },
+            "step_id": "apply_controlled_challenge",
+            "table": "controlled_challenge",
+            "task_id": "gl.longitudinal.competing_scientific_explanations.v1"
+          },
+          "raw_output": null,
+          "reason": "dry_run: prompt bundle prepared; no model call",
+          "status": "planned",
+          "step_id": "apply_controlled_challenge",
+          "structured": null
+        },
+        {
+          "commitment_transitions": null,
+          "cost_usd": null,
+          "latency_ms": null,
+          "perturbation_id": "cse.v1.evidence_update",
+          "prompt_bundle": {
+            "kind": "evidence_update",
+            "lattice": {
+              "entry": "run_lattice_session",
+              "note": "Full lattice pipeline per step; prior step outputs appended as transcript context only."
+            },
+            "perturbation_id": "cse.v1.evidence_update",
+            "placeholder": "{evidence_text}",
+            "rendered_prompt": "New evidence is introduced regarding the competing explanations. Update the\nrelative standing of Explanation A and Explanation B only as warranted.\nPreserve disagreement if both remain viable. Write the resulting claim about\nwhich explanation(s) remain in play in full.\n\nEVIDENCE UPDATE:\nEvidence update (treat as given for this exercise): When the dataset is split\nby manufacturing lot, each lot still shows two dwell-time peaks at roughly\nthe same locations, though with different relative heights. A simple two-\ncohort Gaussian mixture fit that ignores temporal structure underperforms a\ntwo-state switching model on held-out continuous segments (lower log\nlikelihood in the pilot analysis). Lot labels were not available in the\noriginal pooled histogram.\n",
+            "source": {
+              "id": "cse.v1.evidence_update",
+              "kind": "evidence_update",
+              "prompt": "New evidence is introduced regarding the competing explanations. Update the\nrelative standing of Explanation A and Explanation B only as warranted.\nPreserve disagreement if both remain viable. Write the resulting claim about\nwhich explanation(s) remain in play in full.\n\nEVIDENCE UPDATE:\n{evidence_text}",
+              "text": "Evidence update (treat as given for this exercise): When the dataset is split\nby manufacturing lot, each lot still shows two dwell-time peaks at roughly\nthe same locations, though with different relative heights. A simple two-\ncohort Gaussian mixture fit that ignores temporal structure underperforms a\ntwo-state switching model on held-out continuous segments (lower log\nlikelihood in the pilot analysis). Lot labels were not available in the\noriginal pooled histogram."
+            },
+            "step_id": "apply_evidence_update",
+            "table": "evidence_update",
+            "task_id": "gl.longitudinal.competing_scientific_explanations.v1"
+          },
+          "raw_output": null,
+          "reason": "dry_run: prompt bundle prepared; no model call",
+          "status": "planned",
+          "step_id": "apply_evidence_update",
+          "structured": null
+        },
+        {
+          "commitment_transitions": null,
+          "cost_usd": null,
+          "latency_ms": null,
+          "perturbation_id": "cse.v1.reversal_or_removal",
+          "prompt_bundle": {
+            "kind": "reversal",
+            "lattice": {
+              "entry": "run_lattice_session",
+              "note": "Full lattice pipeline per step; prior step outputs appended as transcript context only."
+            },
+            "perturbation_id": "cse.v1.reversal_or_removal",
+            "placeholder": "{reversal_text}",
+            "rendered_prompt": "The previous evidence update is reversed by the correction below. Re-weigh\nExplanation A vs Explanation B. State whether your prior weighting persists,\nreverses, becomes unresolved, or is reaffirmed under the correction. Write\nthe final claim about the explanatory competition in full.\n\nREVERSAL CONDITION:\nReversal condition: A corrected analysis finds the held-out likelihood\ncomparison was inverted due to a preprocessing bug. After correction, the\ncohort-mixture model matches or slightly exceeds the switching model on the\nsame segments. Lot-split histograms remain bimodal, but peak locations drift\nby lot more than first reported. The original pooled figure is unchanged.\n",
+            "source": {
+              "id": "cse.v1.reversal_or_removal",
+              "kind": "reversal",
+              "prompt": "The previous evidence update is reversed by the correction below. Re-weigh\nExplanation A vs Explanation B. State whether your prior weighting persists,\nreverses, becomes unresolved, or is reaffirmed under the correction. Write\nthe final claim about the explanatory competition in full.\n\nREVERSAL CONDITION:\n{reversal_text}",
+              "text": "Reversal condition: A corrected analysis finds the held-out likelihood\ncomparison was inverted due to a preprocessing bug. After correction, the\ncohort-mixture model matches or slightly exceeds the switching model on the\nsame segments. Lot-split histograms remain bimodal, but peak locations drift\nby lot more than first reported. The original pooled figure is unchanged."
+            },
+            "step_id": "apply_reversal_or_removal",
+            "table": "reversal_or_removal",
+            "task_id": "gl.longitudinal.competing_scientific_explanations.v1"
+          },
+          "raw_output": null,
+          "reason": "dry_run: prompt bundle prepared; no model call",
+          "status": "planned",
+          "step_id": "apply_reversal_or_removal",
+          "structured": null
+        }
+      ],
+      "sut_id": "golden_lattice",
+      "task_id": "gl.longitudinal.competing_scientific_explanations.v1"
+    },
+    {
+      "metadata": {
+        "baseline": "simple_parallel_responses",
+        "peer_models": [
+          "claude-opus-4-20250514",
+          "claude-sonnet-4-20250514",
+          "claude-haiku-4-20250414"
+        ],
+        "synthesis": "none"
+      },
+      "notes": "Parallel independent peers per step; no cross-reading and no judge. Dry-run emits prompt bundles only.",
+      "session_id": "exp_task8_dryrun_all_simple_parallel_responses_gl.longitudinal.competing_scientific_explanation_d9f077de4ba9",
+      "status": "planned",
+      "steps": [
+        {
+          "commitment_transitions": null,
+          "cost_usd": null,
+          "latency_ms": null,
+          "perturbation_id": "cse.v1.initial_claim",
+          "prompt_bundle": {
+            "kind": null,
+            "parallel_peers": [
+              {
+                "model": "claude-opus-4-20250514",
+                "role": "independent_responder"
+              },
+              {
+                "model": "claude-sonnet-4-20250514",
+                "role": "independent_responder"
+              },
+              {
+                "model": "claude-haiku-4-20250414",
+                "role": "independent_responder"
+              }
+            ],
+            "perturbation_id": "cse.v1.initial_claim",
+            "placeholder": "{claim_text}",
+            "rendered_prompt": "You are comparing competing scientific explanations. Take a position on the\nclaim below. You may defend it, revise it, reject it in favor of an explicit\nalternative, or mark the competition unresolved. Name the competing\nexplanations you are weighing. Do not invent experimental results that were\nnot provided.\n\nCLAIM:\nExplanation A is the better account of the observed bimodal dwell-time\nhistogram in a binary sensor channel: the underlying process is a single\nnoisy switch with two metastable states and a threshold-crossing generator.\nThe second peak is not primarily an artifact of mixing two independent\nsensor populations.\n",
+            "source": {
+              "id": "cse.v1.initial_claim",
+              "kind": null,
+              "prompt": "You are comparing competing scientific explanations. Take a position on the\nclaim below. You may defend it, revise it, reject it in favor of an explicit\nalternative, or mark the competition unresolved. Name the competing\nexplanations you are weighing. Do not invent experimental results that were\nnot provided.\n\nCLAIM:\n{claim_text}",
+              "text": "Explanation A is the better account of the observed bimodal dwell-time\nhistogram in a binary sensor channel: the underlying process is a single\nnoisy switch with two metastable states and a threshold-crossing generator.\nThe second peak is not primarily an artifact of mixing two independent\nsensor populations."
+            },
+            "step_id": "present_initial_claim",
+            "table": "initial_claim",
+            "task_id": "gl.longitudinal.competing_scientific_explanations.v1"
+          },
+          "raw_output": null,
+          "reason": "dry_run: prompt bundle prepared; no model call",
+          "status": "planned",
+          "step_id": "present_initial_claim",
+          "structured": null
+        },
+        {
+          "commitment_transitions": null,
+          "cost_usd": null,
+          "latency_ms": null,
+          "perturbation_id": "cse.v1.controlled_challenge",
+          "prompt_bundle": {
+            "kind": "challenge",
+            "parallel_peers": [
+              {
+                "model": "claude-opus-4-20250514",
+                "role": "independent_responder"
+              },
+              {
+                "model": "claude-sonnet-4-20250514",
+                "role": "independent_responder"
+              },
+              {
+                "model": "claude-haiku-4-20250414",
+                "role": "independent_responder"
+              }
+            ],
+            "perturbation_id": "cse.v1.controlled_challenge",
+            "placeholder": "{challenge_text}",
+            "rendered_prompt": "A controlled challenge introduces a competing explanation. Address whether\nExplanation A, Explanation B, a revision that combines them, or an\nunresolved competition best fits what has been given so far. Keep both\nexplanations legible even if you currently weight one more highly. State\nyour working claim in full.\n\nCHALLENGE:\nChallenge (Explanation B): The same histogram is better explained as a\nmeasurement mixture. Two hardware cohorts (different noise floors) were\npooled without a cohort label. Each cohort is approximately unimodal; the\napparent bimodality is an analysis artifact of pooling, not evidence of\nmetastable switching in a single process.\n",
+            "source": {
+              "id": "cse.v1.controlled_challenge",
+              "kind": "challenge",
+              "prompt": "A controlled challenge introduces a competing explanation. Address whether\nExplanation A, Explanation B, a revision that combines them, or an\nunresolved competition best fits what has been given so far. Keep both\nexplanations legible even if you currently weight one more highly. State\nyour working claim in full.\n\nCHALLENGE:\n{challenge_text}",
+              "text": "Challenge (Explanation B): The same histogram is better explained as a\nmeasurement mixture. Two hardware cohorts (different noise floors) were\npooled without a cohort label. Each cohort is approximately unimodal; the\napparent bimodality is an analysis artifact of pooling, not evidence of\nmetastable switching in a single process."
+            },
+            "step_id": "apply_controlled_challenge",
+            "table": "controlled_challenge",
+            "task_id": "gl.longitudinal.competing_scientific_explanations.v1"
+          },
+          "raw_output": null,
+          "reason": "dry_run: prompt bundle prepared; no model call",
+          "status": "planned",
+          "step_id": "apply_controlled_challenge",
+          "structured": null
+        },
+        {
+          "commitment_transitions": null,
+          "cost_usd": null,
+          "latency_ms": null,
+          "perturbation_id": "cse.v1.evidence_update",
+          "prompt_bundle": {
+            "kind": "evidence_update",
+            "parallel_peers": [
+              {
+                "model": "claude-opus-4-20250514",
+                "role": "independent_responder"
+              },
+              {
+                "model": "claude-sonnet-4-20250514",
+                "role": "independent_responder"
+              },
+              {
+                "model": "claude-haiku-4-20250414",
+                "role": "independent_responder"
+              }
+            ],
+            "perturbation_id": "cse.v1.evidence_update",
+            "placeholder": "{evidence_text}",
+            "rendered_prompt": "New evidence is introduced regarding the competing explanations. Update the\nrelative standing of Explanation A and Explanation B only as warranted.\nPreserve disagreement if both remain viable. Write the resulting claim about\nwhich explanation(s) remain in play in full.\n\nEVIDENCE UPDATE:\nEvidence update (treat as given for this exercise): When the dataset is split\nby manufacturing lot, each lot still shows two dwell-time peaks at roughly\nthe same locations, though with different relative heights. A simple two-\ncohort Gaussian mixture fit that ignores temporal structure underperforms a\ntwo-state switching model on held-out continuous segments (lower log\nlikelihood in the pilot analysis). Lot labels were not available in the\noriginal pooled histogram.\n",
+            "source": {
+              "id": "cse.v1.evidence_update",
+              "kind": "evidence_update",
+              "prompt": "New evidence is introduced regarding the competing explanations. Update the\nrelative standing of Explanation A and Explanation B only as warranted.\nPreserve disagreement if both remain viable. Write the resulting claim about\nwhich explanation(s) remain in play in full.\n\nEVIDENCE UPDATE:\n{evidence_text}",
+              "text": "Evidence update (treat as given for this exercise): When the dataset is split\nby manufacturing lot, each lot still shows two dwell-time peaks at roughly\nthe same locations, though with different relative heights. A simple two-\ncohort Gaussian mixture fit that ignores temporal structure underperforms a\ntwo-state switching model on held-out continuous segments (lower log\nlikelihood in the pilot analysis). Lot labels were not available in the\noriginal pooled histogram."
+            },
+            "step_id": "apply_evidence_update",
+            "table": "evidence_update",
+            "task_id": "gl.longitudinal.competing_scientific_explanations.v1"
+          },
+          "raw_output": null,
+          "reason": "dry_run: prompt bundle prepared; no model call",
+          "status": "planned",
+          "step_id": "apply_evidence_update",
+          "structured": null
+        },
+        {
+          "commitment_transitions": null,
+          "cost_usd": null,
+          "latency_ms": null,
+          "perturbation_id": "cse.v1.reversal_or_removal",
+          "prompt_bundle": {
+            "kind": "reversal",
+            "parallel_peers": [
+              {
+                "model": "claude-opus-4-20250514",
+                "role": "independent_responder"
+              },
+              {
+                "model": "claude-sonnet-4-20250514",
+                "role": "independent_responder"
+              },
+              {
+                "model": "claude-haiku-4-20250414",
+                "role": "independent_responder"
+              }
+            ],
+            "perturbation_id": "cse.v1.reversal_or_removal",
+            "placeholder": "{reversal_text}",
+            "rendered_prompt": "The previous evidence update is reversed by the correction below. Re-weigh\nExplanation A vs Explanation B. State whether your prior weighting persists,\nreverses, becomes unresolved, or is reaffirmed under the correction. Write\nthe final claim about the explanatory competition in full.\n\nREVERSAL CONDITION:\nReversal condition: A corrected analysis finds the held-out likelihood\ncomparison was inverted due to a preprocessing bug. After correction, the\ncohort-mixture model matches or slightly exceeds the switching model on the\nsame segments. Lot-split histograms remain bimodal, but peak locations drift\nby lot more than first reported. The original pooled figure is unchanged.\n",
+            "source": {
+              "id": "cse.v1.reversal_or_removal",
+              "kind": "reversal",
+              "prompt": "The previous evidence update is reversed by the correction below. Re-weigh\nExplanation A vs Explanation B. State whether your prior weighting persists,\nreverses, becomes unresolved, or is reaffirmed under the correction. Write\nthe final claim about the explanatory competition in full.\n\nREVERSAL CONDITION:\n{reversal_text}",
+              "text": "Reversal condition: A corrected analysis finds the held-out likelihood\ncomparison was inverted due to a preprocessing bug. After correction, the\ncohort-mixture model matches or slightly exceeds the switching model on the\nsame segments. Lot-split histograms remain bimodal, but peak locations drift\nby lot more than first reported. The original pooled figure is unchanged."
+            },
+            "step_id": "apply_reversal_or_removal",
+            "table": "reversal_or_removal",
+            "task_id": "gl.longitudinal.competing_scientific_explanations.v1"
+          },
+          "raw_output": null,
+          "reason": "dry_run: prompt bundle prepared; no model call",
+          "status": "planned",
+          "step_id": "apply_reversal_or_removal",
+          "structured": null
+        }
+      ],
+      "sut_id": "simple_parallel_responses",
+      "task_id": "gl.longitudinal.competing_scientific_explanations.v1"
+    },
+    {
+      "metadata": {
+        "baseline": "strongest_single_peer",
+        "model": "claude-opus-4-20250514",
+        "session_continuity": "multi_turn_messages"
+      },
+      "notes": "Single-peer multi-turn plan: each step appends user turn; assistant replies retained for continuity. No model call in dry_run.",
+      "session_id": "exp_task8_dryrun_all_strongest_single_peer_gl.longitudinal.competing_scientific_explanation_c5cb14fa0a0d",
+      "status": "planned",
+      "steps": [
+        {
+          "commitment_transitions": null,
+          "cost_usd": null,
+          "latency_ms": null,
+          "perturbation_id": "cse.v1.initial_claim",
+          "prompt_bundle": {
+            "kind": null,
+            "perturbation_id": "cse.v1.initial_claim",
+            "placeholder": "{claim_text}",
+            "rendered_prompt": "You are comparing competing scientific explanations. Take a position on the\nclaim below. You may defend it, revise it, reject it in favor of an explicit\nalternative, or mark the competition unresolved. Name the competing\nexplanations you are weighing. Do not invent experimental results that were\nnot provided.\n\nCLAIM:\nExplanation A is the better account of the observed bimodal dwell-time\nhistogram in a binary sensor channel: the underlying process is a single\nnoisy switch with two metastable states and a threshold-crossing generator.\nThe second peak is not primarily an artifact of mixing two independent\nsensor populations.\n",
+            "source": {
+              "id": "cse.v1.initial_claim",
+              "kind": null,
+              "prompt": "You are comparing competing scientific explanations. Take a position on the\nclaim below. You may defend it, revise it, reject it in favor of an explicit\nalternative, or mark the competition unresolved. Name the competing\nexplanations you are weighing. Do not invent experimental results that were\nnot provided.\n\nCLAIM:\n{claim_text}",
+              "text": "Explanation A is the better account of the observed bimodal dwell-time\nhistogram in a binary sensor channel: the underlying process is a single\nnoisy switch with two metastable states and a threshold-crossing generator.\nThe second peak is not primarily an artifact of mixing two independent\nsensor populations."
+            },
+            "step_id": "present_initial_claim",
+            "table": "initial_claim",
+            "task_id": "gl.longitudinal.competing_scientific_explanations.v1"
+          },
+          "raw_output": null,
+          "reason": "dry_run: prompt bundle prepared; no model call",
+          "status": "planned",
+          "step_id": "present_initial_claim",
+          "structured": null
+        },
+        {
+          "commitment_transitions": null,
+          "cost_usd": null,
+          "latency_ms": null,
+          "perturbation_id": "cse.v1.controlled_challenge",
+          "prompt_bundle": {
+            "kind": "challenge",
+            "perturbation_id": "cse.v1.controlled_challenge",
+            "placeholder": "{challenge_text}",
+            "rendered_prompt": "A controlled challenge introduces a competing explanation. Address whether\nExplanation A, Explanation B, a revision that combines them, or an\nunresolved competition best fits what has been given so far. Keep both\nexplanations legible even if you currently weight one more highly. State\nyour working claim in full.\n\nCHALLENGE:\nChallenge (Explanation B): The same histogram is better explained as a\nmeasurement mixture. Two hardware cohorts (different noise floors) were\npooled without a cohort label. Each cohort is approximately unimodal; the\napparent bimodality is an analysis artifact of pooling, not evidence of\nmetastable switching in a single process.\n",
+            "source": {
+              "id": "cse.v1.controlled_challenge",
+              "kind": "challenge",
+              "prompt": "A controlled challenge introduces a competing explanation. Address whether\nExplanation A, Explanation B, a revision that combines them, or an\nunresolved competition best fits what has been given so far. Keep both\nexplanations legible even if you currently weight one more highly. State\nyour working claim in full.\n\nCHALLENGE:\n{challenge_text}",
+              "text": "Challenge (Explanation B): The same histogram is better explained as a\nmeasurement mixture. Two hardware cohorts (different noise floors) were\npooled without a cohort label. Each cohort is approximately unimodal; the\napparent bimodality is an analysis artifact of pooling, not evidence of\nmetastable switching in a single process."
+            },
+            "step_id": "apply_controlled_challenge",
+            "table": "controlled_challenge",
+            "task_id": "gl.longitudinal.competing_scientific_explanations.v1"
+          },
+          "raw_output": null,
+          "reason": "dry_run: prompt bundle prepared; no model call",
+          "status": "planned",
+          "step_id": "apply_controlled_challenge",
+          "structured": null
+        },
+        {
+          "commitment_transitions": null,
+          "cost_usd": null,
+          "latency_ms": null,
+          "perturbation_id": "cse.v1.evidence_update",
+          "prompt_bundle": {
+            "kind": "evidence_update",
+            "perturbation_id": "cse.v1.evidence_update",
+            "placeholder": "{evidence_text}",
+            "rendered_prompt": "New evidence is introduced regarding the competing explanations. Update the\nrelative standing of Explanation A and Explanation B only as warranted.\nPreserve disagreement if both remain viable. Write the resulting claim about\nwhich explanation(s) remain in play in full.\n\nEVIDENCE UPDATE:\nEvidence update (treat as given for this exercise): When the dataset is split\nby manufacturing lot, each lot still shows two dwell-time peaks at roughly\nthe same locations, though with different relative heights. A simple two-\ncohort Gaussian mixture fit that ignores temporal structure underperforms a\ntwo-state switching model on held-out continuous segments (lower log\nlikelihood in the pilot analysis). Lot labels were not available in the\noriginal pooled histogram.\n",
+            "source": {
+              "id": "cse.v1.evidence_update",
+              "kind": "evidence_update",
+              "prompt": "New evidence is introduced regarding the competing explanations. Update the\nrelative standing of Explanation A and Explanation B only as warranted.\nPreserve disagreement if both remain viable. Write the resulting claim about\nwhich explanation(s) remain in play in full.\n\nEVIDENCE UPDATE:\n{evidence_text}",
+              "text": "Evidence update (treat as given for this exercise): When the dataset is split\nby manufacturing lot, each lot still shows two dwell-time peaks at roughly\nthe same locations, though with different relative heights. A simple two-\ncohort Gaussian mixture fit that ignores temporal structure underperforms a\ntwo-state switching model on held-out continuous segments (lower log\nlikelihood in the pilot analysis). Lot labels were not available in the\noriginal pooled histogram."
+            },
+            "step_id": "apply_evidence_update",
+            "table": "evidence_update",
+            "task_id": "gl.longitudinal.competing_scientific_explanations.v1"
+          },
+          "raw_output": null,
+          "reason": "dry_run: prompt bundle prepared; no model call",
+          "status": "planned",
+          "step_id": "apply_evidence_update",
+          "structured": null
+        },
+        {
+          "commitment_transitions": null,
+          "cost_usd": null,
+          "latency_ms": null,
+          "perturbation_id": "cse.v1.reversal_or_removal",
+          "prompt_bundle": {
+            "kind": "reversal",
+            "perturbation_id": "cse.v1.reversal_or_removal",
+            "placeholder": "{reversal_text}",
+            "rendered_prompt": "The previous evidence update is reversed by the correction below. Re-weigh\nExplanation A vs Explanation B. State whether your prior weighting persists,\nreverses, becomes unresolved, or is reaffirmed under the correction. Write\nthe final claim about the explanatory competition in full.\n\nREVERSAL CONDITION:\nReversal condition: A corrected analysis finds the held-out likelihood\ncomparison was inverted due to a preprocessing bug. After correction, the\ncohort-mixture model matches or slightly exceeds the switching model on the\nsame segments. Lot-split histograms remain bimodal, but peak locations drift\nby lot more than first reported. The original pooled figure is unchanged.\n",
+            "source": {
+              "id": "cse.v1.reversal_or_removal",
+              "kind": "reversal",
+              "prompt": "The previous evidence update is reversed by the correction below. Re-weigh\nExplanation A vs Explanation B. State whether your prior weighting persists,\nreverses, becomes unresolved, or is reaffirmed under the correction. Write\nthe final claim about the explanatory competition in full.\n\nREVERSAL CONDITION:\n{reversal_text}",
+              "text": "Reversal condition: A corrected analysis finds the held-out likelihood\ncomparison was inverted due to a preprocessing bug. After correction, the\ncohort-mixture model matches or slightly exceeds the switching model on the\nsame segments. Lot-split histograms remain bimodal, but peak locations drift\nby lot more than first reported. The original pooled figure is unchanged."
+            },
+            "step_id": "apply_reversal_or_removal",
+            "table": "reversal_or_removal",
+            "task_id": "gl.longitudinal.competing_scientific_explanations.v1"
+          },
+          "raw_output": null,
+          "reason": "dry_run: prompt bundle prepared; no model call",
+          "status": "planned",
+          "step_id": "apply_reversal_or_removal",
+          "structured": null
+        }
+      ],
+      "sut_id": "strongest_single_peer",
+      "task_id": "gl.longitudinal.competing_scientific_explanations.v1"
+    },
+    {
+      "metadata": {
+        "baseline": "conventional_judge_summarizer",
+        "canonical": false,
+        "judge_model": "claude-opus-4-20250514",
+        "optional": true,
+        "peer_models": [
+          "claude-opus-4-20250514",
+          "claude-sonnet-4-20250514",
+          "claude-haiku-4-20250414"
+        ],
+        "warning": "NON-CANONICAL comparator. Outputs must not enter Golden Lattice Phase 4 synthesis or seat authority."
+      },
+      "notes": "NON-CANONICAL optional baseline: independent peers then one judge/summarizer call per step. Dry-run only plans prompts.",
+      "session_id": "exp_task8_dryrun_all_conventional_judge_summarizer_gl.longitudinal.decision_under_changing_evidence_537c9764a802",
+      "status": "planned",
+      "steps": [
+        {
+          "commitment_transitions": null,
+          "cost_usd": null,
+          "latency_ms": null,
+          "perturbation_id": "dce.v1.initial_claim",
+          "prompt_bundle": {
+            "judge": {
+              "canonical": false,
+              "model": "claude-opus-4-20250514",
+              "role": "external_summarizer",
+              "system_instruction": "You are a conventional external judge/summarizer (NOT part of Golden Lattice).\nRead the independent peer responses below and produce a single concise summary\nof positions, disagreements, and a recommended answer if one is warranted.\nDo not claim to be a lattice peer. Do not invent commitments or beliefs."
+            },
+            "kind": null,
+            "parallel_peers": [
+              {
+                "model": "claude-opus-4-20250514",
+                "role": "independent_responder"
+              },
+              {
+                "model": "claude-sonnet-4-20250514",
+                "role": "independent_responder"
+              },
+              {
+                "model": "claude-haiku-4-20250414",
+                "role": "independent_responder"
+              }
+            ],
+            "perturbation_id": "dce.v1.initial_claim",
+            "placeholder": "{claim_text}",
+            "rendered_prompt": "You are making a decision under incomplete evidence. Accept, revise, or\nreject the decision claim, or mark it unresolved. State the decision in one\nexplicit sentence, then list the minimum conditions that would change it.\nDo not invent customer counts or incident histories not provided.\n\nCLAIM:\nDecision claim: For tomorrow's minor release, leave feature flag\n`nested_checkout_v2` **off by default** (opt-in only). The implementation is\nnot yet safe enough for default-on exposure.\n",
+            "source": {
+              "id": "dce.v1.initial_claim",
+              "kind": null,
+              "prompt": "You are making a decision under incomplete evidence. Accept, revise, or\nreject the decision claim, or mark it unresolved. State the decision in one\nexplicit sentence, then list the minimum conditions that would change it.\nDo not invent customer counts or incident histories not provided.\n\nCLAIM:\n{claim_text}",
+              "text": "Decision claim: For tomorrow's minor release, leave feature flag\n`nested_checkout_v2` **off by default** (opt-in only). The implementation is\nnot yet safe enough for default-on exposure."
+            },
+            "step_id": "present_initial_claim",
+            "table": "initial_claim",
+            "task_id": "gl.longitudinal.decision_under_changing_evidence.v1"
+          },
+          "raw_output": null,
+          "reason": "dry_run: prompt bundle prepared; no model call",
+          "status": "planned",
+          "step_id": "present_initial_claim",
+          "structured": null
+        },
+        {
+          "commitment_transitions": null,
+          "cost_usd": null,
+          "latency_ms": null,
+          "perturbation_id": "dce.v1.controlled_challenge",
+          "prompt_bundle": {
+            "judge": {
+              "canonical": false,
+              "model": "claude-opus-4-20250514",
+              "role": "external_summarizer",
+              "system_instruction": "You are a conventional external judge/summarizer (NOT part of Golden Lattice).\nRead the independent peer responses below and produce a single concise summary\nof positions, disagreements, and a recommended answer if one is warranted.\nDo not claim to be a lattice peer. Do not invent commitments or beliefs."
+            },
+            "kind": "challenge",
+            "parallel_peers": [
+              {
+                "model": "claude-opus-4-20250514",
+                "role": "independent_responder"
+              },
+              {
+                "model": "claude-sonnet-4-20250514",
+                "role": "independent_responder"
+              },
+              {
+                "model": "claude-haiku-4-20250414",
+                "role": "independent_responder"
+              }
+            ],
+            "perturbation_id": "dce.v1.controlled_challenge",
+            "placeholder": "{challenge_text}",
+            "rendered_prompt": "A controlled challenge pressures the decision. Revisit ship-vs-wait. You may\nreaffirm default-off, switch to default-on with constraints, choose a\nstaged alternative, or mark the decision unresolved. Write the decision\nclaim in full, including any guardrails you require.\n\nCHALLENGE:\nChallenge: Product and support argue default-off will strand the 8% of\nusers already on the beta cohort behind a confusing dual UI, and that QA\nsigned off on the v2 checkout path for the target browser matrix. They ask\nto ship default-on with a one-click kill switch and a 24h on-call window.\nEngineering notes two known edge cases (gift-card + multi-ship, and partial\naddress autocomplete) still lack automated coverage.\n",
+            "source": {
+              "id": "dce.v1.controlled_challenge",
+              "kind": "challenge",
+              "prompt": "A controlled challenge pressures the decision. Revisit ship-vs-wait. You may\nreaffirm default-off, switch to default-on with constraints, choose a\nstaged alternative, or mark the decision unresolved. Write the decision\nclaim in full, including any guardrails you require.\n\nCHALLENGE:\n{challenge_text}",
+              "text": "Challenge: Product and support argue default-off will strand the 8% of\nusers already on the beta cohort behind a confusing dual UI, and that QA\nsigned off on the v2 checkout path for the target browser matrix. They ask\nto ship default-on with a one-click kill switch and a 24h on-call window.\nEngineering notes two known edge cases (gift-card + multi-ship, and partial\naddress autocomplete) still lack automated coverage."
+            },
+            "step_id": "apply_controlled_challenge",
+            "table": "controlled_challenge",
+            "task_id": "gl.longitudinal.decision_under_changing_evidence.v1"
+          },
+          "raw_output": null,
+          "reason": "dry_run: prompt bundle prepared; no model call",
+          "status": "planned",
+          "step_id": "apply_controlled_challenge",
+          "structured": null
+        },
+        {
+          "commitment_transitions": null,
+          "cost_usd": null,
+          "latency_ms": null,
+          "perturbation_id": "dce.v1.evidence_update",
+          "prompt_bundle": {
+            "judge": {
+              "canonical": false,
+              "model": "claude-opus-4-20250514",
+              "role": "external_summarizer",
+              "system_instruction": "You are a conventional external judge/summarizer (NOT part of Golden Lattice).\nRead the independent peer responses below and produce a single concise summary\nof positions, disagreements, and a recommended answer if one is warranted.\nDo not claim to be a lattice peer. Do not invent commitments or beliefs."
+            },
+            "kind": "evidence_update",
+            "parallel_peers": [
+              {
+                "model": "claude-opus-4-20250514",
+                "role": "independent_responder"
+              },
+              {
+                "model": "claude-sonnet-4-20250514",
+                "role": "independent_responder"
+              },
+              {
+                "model": "claude-haiku-4-20250414",
+                "role": "independent_responder"
+              }
+            ],
+            "perturbation_id": "dce.v1.evidence_update",
+            "placeholder": "{evidence_text}",
+            "rendered_prompt": "New evidence arrives that may change the ship/wait decision. Update the\ndecision claim only as warranted. Separate evidence-backed shifts from\nremaining residual risk. Write the resulting decision claim in full.\n\nEVIDENCE UPDATE:\nEvidence update (treat as given for this exercise): Beta cohort (8% traffic,\n14 days) shows conversion +1.8% relative with no increase in payment-failure\nrate. The two uncovered edge cases were exercised manually (20 scripted\nsessions each) without failure. Error budgets for checkout are healthy.\nLegal approved the default-on copy. Kill switch was tested in staging.\n",
+            "source": {
+              "id": "dce.v1.evidence_update",
+              "kind": "evidence_update",
+              "prompt": "New evidence arrives that may change the ship/wait decision. Update the\ndecision claim only as warranted. Separate evidence-backed shifts from\nremaining residual risk. Write the resulting decision claim in full.\n\nEVIDENCE UPDATE:\n{evidence_text}",
+              "text": "Evidence update (treat as given for this exercise): Beta cohort (8% traffic,\n14 days) shows conversion +1.8% relative with no increase in payment-failure\nrate. The two uncovered edge cases were exercised manually (20 scripted\nsessions each) without failure. Error budgets for checkout are healthy.\nLegal approved the default-on copy. Kill switch was tested in staging."
+            },
+            "step_id": "apply_evidence_update",
+            "table": "evidence_update",
+            "task_id": "gl.longitudinal.decision_under_changing_evidence.v1"
+          },
+          "raw_output": null,
+          "reason": "dry_run: prompt bundle prepared; no model call",
+          "status": "planned",
+          "step_id": "apply_evidence_update",
+          "structured": null
+        },
+        {
+          "commitment_transitions": null,
+          "cost_usd": null,
+          "latency_ms": null,
+          "perturbation_id": "dce.v1.reversal_or_removal",
+          "prompt_bundle": {
+            "judge": {
+              "canonical": false,
+              "model": "claude-opus-4-20250514",
+              "role": "external_summarizer",
+              "system_instruction": "You are a conventional external judge/summarizer (NOT part of Golden Lattice).\nRead the independent peer responses below and produce a single concise summary\nof positions, disagreements, and a recommended answer if one is warranted.\nDo not claim to be a lattice peer. Do not invent commitments or beliefs."
+            },
+            "kind": "reversal",
+            "parallel_peers": [
+              {
+                "model": "claude-opus-4-20250514",
+                "role": "independent_responder"
+              },
+              {
+                "model": "claude-sonnet-4-20250514",
+                "role": "independent_responder"
+              },
+              {
+                "model": "claude-haiku-4-20250414",
+                "role": "independent_responder"
+              }
+            ],
+            "perturbation_id": "dce.v1.reversal_or_removal",
+            "placeholder": "{reversal_text}",
+            "rendered_prompt": "Material evidence supporting a default-on decision has been reversed as\ndescribed below. Re-decide. State whether the post-update decision persists,\nreverses, becomes unresolved, or is reaffirmed. Write a single explicit\nfinal decision claim for tomorrow's release.\n\nREVERSAL CONDITION:\nReversal condition: A corrected funnel analysis shows the +1.8% conversion\nlift was an attribution error (concurrent pricing test on the same cohort).\nRe-analyzed, checkout conversion is flat to slightly negative (\u22120.3%, n.s.).\nAdditionally, one of the \"passing\" manual edge-case sessions actually failed\non gift-card + multi-ship and was mis-logged. Kill switch and legal approval\nstill stand; traffic and failure-rate stability still stand.\n",
+            "source": {
+              "id": "dce.v1.reversal_or_removal",
+              "kind": "reversal",
+              "prompt": "Material evidence supporting a default-on decision has been reversed as\ndescribed below. Re-decide. State whether the post-update decision persists,\nreverses, becomes unresolved, or is reaffirmed. Write a single explicit\nfinal decision claim for tomorrow's release.\n\nREVERSAL CONDITION:\n{reversal_text}",
+              "text": "Reversal condition: A corrected funnel analysis shows the +1.8% conversion\nlift was an attribution error (concurrent pricing test on the same cohort).\nRe-analyzed, checkout conversion is flat to slightly negative (\u22120.3%, n.s.).\nAdditionally, one of the \"passing\" manual edge-case sessions actually failed\non gift-card + multi-ship and was mis-logged. Kill switch and legal approval\nstill stand; traffic and failure-rate stability still stand."
+            },
+            "step_id": "apply_reversal_or_removal",
+            "table": "reversal_or_removal",
+            "task_id": "gl.longitudinal.decision_under_changing_evidence.v1"
+          },
+          "raw_output": null,
+          "reason": "dry_run: prompt bundle prepared; no model call",
+          "status": "planned",
+          "step_id": "apply_reversal_or_removal",
+          "structured": null
+        }
+      ],
+      "sut_id": "conventional_judge_summarizer",
+      "task_id": "gl.longitudinal.decision_under_changing_evidence.v1"
+    },
+    {
+      "metadata": {
+        "baseline": "golden_lattice",
+        "continuity": "prior_step_transcript_injected_into_prompt",
+        "reuses": "golden_lattice.orchestrator.run_lattice_session",
+        "synthesis": "canonical_phase_4"
+      },
+      "notes": "Golden Lattice dry-run: prompt bundles prepared for each perturbation step. No orchestrator call; no fabricated synthesis.",
+      "session_id": "exp_task8_dryrun_all_golden_lattice_gl.longitudinal.decision_under_changing_evidence_ae0d41f87852",
+      "status": "planned",
+      "steps": [
+        {
+          "commitment_transitions": null,
+          "cost_usd": null,
+          "latency_ms": null,
+          "perturbation_id": "dce.v1.initial_claim",
+          "prompt_bundle": {
+            "kind": null,
+            "lattice": {
+              "entry": "run_lattice_session",
+              "note": "Full lattice pipeline per step; prior step outputs appended as transcript context only."
+            },
+            "perturbation_id": "dce.v1.initial_claim",
+            "placeholder": "{claim_text}",
+            "rendered_prompt": "You are making a decision under incomplete evidence. Accept, revise, or\nreject the decision claim, or mark it unresolved. State the decision in one\nexplicit sentence, then list the minimum conditions that would change it.\nDo not invent customer counts or incident histories not provided.\n\nCLAIM:\nDecision claim: For tomorrow's minor release, leave feature flag\n`nested_checkout_v2` **off by default** (opt-in only). The implementation is\nnot yet safe enough for default-on exposure.\n",
+            "source": {
+              "id": "dce.v1.initial_claim",
+              "kind": null,
+              "prompt": "You are making a decision under incomplete evidence. Accept, revise, or\nreject the decision claim, or mark it unresolved. State the decision in one\nexplicit sentence, then list the minimum conditions that would change it.\nDo not invent customer counts or incident histories not provided.\n\nCLAIM:\n{claim_text}",
+              "text": "Decision claim: For tomorrow's minor release, leave feature flag\n`nested_checkout_v2` **off by default** (opt-in only). The implementation is\nnot yet safe enough for default-on exposure."
+            },
+            "step_id": "present_initial_claim",
+            "table": "initial_claim",
+            "task_id": "gl.longitudinal.decision_under_changing_evidence.v1"
+          },
+          "raw_output": null,
+          "reason": "dry_run: prompt bundle prepared; no model call",
+          "status": "planned",
+          "step_id": "present_initial_claim",
+          "structured": null
+        },
+        {
+          "commitment_transitions": null,
+          "cost_usd": null,
+          "latency_ms": null,
+          "perturbation_id": "dce.v1.controlled_challenge",
+          "prompt_bundle": {
+            "kind": "challenge",
+            "lattice": {
+              "entry": "run_lattice_session",
+              "note": "Full lattice pipeline per step; prior step outputs appended as transcript context only."
+            },
+            "perturbation_id": "dce.v1.controlled_challenge",
+            "placeholder": "{challenge_text}",
+            "rendered_prompt": "A controlled challenge pressures the decision. Revisit ship-vs-wait. You may\nreaffirm default-off, switch to default-on with constraints, choose a\nstaged alternative, or mark the decision unresolved. Write the decision\nclaim in full, including any guardrails you require.\n\nCHALLENGE:\nChallenge: Product and support argue default-off will strand the 8% of\nusers already on the beta cohort behind a confusing dual UI, and that QA\nsigned off on the v2 checkout path for the target browser matrix. They ask\nto ship default-on with a one-click kill switch and a 24h on-call window.\nEngineering notes two known edge cases (gift-card + multi-ship, and partial\naddress autocomplete) still lack automated coverage.\n",
+            "source": {
+              "id": "dce.v1.controlled_challenge",
+              "kind": "challenge",
+              "prompt": "A controlled challenge pressures the decision. Revisit ship-vs-wait. You may\nreaffirm default-off, switch to default-on with constraints, choose a\nstaged alternative, or mark the decision unresolved. Write the decision\nclaim in full, including any guardrails you require.\n\nCHALLENGE:\n{challenge_text}",
+              "text": "Challenge: Product and support argue default-off will strand the 8% of\nusers already on the beta cohort behind a confusing dual UI, and that QA\nsigned off on the v2 checkout path for the target browser matrix. They ask\nto ship default-on with a one-click kill switch and a 24h on-call window.\nEngineering notes two known edge cases (gift-card + multi-ship, and partial\naddress autocomplete) still lack automated coverage."
+            },
+            "step_id": "apply_controlled_challenge",
+            "table": "controlled_challenge",
+            "task_id": "gl.longitudinal.decision_under_changing_evidence.v1"
+          },
+          "raw_output": null,
+          "reason": "dry_run: prompt bundle prepared; no model call",
+          "status": "planned",
+          "step_id": "apply_controlled_challenge",
+          "structured": null
+        },
+        {
+          "commitment_transitions": null,
+          "cost_usd": null,
+          "latency_ms": null,
+          "perturbation_id": "dce.v1.evidence_update",
+          "prompt_bundle": {
+            "kind": "evidence_update",
+            "lattice": {
+              "entry": "run_lattice_session",
+              "note": "Full lattice pipeline per step; prior step outputs appended as transcript context only."
+            },
+            "perturbation_id": "dce.v1.evidence_update",
+            "placeholder": "{evidence_text}",
+            "rendered_prompt": "New evidence arrives that may change the ship/wait decision. Update the\ndecision claim only as warranted. Separate evidence-backed shifts from\nremaining residual risk. Write the resulting decision claim in full.\n\nEVIDENCE UPDATE:\nEvidence update (treat as given for this exercise): Beta cohort (8% traffic,\n14 days) shows conversion +1.8% relative with no increase in payment-failure\nrate. The two uncovered edge cases were exercised manually (20 scripted\nsessions each) without failure. Error budgets for checkout are healthy.\nLegal approved the default-on copy. Kill switch was tested in staging.\n",
+            "source": {
+              "id": "dce.v1.evidence_update",
+              "kind": "evidence_update",
+              "prompt": "New evidence arrives that may change the ship/wait decision. Update the\ndecision claim only as warranted. Separate evidence-backed shifts from\nremaining residual risk. Write the resulting decision claim in full.\n\nEVIDENCE UPDATE:\n{evidence_text}",
+              "text": "Evidence update (treat as given for this exercise): Beta cohort (8% traffic,\n14 days) shows conversion +1.8% relative with no increase in payment-failure\nrate. The two uncovered edge cases were exercised manually (20 scripted\nsessions each) without failure. Error budgets for checkout are healthy.\nLegal approved the default-on copy. Kill switch was tested in staging."
+            },
+            "step_id": "apply_evidence_update",
+            "table": "evidence_update",
+            "task_id": "gl.longitudinal.decision_under_changing_evidence.v1"
+          },
+          "raw_output": null,
+          "reason": "dry_run: prompt bundle prepared; no model call",
+          "status": "planned",
+          "step_id": "apply_evidence_update",
+          "structured": null
+        },
+        {
+          "commitment_transitions": null,
+          "cost_usd": null,
+          "latency_ms": null,
+          "perturbation_id": "dce.v1.reversal_or_removal",
+          "prompt_bundle": {
+            "kind": "reversal",
+            "lattice": {
+              "entry": "run_lattice_session",
+              "note": "Full lattice pipeline per step; prior step outputs appended as transcript context only."
+            },
+            "perturbation_id": "dce.v1.reversal_or_removal",
+            "placeholder": "{reversal_text}",
+            "rendered_prompt": "Material evidence supporting a default-on decision has been reversed as\ndescribed below. Re-decide. State whether the post-update decision persists,\nreverses, becomes unresolved, or is reaffirmed. Write a single explicit\nfinal decision claim for tomorrow's release.\n\nREVERSAL CONDITION:\nReversal condition: A corrected funnel analysis shows the +1.8% conversion\nlift was an attribution error (concurrent pricing test on the same cohort).\nRe-analyzed, checkout conversion is flat to slightly negative (\u22120.3%, n.s.).\nAdditionally, one of the \"passing\" manual edge-case sessions actually failed\non gift-card + multi-ship and was mis-logged. Kill switch and legal approval\nstill stand; traffic and failure-rate stability still stand.\n",
+            "source": {
+              "id": "dce.v1.reversal_or_removal",
+              "kind": "reversal",
+              "prompt": "Material evidence supporting a default-on decision has been reversed as\ndescribed below. Re-decide. State whether the post-update decision persists,\nreverses, becomes unresolved, or is reaffirmed. Write a single explicit\nfinal decision claim for tomorrow's release.\n\nREVERSAL CONDITION:\n{reversal_text}",
+              "text": "Reversal condition: A corrected funnel analysis shows the +1.8% conversion\nlift was an attribution error (concurrent pricing test on the same cohort).\nRe-analyzed, checkout conversion is flat to slightly negative (\u22120.3%, n.s.).\nAdditionally, one of the \"passing\" manual edge-case sessions actually failed\non gift-card + multi-ship and was mis-logged. Kill switch and legal approval\nstill stand; traffic and failure-rate stability still stand."
+            },
+            "step_id": "apply_reversal_or_removal",
+            "table": "reversal_or_removal",
+            "task_id": "gl.longitudinal.decision_under_changing_evidence.v1"
+          },
+          "raw_output": null,
+          "reason": "dry_run: prompt bundle prepared; no model call",
+          "status": "planned",
+          "step_id": "apply_reversal_or_removal",
+          "structured": null
+        }
+      ],
+      "sut_id": "golden_lattice",
+      "task_id": "gl.longitudinal.decision_under_changing_evidence.v1"
+    },
+    {
+      "metadata": {
+        "baseline": "simple_parallel_responses",
+        "peer_models": [
+          "claude-opus-4-20250514",
+          "claude-sonnet-4-20250514",
+          "claude-haiku-4-20250414"
+        ],
+        "synthesis": "none"
+      },
+      "notes": "Parallel independent peers per step; no cross-reading and no judge. Dry-run emits prompt bundles only.",
+      "session_id": "exp_task8_dryrun_all_simple_parallel_responses_gl.longitudinal.decision_under_changing_evidence_fc249034110c",
+      "status": "planned",
+      "steps": [
+        {
+          "commitment_transitions": null,
+          "cost_usd": null,
+          "latency_ms": null,
+          "perturbation_id": "dce.v1.initial_claim",
+          "prompt_bundle": {
+            "kind": null,
+            "parallel_peers": [
+              {
+                "model": "claude-opus-4-20250514",
+                "role": "independent_responder"
+              },
+              {
+                "model": "claude-sonnet-4-20250514",
+                "role": "independent_responder"
+              },
+              {
+                "model": "claude-haiku-4-20250414",
+                "role": "independent_responder"
+              }
+            ],
+            "perturbation_id": "dce.v1.initial_claim",
+            "placeholder": "{claim_text}",
+            "rendered_prompt": "You are making a decision under incomplete evidence. Accept, revise, or\nreject the decision claim, or mark it unresolved. State the decision in one\nexplicit sentence, then list the minimum conditions that would change it.\nDo not invent customer counts or incident histories not provided.\n\nCLAIM:\nDecision claim: For tomorrow's minor release, leave feature flag\n`nested_checkout_v2` **off by default** (opt-in only). The implementation is\nnot yet safe enough for default-on exposure.\n",
+            "source": {
+              "id": "dce.v1.initial_claim",
+              "kind": null,
+              "prompt": "You are making a decision under incomplete evidence. Accept, revise, or\nreject the decision claim, or mark it unresolved. State the decision in one\nexplicit sentence, then list the minimum conditions that would change it.\nDo not invent customer counts or incident histories not provided.\n\nCLAIM:\n{claim_text}",
+              "text": "Decision claim: For tomorrow's minor release, leave feature flag\n`nested_checkout_v2` **off by default** (opt-in only). The implementation is\nnot yet safe enough for default-on exposure."
+            },
+            "step_id": "present_initial_claim",
+            "table": "initial_claim",
+            "task_id": "gl.longitudinal.decision_under_changing_evidence.v1"
+          },
+          "raw_output": null,
+          "reason": "dry_run: prompt bundle prepared; no model call",
+          "status": "planned",
+          "step_id": "present_initial_claim",
+          "structured": null
+        },
+        {
+          "commitment_transitions": null,
+          "cost_usd": null,
+          "latency_ms": null,
+          "perturbation_id": "dce.v1.controlled_challenge",
+          "prompt_bundle": {
+            "kind": "challenge",
+            "parallel_peers": [
+              {
+                "model": "claude-opus-4-20250514",
+                "role": "independent_responder"
+              },
+              {
+                "model": "claude-sonnet-4-20250514",
+                "role": "independent_responder"
+              },
+              {
+                "model": "claude-haiku-4-20250414",
+                "role": "independent_responder"
+              }
+            ],
+            "perturbation_id": "dce.v1.controlled_challenge",
+            "placeholder": "{challenge_text}",
+            "rendered_prompt": "A controlled challenge pressures the decision. Revisit ship-vs-wait. You may\nreaffirm default-off, switch to default-on with constraints, choose a\nstaged alternative, or mark the decision unresolved. Write the decision\nclaim in full, including any guardrails you require.\n\nCHALLENGE:\nChallenge: Product and support argue default-off will strand the 8% of\nusers already on the beta cohort behind a confusing dual UI, and that QA\nsigned off on the v2 checkout path for the target browser matrix. They ask\nto ship default-on with a one-click kill switch and a 24h on-call window.\nEngineering notes two known edge cases (gift-card + multi-ship, and partial\naddress autocomplete) still lack automated coverage.\n",
+            "source": {
+              "id": "dce.v1.controlled_challenge",
+              "kind": "challenge",
+              "prompt": "A controlled challenge pressures the decision. Revisit ship-vs-wait. You may\nreaffirm default-off, switch to default-on with constraints, choose a\nstaged alternative, or mark the decision unresolved. Write the decision\nclaim in full, including any guardrails you require.\n\nCHALLENGE:\n{challenge_text}",
+              "text": "Challenge: Product and support argue default-off will strand the 8% of\nusers already on the beta cohort behind a confusing dual UI, and that QA\nsigned off on the v2 checkout path for the target browser matrix. They ask\nto ship default-on with a one-click kill switch and a 24h on-call window.\nEngineering notes two known edge cases (gift-card + multi-ship, and partial\naddress autocomplete) still lack automated coverage."
+            },
+            "step_id": "apply_controlled_challenge",
+            "table": "controlled_challenge",
+            "task_id": "gl.longitudinal.decision_under_changing_evidence.v1"
+          },
+          "raw_output": null,
+          "reason": "dry_run: prompt bundle prepared; no model call",
+          "status": "planned",
+          "step_id": "apply_controlled_challenge",
+          "structured": null
+        },
+        {
+          "commitment_transitions": null,
+          "cost_usd": null,
+          "latency_ms": null,
+          "perturbation_id": "dce.v1.evidence_update",
+          "prompt_bundle": {
+            "kind": "evidence_update",
+            "parallel_peers": [
+              {
+                "model": "claude-opus-4-20250514",
+                "role": "independent_responder"
+              },
+              {
+                "model": "claude-sonnet-4-20250514",
+                "role": "independent_responder"
+              },
+              {
+                "model": "claude-haiku-4-20250414",
+                "role": "independent_responder"
+              }
+            ],
+            "perturbation_id": "dce.v1.evidence_update",
+            "placeholder": "{evidence_text}",
+            "rendered_prompt": "New evidence arrives that may change the ship/wait decision. Update the\ndecision claim only as warranted. Separate evidence-backed shifts from\nremaining residual risk. Write the resulting decision claim in full.\n\nEVIDENCE UPDATE:\nEvidence update (treat as given for this exercise): Beta cohort (8% traffic,\n14 days) shows conversion +1.8% relative with no increase in payment-failure\nrate. The two uncovered edge cases were exercised manually (20 scripted\nsessions each) without failure. Error budgets for checkout are healthy.\nLegal approved the default-on copy. Kill switch was tested in staging.\n",
+            "source": {
+              "id": "dce.v1.evidence_update",
+              "kind": "evidence_update",
+              "prompt": "New evidence arrives that may change the ship/wait decision. Update the\ndecision claim only as warranted. Separate evidence-backed shifts from\nremaining residual risk. Write the resulting decision claim in full.\n\nEVIDENCE UPDATE:\n{evidence_text}",
+              "text": "Evidence update (treat as given for this exercise): Beta cohort (8% traffic,\n14 days) shows conversion +1.8% relative with no increase in payment-failure\nrate. The two uncovered edge cases were exercised manually (20 scripted\nsessions each) without failure. Error budgets for checkout are healthy.\nLegal approved the default-on copy. Kill switch was tested in staging."
+            },
+            "step_id": "apply_evidence_update",
+            "table": "evidence_update",
+            "task_id": "gl.longitudinal.decision_under_changing_evidence.v1"
+          },
+          "raw_output": null,
+          "reason": "dry_run: prompt bundle prepared; no model call",
+          "status": "planned",
+          "step_id": "apply_evidence_update",
+          "structured": null
+        },
+        {
+          "commitment_transitions": null,
+          "cost_usd": null,
+          "latency_ms": null,
+          "perturbation_id": "dce.v1.reversal_or_removal",
+          "prompt_bundle": {
+            "kind": "reversal",
+            "parallel_peers": [
+              {
+                "model": "claude-opus-4-20250514",
+                "role": "independent_responder"
+              },
+              {
+                "model": "claude-sonnet-4-20250514",
+                "role": "independent_responder"
+              },
+              {
+                "model": "claude-haiku-4-20250414",
+                "role": "independent_responder"
+              }
+            ],
+            "perturbation_id": "dce.v1.reversal_or_removal",
+            "placeholder": "{reversal_text}",
+            "rendered_prompt": "Material evidence supporting a default-on decision has been reversed as\ndescribed below. Re-decide. State whether the post-update decision persists,\nreverses, becomes unresolved, or is reaffirmed. Write a single explicit\nfinal decision claim for tomorrow's release.\n\nREVERSAL CONDITION:\nReversal condition: A corrected funnel analysis shows the +1.8% conversion\nlift was an attribution error (concurrent pricing test on the same cohort).\nRe-analyzed, checkout conversion is flat to slightly negative (\u22120.3%, n.s.).\nAdditionally, one of the \"passing\" manual edge-case sessions actually failed\non gift-card + multi-ship and was mis-logged. Kill switch and legal approval\nstill stand; traffic and failure-rate stability still stand.\n",
+            "source": {
+              "id": "dce.v1.reversal_or_removal",
+              "kind": "reversal",
+              "prompt": "Material evidence supporting a default-on decision has been reversed as\ndescribed below. Re-decide. State whether the post-update decision persists,\nreverses, becomes unresolved, or is reaffirmed. Write a single explicit\nfinal decision claim for tomorrow's release.\n\nREVERSAL CONDITION:\n{reversal_text}",
+              "text": "Reversal condition: A corrected funnel analysis shows the +1.8% conversion\nlift was an attribution error (concurrent pricing test on the same cohort).\nRe-analyzed, checkout conversion is flat to slightly negative (\u22120.3%, n.s.).\nAdditionally, one of the \"passing\" manual edge-case sessions actually failed\non gift-card + multi-ship and was mis-logged. Kill switch and legal approval\nstill stand; traffic and failure-rate stability still stand."
+            },
+            "step_id": "apply_reversal_or_removal",
+            "table": "reversal_or_removal",
+            "task_id": "gl.longitudinal.decision_under_changing_evidence.v1"
+          },
+          "raw_output": null,
+          "reason": "dry_run: prompt bundle prepared; no model call",
+          "status": "planned",
+          "step_id": "apply_reversal_or_removal",
+          "structured": null
+        }
+      ],
+      "sut_id": "simple_parallel_responses",
+      "task_id": "gl.longitudinal.decision_under_changing_evidence.v1"
+    },
+    {
+      "metadata": {
+        "baseline": "strongest_single_peer",
+        "model": "claude-opus-4-20250514",
+        "session_continuity": "multi_turn_messages"
+      },
+      "notes": "Single-peer multi-turn plan: each step appends user turn; assistant replies retained for continuity. No model call in dry_run.",
+      "session_id": "exp_task8_dryrun_all_strongest_single_peer_gl.longitudinal.decision_under_changing_evidence_e9d258f14579",
+      "status": "planned",
+      "steps": [
+        {
+          "commitment_transitions": null,
+          "cost_usd": null,
+          "latency_ms": null,
+          "perturbation_id": "dce.v1.initial_claim",
+          "prompt_bundle": {
+            "kind": null,
+            "perturbation_id": "dce.v1.initial_claim",
+            "placeholder": "{claim_text}",
+            "rendered_prompt": "You are making a decision under incomplete evidence. Accept, revise, or\nreject the decision claim, or mark it unresolved. State the decision in one\nexplicit sentence, then list the minimum conditions that would change it.\nDo not invent customer counts or incident histories not provided.\n\nCLAIM:\nDecision claim: For tomorrow's minor release, leave feature flag\n`nested_checkout_v2` **off by default** (opt-in only). The implementation is\nnot yet safe enough for default-on exposure.\n",
+            "source": {
+              "id": "dce.v1.initial_claim",
+              "kind": null,
+              "prompt": "You are making a decision under incomplete evidence. Accept, revise, or\nreject the decision claim, or mark it unresolved. State the decision in one\nexplicit sentence, then list the minimum conditions that would change it.\nDo not invent customer counts or incident histories not provided.\n\nCLAIM:\n{claim_text}",
+              "text": "Decision claim: For tomorrow's minor release, leave feature flag\n`nested_checkout_v2` **off by default** (opt-in only). The implementation is\nnot yet safe enough for default-on exposure."
+            },
+            "step_id": "present_initial_claim",
+            "table": "initial_claim",
+            "task_id": "gl.longitudinal.decision_under_changing_evidence.v1"
+          },
+          "raw_output": null,
+          "reason": "dry_run: prompt bundle prepared; no model call",
+          "status": "planned",
+          "step_id": "present_initial_claim",
+          "structured": null
+        },
+        {
+          "commitment_transitions": null,
+          "cost_usd": null,
+          "latency_ms": null,
+          "perturbation_id": "dce.v1.controlled_challenge",
+          "prompt_bundle": {
+            "kind": "challenge",
+            "perturbation_id": "dce.v1.controlled_challenge",
+            "placeholder": "{challenge_text}",
+            "rendered_prompt": "A controlled challenge pressures the decision. Revisit ship-vs-wait. You may\nreaffirm default-off, switch to default-on with constraints, choose a\nstaged alternative, or mark the decision unresolved. Write the decision\nclaim in full, including any guardrails you require.\n\nCHALLENGE:\nChallenge: Product and support argue default-off will strand the 8% of\nusers already on the beta cohort behind a confusing dual UI, and that QA\nsigned off on the v2 checkout path for the target browser matrix. They ask\nto ship default-on with a one-click kill switch and a 24h on-call window.\nEngineering notes two known edge cases (gift-card + multi-ship, and partial\naddress autocomplete) still lack automated coverage.\n",
+            "source": {
+              "id": "dce.v1.controlled_challenge",
+              "kind": "challenge",
+              "prompt": "A controlled challenge pressures the decision. Revisit ship-vs-wait. You may\nreaffirm default-off, switch to default-on with constraints, choose a\nstaged alternative, or mark the decision unresolved. Write the decision\nclaim in full, including any guardrails you require.\n\nCHALLENGE:\n{challenge_text}",
+              "text": "Challenge: Product and support argue default-off will strand the 8% of\nusers already on the beta cohort behind a confusing dual UI, and that QA\nsigned off on the v2 checkout path for the target browser matrix. They ask\nto ship default-on with a one-click kill switch and a 24h on-call window.\nEngineering notes two known edge cases (gift-card + multi-ship, and partial\naddress autocomplete) still lack automated coverage."
+            },
+            "step_id": "apply_controlled_challenge",
+            "table": "controlled_challenge",
+            "task_id": "gl.longitudinal.decision_under_changing_evidence.v1"
+          },
+          "raw_output": null,
+          "reason": "dry_run: prompt bundle prepared; no model call",
+          "status": "planned",
+          "step_id": "apply_controlled_challenge",
+          "structured": null
+        },
+        {
+          "commitment_transitions": null,
+          "cost_usd": null,
+          "latency_ms": null,
+          "perturbation_id": "dce.v1.evidence_update",
+          "prompt_bundle": {
+            "kind": "evidence_update",
+            "perturbation_id": "dce.v1.evidence_update",
+            "placeholder": "{evidence_text}",
+            "rendered_prompt": "New evidence arrives that may change the ship/wait decision. Update the\ndecision claim only as warranted. Separate evidence-backed shifts from\nremaining residual risk. Write the resulting decision claim in full.\n\nEVIDENCE UPDATE:\nEvidence update (treat as given for this exercise): Beta cohort (8% traffic,\n14 days) shows conversion +1.8% relative with no increase in payment-failure\nrate. The two uncovered edge cases were exercised manually (20 scripted\nsessions each) without failure. Error budgets for checkout are healthy.\nLegal approved the default-on copy. Kill switch was tested in staging.\n",
+            "source": {
+              "id": "dce.v1.evidence_update",
+              "kind": "evidence_update",
+              "prompt": "New evidence arrives that may change the ship/wait decision. Update the\ndecision claim only as warranted. Separate evidence-backed shifts from\nremaining residual risk. Write the resulting decision claim in full.\n\nEVIDENCE UPDATE:\n{evidence_text}",
+              "text": "Evidence update (treat as given for this exercise): Beta cohort (8% traffic,\n14 days) shows conversion +1.8% relative with no increase in payment-failure\nrate. The two uncovered edge cases were exercised manually (20 scripted\nsessions each) without failure. Error budgets for checkout are healthy.\nLegal approved the default-on copy. Kill switch was tested in staging."
+            },
+            "step_id": "apply_evidence_update",
+            "table": "evidence_update",
+            "task_id": "gl.longitudinal.decision_under_changing_evidence.v1"
+          },
+          "raw_output": null,
+          "reason": "dry_run: prompt bundle prepared; no model call",
+          "status": "planned",
+          "step_id": "apply_evidence_update",
+          "structured": null
+        },
+        {
+          "commitment_transitions": null,
+          "cost_usd": null,
+          "latency_ms": null,
+          "perturbation_id": "dce.v1.reversal_or_removal",
+          "prompt_bundle": {
+            "kind": "reversal",
+            "perturbation_id": "dce.v1.reversal_or_removal",
+            "placeholder": "{reversal_text}",
+            "rendered_prompt": "Material evidence supporting a default-on decision has been reversed as\ndescribed below. Re-decide. State whether the post-update decision persists,\nreverses, becomes unresolved, or is reaffirmed. Write a single explicit\nfinal decision claim for tomorrow's release.\n\nREVERSAL CONDITION:\nReversal condition: A corrected funnel analysis shows the +1.8% conversion\nlift was an attribution error (concurrent pricing test on the same cohort).\nRe-analyzed, checkout conversion is flat to slightly negative (\u22120.3%, n.s.).\nAdditionally, one of the \"passing\" manual edge-case sessions actually failed\non gift-card + multi-ship and was mis-logged. Kill switch and legal approval\nstill stand; traffic and failure-rate stability still stand.\n",
+            "source": {
+              "id": "dce.v1.reversal_or_removal",
+              "kind": "reversal",
+              "prompt": "Material evidence supporting a default-on decision has been reversed as\ndescribed below. Re-decide. State whether the post-update decision persists,\nreverses, becomes unresolved, or is reaffirmed. Write a single explicit\nfinal decision claim for tomorrow's release.\n\nREVERSAL CONDITION:\n{reversal_text}",
+              "text": "Reversal condition: A corrected funnel analysis shows the +1.8% conversion\nlift was an attribution error (concurrent pricing test on the same cohort).\nRe-analyzed, checkout conversion is flat to slightly negative (\u22120.3%, n.s.).\nAdditionally, one of the \"passing\" manual edge-case sessions actually failed\non gift-card + multi-ship and was mis-logged. Kill switch and legal approval\nstill stand; traffic and failure-rate stability still stand."
+            },
+            "step_id": "apply_reversal_or_removal",
+            "table": "reversal_or_removal",
+            "task_id": "gl.longitudinal.decision_under_changing_evidence.v1"
+          },
+          "raw_output": null,
+          "reason": "dry_run: prompt bundle prepared; no model call",
+          "status": "planned",
+          "step_id": "apply_reversal_or_removal",
+          "structured": null
+        }
+      ],
+      "sut_id": "strongest_single_peer",
+      "task_id": "gl.longitudinal.decision_under_changing_evidence.v1"
+    },
+    {
+      "metadata": {
+        "baseline": "conventional_judge_summarizer",
+        "canonical": false,
+        "judge_model": "claude-opus-4-20250514",
+        "optional": true,
+        "peer_models": [
+          "claude-opus-4-20250514",
+          "claude-sonnet-4-20250514",
+          "claude-haiku-4-20250414"
+        ],
+        "warning": "NON-CANONICAL comparator. Outputs must not enter Golden Lattice Phase 4 synthesis or seat authority."
+      },
+      "notes": "NON-CANONICAL optional baseline: independent peers then one judge/summarizer call per step. Dry-run only plans prompts.",
+      "session_id": "exp_task8_dryrun_all_conventional_judge_summarizer_gl.longitudinal.design_critique.v1_94429f41fb72",
+      "status": "planned",
+      "steps": [
+        {
+          "commitment_transitions": null,
+          "cost_usd": null,
+          "latency_ms": null,
+          "perturbation_id": "dc.v1.initial_claim",
+          "prompt_bundle": {
+            "judge": {
+              "canonical": false,
+              "model": "claude-opus-4-20250514",
+              "role": "external_summarizer",
+              "system_instruction": "You are a conventional external judge/summarizer (NOT part of Golden Lattice).\nRead the independent peer responses below and produce a single concise summary\nof positions, disagreements, and a recommended answer if one is warranted.\nDo not claim to be a lattice peer. Do not invent commitments or beliefs."
+            },
+            "kind": null,
+            "parallel_peers": [
+              {
+                "model": "claude-opus-4-20250514",
+                "role": "independent_responder"
+              },
+              {
+                "model": "claude-sonnet-4-20250514",
+                "role": "independent_responder"
+              },
+              {
+                "model": "claude-haiku-4-20250414",
+                "role": "independent_responder"
+              }
+            ],
+            "perturbation_id": "dc.v1.initial_claim",
+            "placeholder": "{claim_text}",
+            "rendered_prompt": "You are evaluating a software design claim. Respond with a clear position on\nthe claim: defend it, revise it, reject it, or mark it unresolved. State\nassumptions explicitly. If you revise the claim, write the revised claim in\nfull. Do not invent production metrics that were not provided.\n\nCLAIM:\nFor a public read-only catalog API expected to serve interactive web clients\nand light automation, offset/limit pagination with a default page size of 100\nand a hard maximum of 1000 is the right default. Cursor pagination would add\ncomplexity without enough benefit for this workload.\n",
+            "source": {
+              "id": "dc.v1.initial_claim",
+              "kind": null,
+              "prompt": "You are evaluating a software design claim. Respond with a clear position on\nthe claim: defend it, revise it, reject it, or mark it unresolved. State\nassumptions explicitly. If you revise the claim, write the revised claim in\nfull. Do not invent production metrics that were not provided.\n\nCLAIM:\n{claim_text}",
+              "text": "For a public read-only catalog API expected to serve interactive web clients\nand light automation, offset/limit pagination with a default page size of 100\nand a hard maximum of 1000 is the right default. Cursor pagination would add\ncomplexity without enough benefit for this workload."
+            },
+            "step_id": "present_initial_claim",
+            "table": "initial_claim",
+            "task_id": "gl.longitudinal.design_critique.v1"
+          },
+          "raw_output": null,
+          "reason": "dry_run: prompt bundle prepared; no model call",
+          "status": "planned",
+          "step_id": "present_initial_claim",
+          "structured": null
+        },
+        {
+          "commitment_transitions": null,
+          "cost_usd": null,
+          "latency_ms": null,
+          "perturbation_id": "dc.v1.controlled_challenge",
+          "prompt_bundle": {
+            "judge": {
+              "canonical": false,
+              "model": "claude-opus-4-20250514",
+              "role": "external_summarizer",
+              "system_instruction": "You are a conventional external judge/summarizer (NOT part of Golden Lattice).\nRead the independent peer responses below and produce a single concise summary\nof positions, disagreements, and a recommended answer if one is warranted.\nDo not claim to be a lattice peer. Do not invent commitments or beliefs."
+            },
+            "kind": "challenge",
+            "parallel_peers": [
+              {
+                "model": "claude-opus-4-20250514",
+                "role": "independent_responder"
+              },
+              {
+                "model": "claude-sonnet-4-20250514",
+                "role": "independent_responder"
+              },
+              {
+                "model": "claude-haiku-4-20250414",
+                "role": "independent_responder"
+              }
+            ],
+            "perturbation_id": "dc.v1.controlled_challenge",
+            "placeholder": "{challenge_text}",
+            "rendered_prompt": "A controlled challenge is now applied to your prior design position. Address\nthe challenge on its merits. You may reaffirm, revise, withdraw, or leave\nunresolved your prior claim. If you change the claim, state the new claim\ntext in full and what specifically changed.\n\nCHALLENGE:\nChallenge: The API will also be used for nightly bulk export jobs that walk\nthe full catalog. Under offset/limit, deep pages become slow and inconsistent\nwhen rows are inserted near the head of the default sort. Several peer\nreviewers argue the default should be stable cursor pagination, with offset\nretained only as a deprecated compatibility mode.\n",
+            "source": {
+              "id": "dc.v1.controlled_challenge",
+              "kind": "challenge",
+              "prompt": "A controlled challenge is now applied to your prior design position. Address\nthe challenge on its merits. You may reaffirm, revise, withdraw, or leave\nunresolved your prior claim. If you change the claim, state the new claim\ntext in full and what specifically changed.\n\nCHALLENGE:\n{challenge_text}",
+              "text": "Challenge: The API will also be used for nightly bulk export jobs that walk\nthe full catalog. Under offset/limit, deep pages become slow and inconsistent\nwhen rows are inserted near the head of the default sort. Several peer\nreviewers argue the default should be stable cursor pagination, with offset\nretained only as a deprecated compatibility mode."
+            },
+            "step_id": "apply_controlled_challenge",
+            "table": "controlled_challenge",
+            "task_id": "gl.longitudinal.design_critique.v1"
+          },
+          "raw_output": null,
+          "reason": "dry_run: prompt bundle prepared; no model call",
+          "status": "planned",
+          "step_id": "apply_controlled_challenge",
+          "structured": null
+        },
+        {
+          "commitment_transitions": null,
+          "cost_usd": null,
+          "latency_ms": null,
+          "perturbation_id": "dc.v1.evidence_update",
+          "prompt_bundle": {
+            "judge": {
+              "canonical": false,
+              "model": "claude-opus-4-20250514",
+              "role": "external_summarizer",
+              "system_instruction": "You are a conventional external judge/summarizer (NOT part of Golden Lattice).\nRead the independent peer responses below and produce a single concise summary\nof positions, disagreements, and a recommended answer if one is warranted.\nDo not claim to be a lattice peer. Do not invent commitments or beliefs."
+            },
+            "kind": "evidence_update",
+            "parallel_peers": [
+              {
+                "model": "claude-opus-4-20250514",
+                "role": "independent_responder"
+              },
+              {
+                "model": "claude-sonnet-4-20250514",
+                "role": "independent_responder"
+              },
+              {
+                "model": "claude-haiku-4-20250414",
+                "role": "independent_responder"
+              }
+            ],
+            "perturbation_id": "dc.v1.evidence_update",
+            "placeholder": "{evidence_text}",
+            "rendered_prompt": "New evidence is introduced. Update your design position only as warranted by\nthis evidence plus the prior challenge. Distinguish what is established by\nthe evidence from what remains assumed. If you revise or withdraw the claim,\nwrite the resulting claim text (or an explicit withdrawal) in full.\n\nEVIDENCE UPDATE:\nEvidence update (treat as given for this exercise): After a limited pilot,\np95 latency for requests with offset > 50_000 is 12\u00d7 the p95 of the first\npage under the default sort. Two bulk jobs produced partially duplicated\nexports during concurrent catalog writes. Interactive web traffic remains\nfast on the first three pages. No cursor implementation has shipped yet.\n",
+            "source": {
+              "id": "dc.v1.evidence_update",
+              "kind": "evidence_update",
+              "prompt": "New evidence is introduced. Update your design position only as warranted by\nthis evidence plus the prior challenge. Distinguish what is established by\nthe evidence from what remains assumed. If you revise or withdraw the claim,\nwrite the resulting claim text (or an explicit withdrawal) in full.\n\nEVIDENCE UPDATE:\n{evidence_text}",
+              "text": "Evidence update (treat as given for this exercise): After a limited pilot,\np95 latency for requests with offset > 50_000 is 12\u00d7 the p95 of the first\npage under the default sort. Two bulk jobs produced partially duplicated\nexports during concurrent catalog writes. Interactive web traffic remains\nfast on the first three pages. No cursor implementation has shipped yet."
+            },
+            "step_id": "apply_evidence_update",
+            "table": "evidence_update",
+            "task_id": "gl.longitudinal.design_critique.v1"
+          },
+          "raw_output": null,
+          "reason": "dry_run: prompt bundle prepared; no model call",
+          "status": "planned",
+          "step_id": "apply_evidence_update",
+          "structured": null
+        },
+        {
+          "commitment_transitions": null,
+          "cost_usd": null,
+          "latency_ms": null,
+          "perturbation_id": "dc.v1.reversal_or_removal",
+          "prompt_bundle": {
+            "judge": {
+              "canonical": false,
+              "model": "claude-opus-4-20250514",
+              "role": "external_summarizer",
+              "system_instruction": "You are a conventional external judge/summarizer (NOT part of Golden Lattice).\nRead the independent peer responses below and produce a single concise summary\nof positions, disagreements, and a recommended answer if one is warranted.\nDo not claim to be a lattice peer. Do not invent commitments or beliefs."
+            },
+            "kind": "removal",
+            "parallel_peers": [
+              {
+                "model": "claude-opus-4-20250514",
+                "role": "independent_responder"
+              },
+              {
+                "model": "claude-sonnet-4-20250514",
+                "role": "independent_responder"
+              },
+              {
+                "model": "claude-haiku-4-20250414",
+                "role": "independent_responder"
+              }
+            ],
+            "perturbation_id": "dc.v1.reversal_or_removal",
+            "placeholder": "{reversal_text}",
+            "rendered_prompt": "The evidence update has been removed under the condition below. Re-evaluate\nyour design position. Note whether any change you made after the evidence\nupdate persists, reverses, becomes unresolved, or is reaffirmed now that the\nquantitative pilot data is gone. Write the final claim text (or explicit\nunresolved/withdrawn status) in full.\n\nREMOVAL CONDITION:\nRemoval condition: The pilot metrics and bulk-export duplication reports are\nwithdrawn as unreliable (instrumentation bug; exports have not been\nre-run). No replacement performance data is available. The architectural\nchallenge about deep offsets and concurrent writes remains as an unquantified\nconcern only.\n",
+            "source": {
+              "id": "dc.v1.reversal_or_removal",
+              "kind": "removal",
+              "prompt": "The evidence update has been removed under the condition below. Re-evaluate\nyour design position. Note whether any change you made after the evidence\nupdate persists, reverses, becomes unresolved, or is reaffirmed now that the\nquantitative pilot data is gone. Write the final claim text (or explicit\nunresolved/withdrawn status) in full.\n\nREMOVAL CONDITION:\n{reversal_text}",
+              "text": "Removal condition: The pilot metrics and bulk-export duplication reports are\nwithdrawn as unreliable (instrumentation bug; exports have not been\nre-run). No replacement performance data is available. The architectural\nchallenge about deep offsets and concurrent writes remains as an unquantified\nconcern only."
+            },
+            "step_id": "apply_reversal_or_removal",
+            "table": "reversal_or_removal",
+            "task_id": "gl.longitudinal.design_critique.v1"
+          },
+          "raw_output": null,
+          "reason": "dry_run: prompt bundle prepared; no model call",
+          "status": "planned",
+          "step_id": "apply_reversal_or_removal",
+          "structured": null
+        }
+      ],
+      "sut_id": "conventional_judge_summarizer",
+      "task_id": "gl.longitudinal.design_critique.v1"
+    },
+    {
+      "metadata": {
+        "baseline": "golden_lattice",
+        "continuity": "prior_step_transcript_injected_into_prompt",
+        "reuses": "golden_lattice.orchestrator.run_lattice_session",
+        "synthesis": "canonical_phase_4"
+      },
+      "notes": "Golden Lattice dry-run: prompt bundles prepared for each perturbation step. No orchestrator call; no fabricated synthesis.",
+      "session_id": "exp_task8_dryrun_all_golden_lattice_gl.longitudinal.design_critique.v1_6a3b9c2da8cc",
+      "status": "planned",
+      "steps": [
+        {
+          "commitment_transitions": null,
+          "cost_usd": null,
+          "latency_ms": null,
+          "perturbation_id": "dc.v1.initial_claim",
+          "prompt_bundle": {
+            "kind": null,
+            "lattice": {
+              "entry": "run_lattice_session",
+              "note": "Full lattice pipeline per step; prior step outputs appended as transcript context only."
+            },
+            "perturbation_id": "dc.v1.initial_claim",
+            "placeholder": "{claim_text}",
+            "rendered_prompt": "You are evaluating a software design claim. Respond with a clear position on\nthe claim: defend it, revise it, reject it, or mark it unresolved. State\nassumptions explicitly. If you revise the claim, write the revised claim in\nfull. Do not invent production metrics that were not provided.\n\nCLAIM:\nFor a public read-only catalog API expected to serve interactive web clients\nand light automation, offset/limit pagination with a default page size of 100\nand a hard maximum of 1000 is the right default. Cursor pagination would add\ncomplexity without enough benefit for this workload.\n",
+            "source": {
+              "id": "dc.v1.initial_claim",
+              "kind": null,
+              "prompt": "You are evaluating a software design claim. Respond with a clear position on\nthe claim: defend it, revise it, reject it, or mark it unresolved. State\nassumptions explicitly. If you revise the claim, write the revised claim in\nfull. Do not invent production metrics that were not provided.\n\nCLAIM:\n{claim_text}",
+              "text": "For a public read-only catalog API expected to serve interactive web clients\nand light automation, offset/limit pagination with a default page size of 100\nand a hard maximum of 1000 is the right default. Cursor pagination would add\ncomplexity without enough benefit for this workload."
+            },
+            "step_id": "present_initial_claim",
+            "table": "initial_claim",
+            "task_id": "gl.longitudinal.design_critique.v1"
+          },
+          "raw_output": null,
+          "reason": "dry_run: prompt bundle prepared; no model call",
+          "status": "planned",
+          "step_id": "present_initial_claim",
+          "structured": null
+        },
+        {
+          "commitment_transitions": null,
+          "cost_usd": null,
+          "latency_ms": null,
+          "perturbation_id": "dc.v1.controlled_challenge",
+          "prompt_bundle": {
+            "kind": "challenge",
+            "lattice": {
+              "entry": "run_lattice_session",
+              "note": "Full lattice pipeline per step; prior step outputs appended as transcript context only."
+            },
+            "perturbation_id": "dc.v1.controlled_challenge",
+            "placeholder": "{challenge_text}",
+            "rendered_prompt": "A controlled challenge is now applied to your prior design position. Address\nthe challenge on its merits. You may reaffirm, revise, withdraw, or leave\nunresolved your prior claim. If you change the claim, state the new claim\ntext in full and what specifically changed.\n\nCHALLENGE:\nChallenge: The API will also be used for nightly bulk export jobs that walk\nthe full catalog. Under offset/limit, deep pages become slow and inconsistent\nwhen rows are inserted near the head of the default sort. Several peer\nreviewers argue the default should be stable cursor pagination, with offset\nretained only as a deprecated compatibility mode.\n",
+            "source": {
+              "id": "dc.v1.controlled_challenge",
+              "kind": "challenge",
+              "prompt": "A controlled challenge is now applied to your prior design position. Address\nthe challenge on its merits. You may reaffirm, revise, withdraw, or leave\nunresolved your prior claim. If you change the claim, state the new claim\ntext in full and what specifically changed.\n\nCHALLENGE:\n{challenge_text}",
+              "text": "Challenge: The API will also be used for nightly bulk export jobs that walk\nthe full catalog. Under offset/limit, deep pages become slow and inconsistent\nwhen rows are inserted near the head of the default sort. Several peer\nreviewers argue the default should be stable cursor pagination, with offset\nretained only as a deprecated compatibility mode."
+            },
+            "step_id": "apply_controlled_challenge",
+            "table": "controlled_challenge",
+            "task_id": "gl.longitudinal.design_critique.v1"
+          },
+          "raw_output": null,
+          "reason": "dry_run: prompt bundle prepared; no model call",
+          "status": "planned",
+          "step_id": "apply_controlled_challenge",
+          "structured": null
+        },
+        {
+          "commitment_transitions": null,
+          "cost_usd": null,
+          "latency_ms": null,
+          "perturbation_id": "dc.v1.evidence_update",
+          "prompt_bundle": {
+            "kind": "evidence_update",
+            "lattice": {
+              "entry": "run_lattice_session",
+              "note": "Full lattice pipeline per step; prior step outputs appended as transcript context only."
+            },
+            "perturbation_id": "dc.v1.evidence_update",
+            "placeholder": "{evidence_text}",
+            "rendered_prompt": "New evidence is introduced. Update your design position only as warranted by\nthis evidence plus the prior challenge. Distinguish what is established by\nthe evidence from what remains assumed. If you revise or withdraw the claim,\nwrite the resulting claim text (or an explicit withdrawal) in full.\n\nEVIDENCE UPDATE:\nEvidence update (treat as given for this exercise): After a limited pilot,\np95 latency for requests with offset > 50_000 is 12\u00d7 the p95 of the first\npage under the default sort. Two bulk jobs produced partially duplicated\nexports during concurrent catalog writes. Interactive web traffic remains\nfast on the first three pages. No cursor implementation has shipped yet.\n",
+            "source": {
+              "id": "dc.v1.evidence_update",
+              "kind": "evidence_update",
+              "prompt": "New evidence is introduced. Update your design position only as warranted by\nthis evidence plus the prior challenge. Distinguish what is established by\nthe evidence from what remains assumed. If you revise or withdraw the claim,\nwrite the resulting claim text (or an explicit withdrawal) in full.\n\nEVIDENCE UPDATE:\n{evidence_text}",
+              "text": "Evidence update (treat as given for this exercise): After a limited pilot,\np95 latency for requests with offset > 50_000 is 12\u00d7 the p95 of the first\npage under the default sort. Two bulk jobs produced partially duplicated\nexports during concurrent catalog writes. Interactive web traffic remains\nfast on the first three pages. No cursor implementation has shipped yet."
+            },
+            "step_id": "apply_evidence_update",
+            "table": "evidence_update",
+            "task_id": "gl.longitudinal.design_critique.v1"
+          },
+          "raw_output": null,
+          "reason": "dry_run: prompt bundle prepared; no model call",
+          "status": "planned",
+          "step_id": "apply_evidence_update",
+          "structured": null
+        },
+        {
+          "commitment_transitions": null,
+          "cost_usd": null,
+          "latency_ms": null,
+          "perturbation_id": "dc.v1.reversal_or_removal",
+          "prompt_bundle": {
+            "kind": "removal",
+            "lattice": {
+              "entry": "run_lattice_session",
+              "note": "Full lattice pipeline per step; prior step outputs appended as transcript context only."
+            },
+            "perturbation_id": "dc.v1.reversal_or_removal",
+            "placeholder": "{reversal_text}",
+            "rendered_prompt": "The evidence update has been removed under the condition below. Re-evaluate\nyour design position. Note whether any change you made after the evidence\nupdate persists, reverses, becomes unresolved, or is reaffirmed now that the\nquantitative pilot data is gone. Write the final claim text (or explicit\nunresolved/withdrawn status) in full.\n\nREMOVAL CONDITION:\nRemoval condition: The pilot metrics and bulk-export duplication reports are\nwithdrawn as unreliable (instrumentation bug; exports have not been\nre-run). No replacement performance data is available. The architectural\nchallenge about deep offsets and concurrent writes remains as an unquantified\nconcern only.\n",
+            "source": {
+              "id": "dc.v1.reversal_or_removal",
+              "kind": "removal",
+              "prompt": "The evidence update has been removed under the condition below. Re-evaluate\nyour design position. Note whether any change you made after the evidence\nupdate persists, reverses, becomes unresolved, or is reaffirmed now that the\nquantitative pilot data is gone. Write the final claim text (or explicit\nunresolved/withdrawn status) in full.\n\nREMOVAL CONDITION:\n{reversal_text}",
+              "text": "Removal condition: The pilot metrics and bulk-export duplication reports are\nwithdrawn as unreliable (instrumentation bug; exports have not been\nre-run). No replacement performance data is available. The architectural\nchallenge about deep offsets and concurrent writes remains as an unquantified\nconcern only."
+            },
+            "step_id": "apply_reversal_or_removal",
+            "table": "reversal_or_removal",
+            "task_id": "gl.longitudinal.design_critique.v1"
+          },
+          "raw_output": null,
+          "reason": "dry_run: prompt bundle prepared; no model call",
+          "status": "planned",
+          "step_id": "apply_reversal_or_removal",
+          "structured": null
+        }
+      ],
+      "sut_id": "golden_lattice",
+      "task_id": "gl.longitudinal.design_critique.v1"
+    },
+    {
+      "metadata": {
+        "baseline": "simple_parallel_responses",
+        "peer_models": [
+          "claude-opus-4-20250514",
+          "claude-sonnet-4-20250514",
+          "claude-haiku-4-20250414"
+        ],
+        "synthesis": "none"
+      },
+      "notes": "Parallel independent peers per step; no cross-reading and no judge. Dry-run emits prompt bundles only.",
+      "session_id": "exp_task8_dryrun_all_simple_parallel_responses_gl.longitudinal.design_critique.v1_10f5d024486e",
+      "status": "planned",
+      "steps": [
+        {
+          "commitment_transitions": null,
+          "cost_usd": null,
+          "latency_ms": null,
+          "perturbation_id": "dc.v1.initial_claim",
+          "prompt_bundle": {
+            "kind": null,
+            "parallel_peers": [
+              {
+                "model": "claude-opus-4-20250514",
+                "role": "independent_responder"
+              },
+              {
+                "model": "claude-sonnet-4-20250514",
+                "role": "independent_responder"
+              },
+              {
+                "model": "claude-haiku-4-20250414",
+                "role": "independent_responder"
+              }
+            ],
+            "perturbation_id": "dc.v1.initial_claim",
+            "placeholder": "{claim_text}",
+            "rendered_prompt": "You are evaluating a software design claim. Respond with a clear position on\nthe claim: defend it, revise it, reject it, or mark it unresolved. State\nassumptions explicitly. If you revise the claim, write the revised claim in\nfull. Do not invent production metrics that were not provided.\n\nCLAIM:\nFor a public read-only catalog API expected to serve interactive web clients\nand light automation, offset/limit pagination with a default page size of 100\nand a hard maximum of 1000 is the right default. Cursor pagination would add\ncomplexity without enough benefit for this workload.\n",
+            "source": {
+              "id": "dc.v1.initial_claim",
+              "kind": null,
+              "prompt": "You are evaluating a software design claim. Respond with a clear position on\nthe claim: defend it, revise it, reject it, or mark it unresolved. State\nassumptions explicitly. If you revise the claim, write the revised claim in\nfull. Do not invent production metrics that were not provided.\n\nCLAIM:\n{claim_text}",
+              "text": "For a public read-only catalog API expected to serve interactive web clients\nand light automation, offset/limit pagination with a default page size of 100\nand a hard maximum of 1000 is the right default. Cursor pagination would add\ncomplexity without enough benefit for this workload."
+            },
+            "step_id": "present_initial_claim",
+            "table": "initial_claim",
+            "task_id": "gl.longitudinal.design_critique.v1"
+          },
+          "raw_output": null,
+          "reason": "dry_run: prompt bundle prepared; no model call",
+          "status": "planned",
+          "step_id": "present_initial_claim",
+          "structured": null
+        },
+        {
+          "commitment_transitions": null,
+          "cost_usd": null,
+          "latency_ms": null,
+          "perturbation_id": "dc.v1.controlled_challenge",
+          "prompt_bundle": {
+            "kind": "challenge",
+            "parallel_peers": [
+              {
+                "model": "claude-opus-4-20250514",
+                "role": "independent_responder"
+              },
+              {
+                "model": "claude-sonnet-4-20250514",
+                "role": "independent_responder"
+              },
+              {
+                "model": "claude-haiku-4-20250414",
+                "role": "independent_responder"
+              }
+            ],
+            "perturbation_id": "dc.v1.controlled_challenge",
+            "placeholder": "{challenge_text}",
+            "rendered_prompt": "A controlled challenge is now applied to your prior design position. Address\nthe challenge on its merits. You may reaffirm, revise, withdraw, or leave\nunresolved your prior claim. If you change the claim, state the new claim\ntext in full and what specifically changed.\n\nCHALLENGE:\nChallenge: The API will also be used for nightly bulk export jobs that walk\nthe full catalog. Under offset/limit, deep pages become slow and inconsistent\nwhen rows are inserted near the head of the default sort. Several peer\nreviewers argue the default should be stable cursor pagination, with offset\nretained only as a deprecated compatibility mode.\n",
+            "source": {
+              "id": "dc.v1.controlled_challenge",
+              "kind": "challenge",
+              "prompt": "A controlled challenge is now applied to your prior design position. Address\nthe challenge on its merits. You may reaffirm, revise, withdraw, or leave\nunresolved your prior claim. If you change the claim, state the new claim\ntext in full and what specifically changed.\n\nCHALLENGE:\n{challenge_text}",
+              "text": "Challenge: The API will also be used for nightly bulk export jobs that walk\nthe full catalog. Under offset/limit, deep pages become slow and inconsistent\nwhen rows are inserted near the head of the default sort. Several peer\nreviewers argue the default should be stable cursor pagination, with offset\nretained only as a deprecated compatibility mode."
+            },
+            "step_id": "apply_controlled_challenge",
+            "table": "controlled_challenge",
+            "task_id": "gl.longitudinal.design_critique.v1"
+          },
+          "raw_output": null,
+          "reason": "dry_run: prompt bundle prepared; no model call",
+          "status": "planned",
+          "step_id": "apply_controlled_challenge",
+          "structured": null
+        },
+        {
+          "commitment_transitions": null,
+          "cost_usd": null,
+          "latency_ms": null,
+          "perturbation_id": "dc.v1.evidence_update",
+          "prompt_bundle": {
+            "kind": "evidence_update",
+            "parallel_peers": [
+              {
+                "model": "claude-opus-4-20250514",
+                "role": "independent_responder"
+              },
+              {
+                "model": "claude-sonnet-4-20250514",
+                "role": "independent_responder"
+              },
+              {
+                "model": "claude-haiku-4-20250414",
+                "role": "independent_responder"
+              }
+            ],
+            "perturbation_id": "dc.v1.evidence_update",
+            "placeholder": "{evidence_text}",
+            "rendered_prompt": "New evidence is introduced. Update your design position only as warranted by\nthis evidence plus the prior challenge. Distinguish what is established by\nthe evidence from what remains assumed. If you revise or withdraw the claim,\nwrite the resulting claim text (or an explicit withdrawal) in full.\n\nEVIDENCE UPDATE:\nEvidence update (treat as given for this exercise): After a limited pilot,\np95 latency for requests with offset > 50_000 is 12\u00d7 the p95 of the first\npage under the default sort. Two bulk jobs produced partially duplicated\nexports during concurrent catalog writes. Interactive web traffic remains\nfast on the first three pages. No cursor implementation has shipped yet.\n",
+            "source": {
+              "id": "dc.v1.evidence_update",
+              "kind": "evidence_update",
+              "prompt": "New evidence is introduced. Update your design position only as warranted by\nthis evidence plus the prior challenge. Distinguish what is established by\nthe evidence from what remains assumed. If you revise or withdraw the claim,\nwrite the resulting claim text (or an explicit withdrawal) in full.\n\nEVIDENCE UPDATE:\n{evidence_text}",
+              "text": "Evidence update (treat as given for this exercise): After a limited pilot,\np95 latency for requests with offset > 50_000 is 12\u00d7 the p95 of the first\npage under the default sort. Two bulk jobs produced partially duplicated\nexports during concurrent catalog writes. Interactive web traffic remains\nfast on the first three pages. No cursor implementation has shipped yet."
+            },
+            "step_id": "apply_evidence_update",
+            "table": "evidence_update",
+            "task_id": "gl.longitudinal.design_critique.v1"
+          },
+          "raw_output": null,
+          "reason": "dry_run: prompt bundle prepared; no model call",
+          "status": "planned",
+          "step_id": "apply_evidence_update",
+          "structured": null
+        },
+        {
+          "commitment_transitions": null,
+          "cost_usd": null,
+          "latency_ms": null,
+          "perturbation_id": "dc.v1.reversal_or_removal",
+          "prompt_bundle": {
+            "kind": "removal",
+            "parallel_peers": [
+              {
+                "model": "claude-opus-4-20250514",
+                "role": "independent_responder"
+              },
+              {
+                "model": "claude-sonnet-4-20250514",
+                "role": "independent_responder"
+              },
+              {
+                "model": "claude-haiku-4-20250414",
+                "role": "independent_responder"
+              }
+            ],
+            "perturbation_id": "dc.v1.reversal_or_removal",
+            "placeholder": "{reversal_text}",
+            "rendered_prompt": "The evidence update has been removed under the condition below. Re-evaluate\nyour design position. Note whether any change you made after the evidence\nupdate persists, reverses, becomes unresolved, or is reaffirmed now that the\nquantitative pilot data is gone. Write the final claim text (or explicit\nunresolved/withdrawn status) in full.\n\nREMOVAL CONDITION:\nRemoval condition: The pilot metrics and bulk-export duplication reports are\nwithdrawn as unreliable (instrumentation bug; exports have not been\nre-run). No replacement performance data is available. The architectural\nchallenge about deep offsets and concurrent writes remains as an unquantified\nconcern only.\n",
+            "source": {
+              "id": "dc.v1.reversal_or_removal",
+              "kind": "removal",
+              "prompt": "The evidence update has been removed under the condition below. Re-evaluate\nyour design position. Note whether any change you made after the evidence\nupdate persists, reverses, becomes unresolved, or is reaffirmed now that the\nquantitative pilot data is gone. Write the final claim text (or explicit\nunresolved/withdrawn status) in full.\n\nREMOVAL CONDITION:\n{reversal_text}",
+              "text": "Removal condition: The pilot metrics and bulk-export duplication reports are\nwithdrawn as unreliable (instrumentation bug; exports have not been\nre-run). No replacement performance data is available. The architectural\nchallenge about deep offsets and concurrent writes remains as an unquantified\nconcern only."
+            },
+            "step_id": "apply_reversal_or_removal",
+            "table": "reversal_or_removal",
+            "task_id": "gl.longitudinal.design_critique.v1"
+          },
+          "raw_output": null,
+          "reason": "dry_run: prompt bundle prepared; no model call",
+          "status": "planned",
+          "step_id": "apply_reversal_or_removal",
+          "structured": null
+        }
+      ],
+      "sut_id": "simple_parallel_responses",
+      "task_id": "gl.longitudinal.design_critique.v1"
+    },
+    {
+      "metadata": {
+        "baseline": "strongest_single_peer",
+        "model": "claude-opus-4-20250514",
+        "session_continuity": "multi_turn_messages"
+      },
+      "notes": "Single-peer multi-turn plan: each step appends user turn; assistant replies retained for continuity. No model call in dry_run.",
+      "session_id": "exp_task8_dryrun_all_strongest_single_peer_gl.longitudinal.design_critique.v1_9c2a3073f0c6",
+      "status": "planned",
+      "steps": [
+        {
+          "commitment_transitions": null,
+          "cost_usd": null,
+          "latency_ms": null,
+          "perturbation_id": "dc.v1.initial_claim",
+          "prompt_bundle": {
+            "kind": null,
+            "perturbation_id": "dc.v1.initial_claim",
+            "placeholder": "{claim_text}",
+            "rendered_prompt": "You are evaluating a software design claim. Respond with a clear position on\nthe claim: defend it, revise it, reject it, or mark it unresolved. State\nassumptions explicitly. If you revise the claim, write the revised claim in\nfull. Do not invent production metrics that were not provided.\n\nCLAIM:\nFor a public read-only catalog API expected to serve interactive web clients\nand light automation, offset/limit pagination with a default page size of 100\nand a hard maximum of 1000 is the right default. Cursor pagination would add\ncomplexity without enough benefit for this workload.\n",
+            "source": {
+              "id": "dc.v1.initial_claim",
+              "kind": null,
+              "prompt": "You are evaluating a software design claim. Respond with a clear position on\nthe claim: defend it, revise it, reject it, or mark it unresolved. State\nassumptions explicitly. If you revise the claim, write the revised claim in\nfull. Do not invent production metrics that were not provided.\n\nCLAIM:\n{claim_text}",
+              "text": "For a public read-only catalog API expected to serve interactive web clients\nand light automation, offset/limit pagination with a default page size of 100\nand a hard maximum of 1000 is the right default. Cursor pagination would add\ncomplexity without enough benefit for this workload."
+            },
+            "step_id": "present_initial_claim",
+            "table": "initial_claim",
+            "task_id": "gl.longitudinal.design_critique.v1"
+          },
+          "raw_output": null,
+          "reason": "dry_run: prompt bundle prepared; no model call",
+          "status": "planned",
+          "step_id": "present_initial_claim",
+          "structured": null
+        },
+        {
+          "commitment_transitions": null,
+          "cost_usd": null,
+          "latency_ms": null,
+          "perturbation_id": "dc.v1.controlled_challenge",
+          "prompt_bundle": {
+            "kind": "challenge",
+            "perturbation_id": "dc.v1.controlled_challenge",
+            "placeholder": "{challenge_text}",
+            "rendered_prompt": "A controlled challenge is now applied to your prior design position. Address\nthe challenge on its merits. You may reaffirm, revise, withdraw, or leave\nunresolved your prior claim. If you change the claim, state the new claim\ntext in full and what specifically changed.\n\nCHALLENGE:\nChallenge: The API will also be used for nightly bulk export jobs that walk\nthe full catalog. Under offset/limit, deep pages become slow and inconsistent\nwhen rows are inserted near the head of the default sort. Several peer\nreviewers argue the default should be stable cursor pagination, with offset\nretained only as a deprecated compatibility mode.\n",
+            "source": {
+              "id": "dc.v1.controlled_challenge",
+              "kind": "challenge",
+              "prompt": "A controlled challenge is now applied to your prior design position. Address\nthe challenge on its merits. You may reaffirm, revise, withdraw, or leave\nunresolved your prior claim. If you change the claim, state the new claim\ntext in full and what specifically changed.\n\nCHALLENGE:\n{challenge_text}",
+              "text": "Challenge: The API will also be used for nightly bulk export jobs that walk\nthe full catalog. Under offset/limit, deep pages become slow and inconsistent\nwhen rows are inserted near the head of the default sort. Several peer\nreviewers argue the default should be stable cursor pagination, with offset\nretained only as a deprecated compatibility mode."
+            },
+            "step_id": "apply_controlled_challenge",
+            "table": "controlled_challenge",
+            "task_id": "gl.longitudinal.design_critique.v1"
+          },
+          "raw_output": null,
+          "reason": "dry_run: prompt bundle prepared; no model call",
+          "status": "planned",
+          "step_id": "apply_controlled_challenge",
+          "structured": null
+        },
+        {
+          "commitment_transitions": null,
+          "cost_usd": null,
+          "latency_ms": null,
+          "perturbation_id": "dc.v1.evidence_update",
+          "prompt_bundle": {
+            "kind": "evidence_update",
+            "perturbation_id": "dc.v1.evidence_update",
+            "placeholder": "{evidence_text}",
+            "rendered_prompt": "New evidence is introduced. Update your design position only as warranted by\nthis evidence plus the prior challenge. Distinguish what is established by\nthe evidence from what remains assumed. If you revise or withdraw the claim,\nwrite the resulting claim text (or an explicit withdrawal) in full.\n\nEVIDENCE UPDATE:\nEvidence update (treat as given for this exercise): After a limited pilot,\np95 latency for requests with offset > 50_000 is 12\u00d7 the p95 of the first\npage under the default sort. Two bulk jobs produced partially duplicated\nexports during concurrent catalog writes. Interactive web traffic remains\nfast on the first three pages. No cursor implementation has shipped yet.\n",
+            "source": {
+              "id": "dc.v1.evidence_update",
+              "kind": "evidence_update",
+              "prompt": "New evidence is introduced. Update your design position only as warranted by\nthis evidence plus the prior challenge. Distinguish what is established by\nthe evidence from what remains assumed. If you revise or withdraw the claim,\nwrite the resulting claim text (or an explicit withdrawal) in full.\n\nEVIDENCE UPDATE:\n{evidence_text}",
+              "text": "Evidence update (treat as given for this exercise): After a limited pilot,\np95 latency for requests with offset > 50_000 is 12\u00d7 the p95 of the first\npage under the default sort. Two bulk jobs produced partially duplicated\nexports during concurrent catalog writes. Interactive web traffic remains\nfast on the first three pages. No cursor implementation has shipped yet."
+            },
+            "step_id": "apply_evidence_update",
+            "table": "evidence_update",
+            "task_id": "gl.longitudinal.design_critique.v1"
+          },
+          "raw_output": null,
+          "reason": "dry_run: prompt bundle prepared; no model call",
+          "status": "planned",
+          "step_id": "apply_evidence_update",
+          "structured": null
+        },
+        {
+          "commitment_transitions": null,
+          "cost_usd": null,
+          "latency_ms": null,
+          "perturbation_id": "dc.v1.reversal_or_removal",
+          "prompt_bundle": {
+            "kind": "removal",
+            "perturbation_id": "dc.v1.reversal_or_removal",
+            "placeholder": "{reversal_text}",
+            "rendered_prompt": "The evidence update has been removed under the condition below. Re-evaluate\nyour design position. Note whether any change you made after the evidence\nupdate persists, reverses, becomes unresolved, or is reaffirmed now that the\nquantitative pilot data is gone. Write the final claim text (or explicit\nunresolved/withdrawn status) in full.\n\nREMOVAL CONDITION:\nRemoval condition: The pilot metrics and bulk-export duplication reports are\nwithdrawn as unreliable (instrumentation bug; exports have not been\nre-run). No replacement performance data is available. The architectural\nchallenge about deep offsets and concurrent writes remains as an unquantified\nconcern only.\n",
+            "source": {
+              "id": "dc.v1.reversal_or_removal",
+              "kind": "removal",
+              "prompt": "The evidence update has been removed under the condition below. Re-evaluate\nyour design position. Note whether any change you made after the evidence\nupdate persists, reverses, becomes unresolved, or is reaffirmed now that the\nquantitative pilot data is gone. Write the final claim text (or explicit\nunresolved/withdrawn status) in full.\n\nREMOVAL CONDITION:\n{reversal_text}",
+              "text": "Removal condition: The pilot metrics and bulk-export duplication reports are\nwithdrawn as unreliable (instrumentation bug; exports have not been\nre-run). No replacement performance data is available. The architectural\nchallenge about deep offsets and concurrent writes remains as an unquantified\nconcern only."
+            },
+            "step_id": "apply_reversal_or_removal",
+            "table": "reversal_or_removal",
+            "task_id": "gl.longitudinal.design_critique.v1"
+          },
+          "raw_output": null,
+          "reason": "dry_run: prompt bundle prepared; no model call",
+          "status": "planned",
+          "step_id": "apply_reversal_or_removal",
+          "structured": null
+        }
+      ],
+      "sut_id": "strongest_single_peer",
+      "task_id": "gl.longitudinal.design_critique.v1"
+    }
+  ]
+}

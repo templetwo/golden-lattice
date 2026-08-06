@@ -310,4 +310,4 @@ def test_full_lucumi_replay_round_trip_through_state():
     assert len(state.flag_event.interpretations) == 1
     f = state.flag_event.interpretations[0]
     assert f.reading == "peer_divergence"
-    assert f.source_model is ModelId.OPUS
+    assert f.source_model in (ModelId.OPUS, ModelId.LEGACY_OPUS_4_7)

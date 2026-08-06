@@ -32,9 +32,15 @@ INVESTIGATION_TIMEZONE = "America/New_York"
 
 
 class ModelId(str, Enum):
-    OPUS = "claude-opus-4-7"
-    SONNET = "claude-sonnet-4-6"
-    HAIKU = "claude-haiku-4-5"
+    # Active roster. Legacy values remain readable so persisted sessions from
+    # before the model refresh can still be audited and replayed.
+    FABLE = "claude-fable-5"
+    OPUS = "claude-opus-5"
+    SONNET = "claude-sonnet-5"
+    HAIKU = "claude-haiku-4-5-20251001"
+    LEGACY_OPUS_4_7 = "claude-opus-4-7"
+    LEGACY_SONNET_4_6 = "claude-sonnet-4-6"
+    LEGACY_HAIKU_4_5 = "claude-haiku-4-5"
 
 
 class Phase(int, Enum):
@@ -72,7 +78,7 @@ class OutputMode(str, Enum):
 
     - unified: single voice, attribution stripped.
     - layered: per-model sections.
-    - annotated: synthesis with inline [O], [S], [H] attribution. Default.
+    - annotated: synthesis with inline peer attribution markers. Default.
     - transcript: full Phase 1-3 dialogue verbatim, no synthesis.
 
     The annotation is the proof we did not flatten.
@@ -82,6 +88,23 @@ class OutputMode(str, Enum):
     LAYERED = "layered"
     ANNOTATED = "annotated"
     TRANSCRIPT = "transcript"
+
+
+class CommitmentState(str, Enum):
+    """Closed vocabulary for a claim's commitment status under perturbation.
+
+    Structural labels only — not a model of subjective conviction. A state
+    change is recorded solely via an explicit CommitmentTransition artifact;
+    never inferred from changed claim prose.
+    """
+
+    PROPOSED = "proposed"
+    DEFENDED = "defended"
+    CHALLENGED = "challenged"
+    REVISED = "revised"
+    WITHDRAWN = "withdrawn"
+    REAFFIRMED = "reaffirmed"
+    UNRESOLVED = "unresolved"
 
 
 # Default output mode per ARCHITECTURE.md §7. Single source of truth — both

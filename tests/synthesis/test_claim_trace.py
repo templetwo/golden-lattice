@@ -33,6 +33,7 @@ from golden_lattice.memory_graph.schema import (
     SelfReflectionArtifact,
     Session,
 )
+from golden_lattice.orchestrator import DEFAULT_INVITED_MODELS
 from golden_lattice.synthesis.claim_trace import (
     OMISSION_REASON_PREFIXES,
     build_claim_trace,
@@ -245,7 +246,7 @@ def _build_triad_session(
     phase_2: tuple[CrossReading, ...] = (),
     phase_3: tuple[DialogueTurn, ...] = (),
 ) -> Session:
-    """N=3 session helper. Used by tests of the strict-triadic dispute rule."""
+    """N=3 session helper. Used by tests of the ≥2-peer dispute rule at triad size."""
     ok = opus_response_kwargs or {}
     return Session(
         session_id="t",
@@ -285,9 +286,10 @@ def test_two_peer_dispute_marks_claim_modified_with_hedge():
     """When BOTH non-author peers cross-read disagree with a claim, the
     trace marks it 'modified' and modified_text contains the original
     claim text plus a templated hedge naming both disputers. Symmetric
-    counter to §6's strict-triadic consensus rule: both-non-author-peer
-    dispute is the strict-disagreement signal Rule 1 surfaces inline so
-    the audit doesn't get dropped at the synthesis seam."""
+    counter to §6's consensus rule: at least two distinct non-author
+    peers disputing is the signal Rule 1 surfaces inline so the audit
+    doesn't get dropped at the synthesis seam. This N=3 case has both
+    non-author peers disputing."""
     opus_disputed = _claim(ModelId.OPUS, "the 88x number is real")
     sonnet_reads = CrossReading(
         reader_model=ModelId.SONNET,
@@ -329,8 +331,9 @@ def test_two_peer_dispute_marks_claim_modified_with_hedge():
 
 
 def test_single_peer_dispute_keeps_claim_present():
-    """One peer disagrees, the other is silent → not the strict-triadic
-    signal. Claim stays present, no modification."""
+    """One peer disagrees, the other is silent → not the ≥2 distinct
+    non-author-peer dispute signal. Claim stays present, no modification.
+    At N=3 this means both non-author peers must dispute before modified."""
     opus_claim = _claim(ModelId.OPUS, "contested by only one peer")
     sonnet_reads = CrossReading(
         reader_model=ModelId.SONNET,
@@ -446,8 +449,8 @@ def test_two_peer_dispute_fires_from_phase_3_critique_only():
 
 def test_two_peer_dispute_mixed_channels_one_each():
     """Cross-channel: peer A disagrees in Phase 2, peer B critiques in
-    Phase 3. Still strict-triadic dispute — both non-author peers
-    contested, just through different channels. Modified fires."""
+    Phase 3. Still ≥2 distinct non-author-peer dispute — both non-author
+    peers contested (N=3), just through different channels. Modified fires."""
     opus_claim = _claim(ModelId.OPUS, "mixed-channel disputed claim")
     sonnet_p2 = CrossReading(
         reader_model=ModelId.SONNET,
@@ -482,7 +485,8 @@ def test_two_peer_dispute_mixed_channels_one_each():
 
 def test_single_peer_phase_3_critique_keeps_present():
     """One peer critiques in Phase 3, the other is silent in both
-    channels → not strict-triadic dispute, stays present."""
+    channels → not ≥2 distinct non-author-peer dispute, stays present.
+    At N=3 both non-author peers must dispute before modified."""
     opus_claim = _claim(ModelId.OPUS, "only one peer critiquing")
     sonnet_p3 = _critique(
         turn_id="t1",
@@ -611,10 +615,10 @@ def test_phase_2_disagreement_wins_over_phase_3_for_same_peer():
     assert "REASON_FROM_PHASE_3" not in entry.modified_text
 
 
-def test_two_peer_dispute_is_triadic_only():
-    """N=2 has only one non-author peer; both-peers-disagreed cannot apply.
-    Existing dyad behavior is preserved — single-peer disagreement keeps
-    the claim present, no modification fires."""
+def test_two_peer_dispute_does_not_fire_for_dyad():
+    """N=2 has only one non-author peer; the ≥2-peer dispute threshold
+    cannot be met. Existing dyad behavior is preserved — single-peer
+    disagreement keeps the claim present, no modification fires."""
     o1 = _claim(ModelId.OPUS, "claim")
     s1 = _claim(ModelId.SONNET, "other")
     sonnet_reads = CrossReading(
@@ -627,6 +631,84 @@ def test_two_peer_dispute_is_triadic_only():
     trace = build_claim_trace(session)
     by_id = {e.claim_id: e for e in trace}
     assert by_id[o1.claim_id].disposition == "present"
+
+
+def _build_tetrad_session(
+    *,
+    claims_by_model: dict[ModelId, tuple[Claim, ...]] | None = None,
+    phase_2: tuple[CrossReading, ...] = (),
+    phase_3: tuple[DialogueTurn, ...] = (),
+) -> Session:
+    """N=4 session helper bound to DEFAULT_INVITED_MODELS."""
+    assert DEFAULT_INVITED_MODELS == (
+        ModelId.FABLE,
+        ModelId.OPUS,
+        ModelId.SONNET,
+        ModelId.HAIKU,
+    )
+    claims_by_model = claims_by_model or {}
+    return Session(
+        session_id="t",
+        prompt="p",
+        prompt_hash="h",
+        models_invited=DEFAULT_INVITED_MODELS,
+        phase_1={
+            model: _response(model, claims_by_model.get(model, ()))
+            for model in DEFAULT_INVITED_MODELS
+        },
+        phase_2=phase_2,
+        phase_3=phase_3,
+    )
+
+
+def test_two_peer_dispute_fires_for_n4_with_two_of_three_peers():
+    """Regression: ARCHITECTURE.md §5.4 / §6 — dispute threshold is ≥2
+    distinct non-author peers, not triadic-unanimity. Bound to
+    DEFAULT_INVITED_MODELS: a claim disputed by two of three non-author
+    peers must receive the deterministic DISPUTED hedge; a silent third
+    peer is not a veto. Pre-fix this silently disabled the whole rule at
+    N=4 because _two_peer_disputers required len(non_author_peers) == 2."""
+    assert len(DEFAULT_INVITED_MODELS) == 4
+    author = ModelId.OPUS
+    assert author in DEFAULT_INVITED_MODELS
+    non_authors = tuple(m for m in DEFAULT_INVITED_MODELS if m is not author)
+    assert len(non_authors) == 3
+    disputers = non_authors[:2]
+    silent_peer = non_authors[2]
+
+    author_claim = _claim(author, "n4 disputed claim")
+    phase_2 = tuple(
+        CrossReading(
+            reader_model=peer,
+            target_model=author,
+            disagreements=(
+                Disagreement(
+                    target_claim_id=author_claim.claim_id,
+                    reason=f"{peer.value} objects at N=4.",
+                ),
+            ),
+        )
+        for peer in disputers
+    )
+    # Silent third non-author peer has claims but no dispute cross-reading.
+    session = _build_tetrad_session(
+        claims_by_model={
+            author: (author_claim,),
+            **{m: (_claim(m, "filler"),) for m in non_authors},
+        },
+        phase_2=phase_2,
+    )
+    assert session.models_invited == DEFAULT_INVITED_MODELS
+    trace = build_claim_trace(session)
+    by_id = {e.claim_id: e for e in trace}
+    entry = by_id[author_claim.claim_id]
+    assert entry.disposition == "modified"
+    assert entry.modified_text is not None
+    assert entry.modified_text.startswith(author_claim.text)
+    assert "DISPUTED" in entry.modified_text
+    for peer in disputers:
+        assert peer.value in entry.modified_text
+    assert silent_peer.value not in entry.modified_text
 
 
 def test_low_confidence_isolated_does_not_fire_without_self_reflection():

@@ -27,6 +27,7 @@ from golden_lattice.memory_graph.base import (
 from golden_lattice.memory_graph.metrics import FlagInterpretation
 from golden_lattice.memory_graph.schema import (
     ClaimTraceEntry,
+    CommitmentTransition,
     Elevation,
     SessionMetrics,
     SurfacedDisagreement,
@@ -48,6 +49,7 @@ __all__ = [
     "Phase2CrossReadingEvent",
     "Phase2TaggingEvent",
     "Phase3TurnEvent",
+    "CommitmentTransitionEvent",
     "Phase4ArtifactEvent",
     "Phase4MetricsEvent",
     "Phase4FlagInterpretationsEvent",
@@ -72,6 +74,7 @@ class EventType:
     PHASE_2_CROSS_READING = "phase_2_cross_reading"
     PHASE_2_TAGGING = "phase_2_tagging"
     PHASE_3_TURN = "phase_3_turn"
+    COMMITMENT_TRANSITION = "commitment_transition"
     PHASE_4_ARTIFACT = "phase_4_artifact"
     PHASE_4_METRICS = "phase_4_metrics"
     PHASE_4_FLAG_INTERPRETATIONS = "phase_4_flag_interpretations"
@@ -193,6 +196,17 @@ class Phase3TurnEvent(_BaseEvent):
     content: str
 
 
+class CommitmentTransitionEvent(_BaseEvent):
+    """One explicit commitment-state change from Session.commitment_transitions.
+
+    Never inferred from claim text drift. Carries the frozen
+    CommitmentTransition artifact so live and replay streams share one shape.
+    """
+
+    event_type: Literal["commitment_transition"] = "commitment_transition"
+    transition: CommitmentTransition
+
+
 class Phase4ArtifactEvent(_BaseEvent):
     event_type: Literal["phase_4_artifact"] = "phase_4_artifact"
     output_mode: OutputMode
@@ -232,6 +246,7 @@ LatticeEvent = Union[
     Phase2CrossReadingEvent,
     Phase2TaggingEvent,
     Phase3TurnEvent,
+    CommitmentTransitionEvent,
     Phase4ArtifactEvent,
     Phase4MetricsEvent,
     Phase4FlagInterpretationsEvent,

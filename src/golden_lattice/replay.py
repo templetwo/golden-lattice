@@ -32,6 +32,7 @@ from __future__ import annotations
 from typing import Iterator
 
 from golden_lattice.events import (
+    CommitmentTransitionEvent,
     LatticeEvent,
     Phase0DatetimeGroundingEvent,
     Phase0FailedSearchEvent,
@@ -72,7 +73,8 @@ def replay_session_events(session: Session) -> Iterator[LatticeEvent]:
     Order: session_started → (per-model phase_1_response_started in start-time
     order) → (per-model in completion-time order: phase_1_claim × N,
     phase_1_response_completed, self_reflection) → phase_2_cross_reading × n*(n-1)
-    → phase_2_tagging × n → phase_3_turn × |phase_3| → phase_4_artifact →
+    → phase_2_tagging × n → phase_3_turn × |phase_3| →
+    commitment_transition × |commitment_transitions| → phase_4_artifact →
     phase_4_metrics → phase_4_flag_interpretations → session_completed.
     """
     phase_1 = session.phase_1
@@ -227,6 +229,15 @@ def replay_session_events(session: Session) -> Iterator[LatticeEvent]:
             target_model=turn.target_model,
             target_claim_ids=turn.target_claim_ids,
             content=turn.content,
+        )
+        offset += _SYNTHETIC_GAP_MS
+
+    # Explicit commitment transitions (Phase 1 Task 5). Emitted in session
+    # tuple order after Phase 3 and before Phase 4. Never inferred from text.
+    for transition in session.commitment_transitions:
+        yield CommitmentTransitionEvent(
+            timestamp_offset_ms=offset,
+            transition=transition,
         )
         offset += _SYNTHETIC_GAP_MS
 

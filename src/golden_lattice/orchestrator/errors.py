@@ -69,3 +69,36 @@ class OrchestratorProviderError(OrchestratorError):
             f"{type(underlying).__name__}: {underlying}"
         )
         super().__init__(msg)
+
+
+class OrchestratorCapabilityError(OrchestratorError):
+    """A configured seat endpoint failed preflight capability validation.
+
+    Raised before Phase 1 when the seat→provider mapping is incomplete for
+    the invited roster, or when a resolved provider endpoint is not in the
+    injected availability set. Distinct from ``OrchestratorProviderError``
+    (which is a live call failure): this is configuration/capability, not a
+    mid-session SDK error.
+
+    ``ModelId`` on ``seat`` is protocol attribution identity. ``endpoint`` is
+    the provider model string that failed the check. Presence of a seat enum
+    member (e.g. ``ModelId.FABLE``) is never treated as proof the endpoint
+    is live.
+    """
+
+    def __init__(
+        self,
+        *,
+        seat: ModelId,
+        endpoint: str,
+        reason: str,
+        message: Optional[str] = None,
+    ) -> None:
+        self.seat = seat
+        self.endpoint = endpoint
+        self.reason = reason
+        msg = message or (
+            f"Provider endpoint unavailable for seat {seat.name} "
+            f"(endpoint={endpoint!r}): {reason}"
+        )
+        super().__init__(msg)

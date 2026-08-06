@@ -33,9 +33,10 @@ import asyncio
 import hashlib
 import uuid
 from datetime import datetime, timezone
-from typing import Callable, Optional
+from typing import AbstractSet, Callable, Optional
 
 from golden_lattice.events import (
+    CommitmentTransitionEvent,
     LatticeEvent,
     Phase0DatetimeGroundingEvent,
     Phase0FailedSearchEvent,
@@ -86,13 +87,17 @@ from golden_lattice.memory_graph.phase_0 import (
 )
 from golden_lattice.memory_graph.schema import (
     Claim,
+    CommitmentTransition,
     CrossReading,
     DialogueTurn,
     IndependentResponse,
     Session,
 )
 from golden_lattice.memory_graph.tagging import Phase2Tagging
-from golden_lattice.orchestrator.config import LatticeConfig
+from golden_lattice.orchestrator.config import (
+    LatticeConfig,
+    validate_provider_capabilities,
+)
 from golden_lattice.orchestrator.errors import OrchestratorTimeoutError
 from golden_lattice.synthesis.engine import synthesize
 
@@ -146,6 +151,7 @@ def _make_emitter(callback: Optional[ProgressCallback]) -> _Emitter | _NullEmitt
 
 
 DEFAULT_INVITED_MODELS: tuple[ModelId, ...] = (
+    ModelId.FABLE,
     ModelId.OPUS,
     ModelId.SONNET,
     ModelId.HAIKU,
@@ -181,24 +187,32 @@ async def run_lattice_session_async(
     progress_callback: Optional[ProgressCallback] = None,
     phase_0_client: Optional[Phase0WireClient] = None,
     search_client: Optional[SearchClient] = None,
+    available_endpoints: Optional[AbstractSet[str]] = None,
+    commitment_transitions: tuple[CommitmentTransition, ...] = (),
 ) -> Session:
     """Run a complete Lattice session: Phase 0 → 1 → 2 → 3 → 4. Returns Session.
 
     Async core. Use run_lattice_session() for sync callers.
 
     Pipeline:
+      0. Capability preflight: seat→endpoint mapping coverage, and when
+         ``available_endpoints`` is provided, endpoint membership in that
+         set. Fails before Phase 0/1 with OrchestratorCapabilityError.
+         No network I/O — callers inject the availability set (tests use a
+         frozenset; live scripts may populate it from a provider listing).
       1. Phase 1 dispatch in parallel across invited models. Each model's
          coroutine sequences Phase 1 emission → self-reflection internally,
          using the latency gap productively.
-      2. Phase 2 dispatch: 6 cross-readings (n*(n-1) for n=3) + 3 taggings,
+      2. Phase 2 dispatch: n*(n-1) cross-readings + n taggings,
          all in parallel.
       3. Phase 3 dispatch: 1 dialogue batch per model, all in parallel.
       4. Phase 4 synthesis: synchronous, single call to synthesize().
       5. Build Session, return.
 
     Errors propagate. OrchestratorTimeoutError on per-phase timeout.
-    OrchestratorProviderError on SDK failures. Substrate ValidationError
-    on malformed responses caught at construction. No partial sessions.
+    OrchestratorProviderError on SDK failures. OrchestratorCapabilityError
+    on preflight failure. Substrate ValidationError on malformed responses
+    caught at construction. No partial sessions.
 
     If progress_callback is provided, the orchestrator fires LatticeEvents at
     each phase boundary as they happen — the same event types replay yields
@@ -210,6 +224,10 @@ async def run_lattice_session_async(
     than silently skipping. When Phase 0 is skipped, Session.phase_0 stays
     None and the lattice proceeds with pre-amendment behavior (backward
     compatible with sessions that predate ARCHITECTURE.md §5.0).
+
+    commitment_transitions is an optional explicit ordered history. No
+    transition is auto-created because dialogue or claim text changed; the
+    caller/observer must supply CommitmentTransition artifacts.
     """
     if (phase_0_client is None) != (search_client is None):
         raise ValueError(
@@ -218,6 +236,13 @@ async def run_lattice_session_async(
             "Phase 0 needs both interfaces to run, and the orchestrator "
             "refuses to silently disable Phase 0 if only one is missing."
         )
+
+    # Preflight before any phase work. Seat identity ≠ provider availability.
+    validate_provider_capabilities(
+        invited_models=invited_models,
+        config=config,
+        available_endpoints=available_endpoints,
+    )
 
     if session_id is None:
         session_id = _generate_session_id()
@@ -287,6 +312,8 @@ async def run_lattice_session_async(
     )
 
     # Build the pre-synthesis Session so synthesize() can compose against it.
+    # commitment_transitions are validated here (Phase 1 claim refs, order)
+    # before any live transition events are emitted.
     pre_synth_session = Session(
         session_id=session_id,
         prompt=prompt,
@@ -297,7 +324,16 @@ async def run_lattice_session_async(
         phase_2=phase_2_cross_readings,
         phase_2_taggings=phase_2_taggings,
         phase_3=phase_3_turns,
+        commitment_transitions=commitment_transitions,
     )
+
+    # Explicit commitment transitions (Task 5): emit in order after Phase 3
+    # and before Phase 4 so live matches replay_session_events ordering.
+    for transition in pre_synth_session.commitment_transitions:
+        emitter.emit(CommitmentTransitionEvent(
+            timestamp_offset_ms=emitter.now_ms(),
+            transition=transition,
+        ))
 
     # --- Phase 4: synthesis (sync, atomic) ---------------------------
     artifact = synthesize(
@@ -337,6 +373,7 @@ async def run_lattice_session_async(
         phase_3=pre_synth_session.phase_3,
         phase_4=artifact,
         metrics=metrics,
+        commitment_transitions=pre_synth_session.commitment_transitions,
     )
 
     emitter.emit(Phase4FlagInterpretationsEvent(
@@ -361,6 +398,8 @@ def run_lattice_session(
     progress_callback: Optional[ProgressCallback] = None,
     phase_0_client: Optional[Phase0WireClient] = None,
     search_client: Optional[SearchClient] = None,
+    available_endpoints: Optional[AbstractSet[str]] = None,
+    commitment_transitions: tuple[CommitmentTransition, ...] = (),
 ) -> Session:
     """Sync wrapper around run_lattice_session_async. Canonical CLI entry."""
     return asyncio.run(
@@ -373,6 +412,8 @@ def run_lattice_session(
             progress_callback=progress_callback,
             phase_0_client=phase_0_client,
             search_client=search_client,
+            available_endpoints=available_endpoints,
+            commitment_transitions=commitment_transitions,
         )
     )
 

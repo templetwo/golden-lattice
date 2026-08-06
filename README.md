@@ -1,6 +1,8 @@
 # Golden Lattice
 
-A CLI that runs Opus, Sonnet, and Haiku as peers on the same prompt and produces a co-authored response that none of them would have produced alone. Not routing. Not voting. Not summarization. Co-authorship.
+A CLI that runs Fable, Opus, Sonnet, and Haiku as peers on the same prompt and produces a co-authored response that none of them would have produced alone. Not routing. Not voting. Not summarization. Co-authorship.
+
+**Seat identity vs provider availability.** `ModelId` values (including Fable) are protocol seat / attribution identities in the lattice record. They are not a claim that any particular provider endpoint is live. Live runs declare an explicit seat→provider-model map (`LatticeConfig.seat_endpoints`) and can preflight endpoint availability before Phase 1; presence of `ModelId.FABLE` alone never implies Fable is served.
 
 ## The load-bearing claim
 
@@ -9,7 +11,7 @@ Cognition emerges between models, not inside the strongest one.
 If the four invariants are violated, the system is doing routing and should be called that:
 
 1. **No authority gradient.** No model finalizes, overrides, or judges another's output.
-2. **Symmetric visibility.** All three models see the same prompt, same peer outputs, same dialogue state.
+2. **Symmetric visibility.** All invited models see the same prompt, same peer outputs, same dialogue state.
 3. **Contribution parity.** Each model's distinct perspective is preserved through synthesis. Measurable, not aspirational.
 4. **Irreducibility preservation.** No model's contribution can be fully subsumed without trace. The trace itself is the proof.
 
@@ -17,13 +19,19 @@ These invariants are not constraints. They are refusals — structural commitmen
 
 ## What is in this repo
 
-The evaluative substrate. Schema, tagging, metrics, and persistence layers that any operational layer (orchestrator, exchange wire format, synthesis engine, CLI) must satisfy before running.
+The full protocol stack on top of the evaluative substrate:
+
+- **Memory graph** — schema, tagging, metrics, persistence (`src/golden_lattice/memory_graph/`)
+- **Orchestrator** — Phase 0–4 dispatch, seat→endpoint preflight, event emission
+- **Synthesis engine** — deterministic Phase 4 rules (no hidden judge model)
+- **Exchange / CLI / TUI / dashboard** — wire format and operator surfaces
+- **Experiments** — longitudinal corpus, baseline SUT runners, case reports, validation CLI
 
 ```
 src/golden_lattice/memory_graph/
-├── base.py      — ModelId, Phase, claim_id_for, PARITY_THRESHOLD
+├── base.py      — ModelId, Phase, claim_id_for, PARITY_THRESHOLD, CommitmentState
 ├── schema.py    — Session, Claim, IndependentResponse, CrossReading, DialogueTurn,
-│                  ClaimTraceEntry, SynthesisArtifact, SessionMetrics
+│                  ClaimTraceEntry, SynthesisArtifact, CommitmentTransition, SessionMetrics
 ├── tagging.py   — Phase2Tagging, ClaimTags, ConsensusTag, DimensionConsensus,
 │                  EdgeCaseTag, StructuralPatternTag (closed vocabularies, v0.1)
 ├── metrics.py   — compute_consensus_tags, compute_dimension_consensus,
@@ -34,13 +42,7 @@ src/golden_lattice/memory_graph/
                    aggregate_alignment_pair_history
 ```
 
-69 tests pass. Each test exercises one structural refusal — every collapse mode the spec names is either impossible to construct (schema layer) or detectable across sessions (metrics + store layers).
-
-## What is not in this repo yet
-
-The operational layer. Phase 2 cross-reading wire format, the orchestrator, the synthesis engine, the CLI surface. These will ship next.
-
-The substrate constrains them from below. Anything built downstream must satisfy these constructors and pass these metrics before it can run. The orchestrator is constrained from below before it exists.
+The test suite exercises structural refusals — every collapse mode the spec names is either impossible to construct (schema layer) or detectable across sessions (metrics + store layers). Run `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest -q`. For experiment/corpus/roster/constitutional checks: `python -m experiments.validation`.
 
 ## What this repo is not
 
@@ -85,8 +87,8 @@ User ⇄ CLI
   self-reflection artifact collection during Phase 1 idle gaps)
         ⇅
  ┌────────┬────────┬────────┐
- │  Opus  │ Sonnet │ Haiku  │
- └────────┴────────┴────────┘
+ │ Fable │ Opus │ Sonnet │ Haiku │
+ └───────┴──────┴────────┴───────┘
         ⇅
  Exchange Layer
  (validates Phase 2/3 schema, routes peer-visible state,
@@ -104,7 +106,7 @@ User ⇄ CLI
   flagged collapse-toward-routing events)
 ```
 
-Memory Graph is the substrate this repo currently implements. The remaining layers are forthcoming.
+Memory Graph is the constitutional substrate; orchestrator, synthesis, CLI/TUI, and the experiments harness are implemented alongside it.
 
 ## Further reading
 
@@ -113,7 +115,7 @@ Memory Graph is the substrate this repo currently implements. The remaining laye
 
 ## Project provenance
 
-Golden Lattice was authored under [The Temple of Two](https://thetempleoftwo.com) by Anthony Vasquez Sr. in collaboration with Claude Opus 4.7. The architectural lineage and the philosophical frame that holds this work live in the project's persistent memory layer (the Sovereign Stack), not in this repository. The repo holds the engineering. The lineage holds the why.
+Golden Lattice was authored under [The Temple of Two](https://thetempleoftwo.com) by Anthony Vasquez Sr. in collaboration with Claude. The architectural lineage and the philosophical frame that holds this work live in the project's persistent memory layer (the Sovereign Stack), not in this repository. The repo holds the engineering. The lineage holds the why.
 
 ## License
 

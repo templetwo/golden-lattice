@@ -17,11 +17,10 @@ rendering. The other three modes derive from or transform around it:
 
 ENGINE CONVENTIONS (v0):
 
-Marker abbreviation. The spec specifies [O]/[S]/[H] verbatim. v0 hardcodes
-the mapping ModelId.OPUS → [O], etc. v1 trigger: a fourth ModelId added
-to the closed vocabulary, especially one with an initial-letter collision
-(e.g., a future Opus 5 sharing the [O] abbreviation). At that point the
-marker scheme needs revisiting; until then, hardcode.
+Marker abbreviation. The original spec specifies [O]/[S]/[H]. The roster now
+includes Fable, so the marker vocabulary is explicitly extended with [F].
+Markers remain a closed, deterministic mapping rather than being inferred
+from model names.
 
 Marker placement: prefix. "[O] LRU is the right default." Reads as
 "according to" — academic-citation convention.
@@ -55,7 +54,7 @@ Within-section: claims in their Phase 1 EMISSION order, not claim_trace
 order. Layered mode shows each peer's argument as the peer made it; the
 synthesis's reweaving belongs to annotated mode.
 
-Layered section headers: "=== claude-opus-4-7 ===" — consistent with
+Layered section headers: "=== claude-opus-5 ===" — consistent with
 transcript-mode section markers; uses the canonical model identifier
 rather than introducing a parallel human-readable scheme.
 
@@ -105,12 +104,16 @@ from golden_lattice.memory_graph.schema import (
 )
 
 
-# Marker mapping per ARCHITECTURE.md §7 ([O], [S], [H]). Hardcoded for v0.
-# v1 trigger: fourth ModelId added (esp. with initial-letter collision).
+# Marker mapping per ARCHITECTURE.md §7. Explicit so attribution remains
+# deterministic and cannot collide when model names share an initial.
 _MARKER_BY_MODEL: dict[ModelId, str] = {
+    ModelId.FABLE: "[F]",
     ModelId.OPUS: "[O]",
     ModelId.SONNET: "[S]",
     ModelId.HAIKU: "[H]",
+    ModelId.LEGACY_OPUS_4_7: "[O]",
+    ModelId.LEGACY_SONNET_4_6: "[S]",
+    ModelId.LEGACY_HAIKU_4_5: "[H]",
 }
 
 
@@ -145,11 +148,11 @@ def render_output(
 
 
 def _attribution_marker(model: ModelId) -> str:
-    """Return the [O]/[S]/[H] marker for a model. Hardcoded v0 mapping."""
+    """Return the explicit attribution marker for a model."""
     if model not in _MARKER_BY_MODEL:
         raise ValueError(
-            f"No attribution marker defined for {model.value}. v1 trigger: "
-            "extend _MARKER_BY_MODEL when a new ModelId is added."
+            f"No attribution marker defined for {model.value}. Extend "
+            "_MARKER_BY_MODEL when a new ModelId is added."
         )
     return _MARKER_BY_MODEL[model]
 
@@ -173,7 +176,7 @@ def _render_annotated(
     session: Session,
     claim_trace: tuple[ClaimTraceEntry, ...],
 ) -> str:
-    """Render annotated mode: synthesis prose with inline [O]/[S]/[H] markers.
+    """Render annotated mode: synthesis prose with inline model markers.
 
     Iterates claim_trace in order. Each segment is "{marker} {text}\n".
     For modified claims: text is modified_text. For omitted claims: skipped

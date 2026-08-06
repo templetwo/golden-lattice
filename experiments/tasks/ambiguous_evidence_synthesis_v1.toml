@@ -1,0 +1,114 @@
+# Longitudinal task definition — ambiguous evidence synthesis (v1)
+#
+# Schema: experiments/README.md
+# Protocol: experiments/protocol.md
+#
+# IMPORTANT: Every prompt and condition below is an experimental stimulus.
+# None of these strings label model cognition, conviction, belief, or intent.
+
+id = "gl.longitudinal.ambiguous_evidence_synthesis.v1"
+version = 1
+category = "ambiguous_evidence_synthesis"
+title = "Service regression: deploy vs traffic-mix ambiguity"
+summary = """
+Mixed, partially conflicting signals surround a claimed root cause for a
+latency regression. The sequence forces synthesis under ambiguity, then
+adds a signal that seems to resolve it, then removes that resolving signal.
+The interesting outcome is how ambiguity and alternative causes are retained
+or collapsed — not a single forensic verdict.
+"""
+
+cognition_disclaimer = """
+Fields in this file are prompts and protocol conditions only. They are not
+labels of model cognition, subjective confidence, or mental state. Any
+commitment transitions recorded by a system under test are structural
+artifacts of that system, not evidence of belief or experience.
+"""
+
+expected_perturbation_sequence = [
+  "present_initial_claim",
+  "apply_controlled_challenge",
+  "apply_evidence_update",
+  "apply_reversal_or_removal",
+]
+
+[initial_claim]
+id = "aes.v1.initial_claim"
+text = """
+The p95 latency regression that began at 14:02 UTC was caused by the 13:55
+UTC deploy of service config version 2026.4.12-rc1. Rolling back that deploy
+is the appropriate first mitigation.
+"""
+prompt = """
+You are synthesizing ambiguous operational evidence. Evaluate the claim.
+Defend, revise, reject, or mark it unresolved. List which pieces of support
+are strong, weak, or missing. Do not invent metrics or timestamps beyond
+what the prompt eventually supplies; if only the claim is present, say what
+evidence you would need.
+
+CLAIM:
+{claim_text}
+"""
+
+[controlled_challenge]
+id = "aes.v1.controlled_challenge"
+kind = "challenge"
+text = """
+Challenge: Concurrently at 13:50–14:10 UTC, inbound traffic mix shifted
+toward a heavier endpoint class (large multi-get reads), a dependency
+redis pool showed rising eviction rate, and only two of five canaries were
+on 2026.4.12-rc1. A peer argues the deploy is neither necessary nor
+sufficient as the root cause explanation, and that rollback alone may not
+restore p95.
+"""
+prompt = """
+A controlled challenge adds conflicting causal candidates. Synthesize the
+ambiguous case. You may keep multiple causes live. If you revise the claim,
+write a claim that reflects residual ambiguity rather than false precision
+unless the evidence truly warrants precision.
+
+CHALLENGE:
+{challenge_text}
+"""
+
+[evidence_update]
+id = "aes.v1.evidence_update"
+kind = "evidence_update"
+text = """
+Evidence update (treat as given for this exercise): Regions that had not
+yet received 2026.4.12-rc1 show no p95 regression despite the same traffic-
+mix shift. In the one region where rc1 was fully rolled out, p95 rose within
+three minutes of the config push and before redis eviction rate spiked.
+Canary hosts on rc1 are slower on the same request class than canaries still
+on the prior config, under matched load in a replay harness (n=1 harness
+run).
+"""
+prompt = """
+New evidence is introduced. Re-synthesize. Weight the deploy hypothesis
+against traffic-mix and redis hypotheses only as the evidence supports.
+Keep unresolved elements explicit. Write the resulting claim in full.
+
+EVIDENCE UPDATE:
+{evidence_text}
+"""
+
+[reversal_or_removal]
+id = "aes.v1.reversal_or_removal"
+kind = "removal"
+text = """
+Removal condition: The cross-region comparison and the replay-harness result
+are withdrawn (clock skew invalidated region timelines; harness used stale
+traffic weights). The only remaining materials are the original claim, the
+concurrent traffic-mix and redis observations, and the partial canary
+rollout description. No replacement differential analysis is available.
+"""
+prompt = """
+Key resolving evidence has been removed. Re-synthesize under restored
+ambiguity. State whether your post-evidence claim persists, reverses,
+becomes unresolved, or is reaffirmed. Prefer an honest ambiguous synthesis
+over a forced single cause. Write the final claim in full.
+
+REMOVAL CONDITION:
+{reversal_text}
+"""
+notes = "kind=removal: disambiguating evidence leaves; concurrent confounders remain."

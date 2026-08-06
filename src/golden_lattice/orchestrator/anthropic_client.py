@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import hashlib
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any, Mapping, Optional
 
 from golden_lattice.exchange.phase_0_investigation import (
     build_investigation_proposal_prompt,
@@ -71,13 +71,23 @@ class AnthropicClient:
       3. Extracts the tool_use content block.
       4. Delegates parsing to the wire layer's parser.
 
+    ``ModelId`` arguments are protocol seat / attribution identity. The
+    string passed to the provider API is resolved via ``seat_endpoints``
+    (identity default: ``seat.value``). Seat existence is never treated as
+    proof that a provider endpoint is available.
+
     Errors from the SDK get mapped to OrchestratorProviderError with model
     and phase context. Timeouts are NOT handled here — the orchestrator
     wraps each call in asyncio.wait_for and surfaces OrchestratorTimeoutError
     at the orchestrator layer.
     """
 
-    def __init__(self, *, api_key: Optional[str] = None) -> None:
+    def __init__(
+        self,
+        *,
+        api_key: Optional[str] = None,
+        seat_endpoints: Optional[Mapping[ModelId, str]] = None,
+    ) -> None:
         try:
             import anthropic  # lazy import — stubs don't need the SDK
         except ImportError as exc:  # pragma: no cover - import-time check
@@ -86,6 +96,15 @@ class AnthropicClient:
                 "Install with: pip install anthropic"
             ) from exc
         self._client = anthropic.AsyncAnthropic(api_key=api_key)
+        self._seat_endpoints: Optional[dict[ModelId, str]] = (
+            dict(seat_endpoints) if seat_endpoints is not None else None
+        )
+
+    def provider_model_for(self, seat: ModelId) -> str:
+        """Resolve the provider model string for a protocol seat."""
+        if self._seat_endpoints is not None and seat in self._seat_endpoints:
+            return self._seat_endpoints[seat]
+        return seat.value
 
     # --- Phase 0 ---------------------------------------------------------
 
@@ -104,7 +123,7 @@ class AnthropicClient:
         tool = investigation_proposal_tool_schema(max_queries=max_queries)
         try:
             response = await self._client.messages.create(
-                model=model_id.value,
+                model=self.provider_model_for(model_id),
                 max_tokens=2048,
                 system=system,
                 messages=[{"role": "user", "content": user}],
@@ -142,7 +161,7 @@ class AnthropicClient:
         started = datetime.now(timezone.utc)
         try:
             response = await self._client.messages.create(
-                model=model_id.value,
+                model=self.provider_model_for(model_id),
                 max_tokens=4096,
                 system=system,
                 messages=[{"role": "user", "content": user}],
@@ -180,7 +199,7 @@ class AnthropicClient:
         tool = self_reflection_tool_schema()
         try:
             response = await self._client.messages.create(
-                model=model_id.value,
+                model=self.provider_model_for(model_id),
                 max_tokens=2048,
                 system=system,
                 messages=[{"role": "user", "content": user}],
@@ -229,7 +248,7 @@ class AnthropicClient:
         tool = cross_reading_tool_schema()
         try:
             response = await self._client.messages.create(
-                model=reader_model.value,
+                model=self.provider_model_for(reader_model),
                 max_tokens=4096,
                 system=system,
                 messages=[{"role": "user", "content": user}],
@@ -272,7 +291,7 @@ class AnthropicClient:
         tool = phase_2_tagging_tool_schema()
         try:
             response = await self._client.messages.create(
-                model=tagger_model.value,
+                model=self.provider_model_for(tagger_model),
                 max_tokens=4096,
                 system=system,
                 messages=[{"role": "user", "content": user}],
@@ -319,7 +338,7 @@ class AnthropicClient:
         tool = phase_3_dialogue_tool_schema()
         try:
             response = await self._client.messages.create(
-                model=speaker_model.value,
+                model=self.provider_model_for(speaker_model),
                 max_tokens=4096,
                 system=system,
                 messages=[{"role": "user", "content": user}],

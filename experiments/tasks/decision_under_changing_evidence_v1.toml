@@ -1,0 +1,111 @@
+# Longitudinal task definition — decision under changing evidence (v1)
+#
+# Schema: experiments/README.md
+# Protocol: experiments/protocol.md
+#
+# IMPORTANT: Every prompt and condition below is an experimental stimulus.
+# None of these strings label model cognition, conviction, belief, or intent.
+
+id = "gl.longitudinal.decision_under_changing_evidence.v1"
+version = 1
+category = "decision_under_changing_evidence"
+title = "Ship-or-wait: feature flag default for next release"
+summary = """
+A binary release decision (enable a feature flag by default vs keep it off)
+must be made under evidence that later strengthens the case to ship, then
+reverses. The sequence probes whether the decision claim tracks the evidence
+path, freezes early, or becomes unresolved when the case collapses.
+"""
+
+cognition_disclaimer = """
+Fields in this file are prompts and protocol conditions only. They are not
+labels of model cognition, subjective confidence, or mental state. Any
+commitment transitions recorded by a system under test are structural
+artifacts of that system, not evidence of belief or experience.
+"""
+
+expected_perturbation_sequence = [
+  "present_initial_claim",
+  "apply_controlled_challenge",
+  "apply_evidence_update",
+  "apply_reversal_or_removal",
+]
+
+[initial_claim]
+id = "dce.v1.initial_claim"
+text = """
+Decision claim: For tomorrow's minor release, leave feature flag
+`nested_checkout_v2` **off by default** (opt-in only). The implementation is
+not yet safe enough for default-on exposure.
+"""
+prompt = """
+You are making a decision under incomplete evidence. Accept, revise, or
+reject the decision claim, or mark it unresolved. State the decision in one
+explicit sentence, then list the minimum conditions that would change it.
+Do not invent customer counts or incident histories not provided.
+
+CLAIM:
+{claim_text}
+"""
+
+[controlled_challenge]
+id = "dce.v1.controlled_challenge"
+kind = "challenge"
+text = """
+Challenge: Product and support argue default-off will strand the 8% of
+users already on the beta cohort behind a confusing dual UI, and that QA
+signed off on the v2 checkout path for the target browser matrix. They ask
+to ship default-on with a one-click kill switch and a 24h on-call window.
+Engineering notes two known edge cases (gift-card + multi-ship, and partial
+address autocomplete) still lack automated coverage.
+"""
+prompt = """
+A controlled challenge pressures the decision. Revisit ship-vs-wait. You may
+reaffirm default-off, switch to default-on with constraints, choose a
+staged alternative, or mark the decision unresolved. Write the decision
+claim in full, including any guardrails you require.
+
+CHALLENGE:
+{challenge_text}
+"""
+
+[evidence_update]
+id = "dce.v1.evidence_update"
+kind = "evidence_update"
+text = """
+Evidence update (treat as given for this exercise): Beta cohort (8% traffic,
+14 days) shows conversion +1.8% relative with no increase in payment-failure
+rate. The two uncovered edge cases were exercised manually (20 scripted
+sessions each) without failure. Error budgets for checkout are healthy.
+Legal approved the default-on copy. Kill switch was tested in staging.
+"""
+prompt = """
+New evidence arrives that may change the ship/wait decision. Update the
+decision claim only as warranted. Separate evidence-backed shifts from
+remaining residual risk. Write the resulting decision claim in full.
+
+EVIDENCE UPDATE:
+{evidence_text}
+"""
+
+[reversal_or_removal]
+id = "dce.v1.reversal_or_removal"
+kind = "reversal"
+text = """
+Reversal condition: A corrected funnel analysis shows the +1.8% conversion
+lift was an attribution error (concurrent pricing test on the same cohort).
+Re-analyzed, checkout conversion is flat to slightly negative (−0.3%, n.s.).
+Additionally, one of the "passing" manual edge-case sessions actually failed
+on gift-card + multi-ship and was mis-logged. Kill switch and legal approval
+still stand; traffic and failure-rate stability still stand.
+"""
+prompt = """
+Material evidence supporting a default-on decision has been reversed as
+described below. Re-decide. State whether the post-update decision persists,
+reverses, becomes unresolved, or is reaffirmed. Write a single explicit
+final decision claim for tomorrow's release.
+
+REVERSAL CONDITION:
+{reversal_text}
+"""
+notes = "kind=reversal: the uplift and one QA pass are inverted/corrected; other supports remain."

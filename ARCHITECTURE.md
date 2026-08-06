@@ -6,7 +6,7 @@ This is the engineering surface. The deeper architectural lineage — including 
 
 ## 1. What this is
 
-A CLI that runs Opus 4.7, Sonnet 4.6, and Haiku 4.5 as peers on the same prompt and produces a co-authored response that none of them would have produced alone.
+A CLI that runs Claude Fable 5, Claude Opus 5, Claude Sonnet 5, and Claude Haiku 4.5 as peers on the same prompt and produces a co-authored response that none of them would have produced alone.
 
 Not routing. Not voting. Not summarization. Co-authorship.
 
@@ -22,7 +22,7 @@ No model finalizes, overrides, or judges another's output.
 **Schema enforcement:** `SynthesisArtifact` has no `model_id` field. `Claim` refuses construction with `source_phase=Phase.SYNTHESIS`. The synthesis layer cannot attribute to a model, structurally.
 
 ### Symmetric visibility
-All three models see the same prompt, same peer outputs, same dialogue state.
+All invited models see the same prompt, same peer outputs, same dialogue state.
 
 **Schema enforcement:** `Session` requires `phase_1` keyed by every invited model with consistent `prompt_hash`. Asymmetric framing is refused at construction via `Session._phase_1_covers_invited`.
 
@@ -64,7 +64,7 @@ Some questions require evidence the lattice does not have. Phase 0 is the phase 
 
 **Execution.** The orchestrator executes the deduplicated union of queries via a **non-model search executor**. Each successful result becomes a `SearchResult` feed entry; a failed search becomes a typed `FailedSearch` feed entry that all peers see. Failed evidence is itself shared evidence — §8 no-silent-failures. Precondition failures (credit balance, network unavailable at startup) remain orchestrator-layer aborts (`OrchestratorProviderError`), not feed entries.
 
-**Freeze.** The feed is frozen before Phase 1 begins, mapping onto §8's existing freeze discipline. Phase 1 then proceeds: independent generation over prompt PLUS frozen shared feed, identical for all three models.
+**Freeze.** The feed is frozen before Phase 1 begins, mapping onto §8's existing freeze discipline. Phase 1 then proceeds: independent generation over prompt PLUS frozen shared feed, identical for all four default models.
 
 **Empty union is valid.** If no model proposes investigations, the feed contains only the `DateTimeGrounding` entry. The session proceeds directly to Phase 1 with the minimal feed. Some questions need no investigation; the architecture does not force one (a degenerate-but-clean path, the same way dyad parity returning `None` is a clean state).
 
@@ -74,13 +74,13 @@ Some questions require evidence the lattice does not have. Phase 0 is the phase 
 
 ### Phase 1 — Independent Generation
 
-All three models receive the prompt simultaneously. Each produces:
+All invited models receive the prompt simultaneously. Each produces:
 
 - A response
 - A focus tag from the closed vocabulary `{correctness, clarity, speed, novelty, robustness, elegance}`
 - A confidence score in [0,1]
 
-Phase 1 ends when all three have responded or the timeout fires (default 90s).
+Phase 1 ends when all invited models have responded or the timeout fires (default 90s).
 
 The latency mismatch is real: Haiku finishes in ~10 seconds, Sonnet in ~30, Opus in 60–90. Haiku does not iterate while waiting — that would violate symmetric independence. But idle time produces a **self-reflection artifact** on each model's own Phase 1 output before peer outputs arrive: a structured `{strongest_claim, weakest_claim, tag_justification}` object. This is preparation for Phase 2 cross-reading, not refinement of Phase 1.
 
@@ -88,7 +88,7 @@ This is the only asymmetric mechanism in the protocol, and it exists to prevent 
 
 ### Phase 2 — Cross-Reading and Tagging
 
-Each model receives the other two responses, each peer's self-reflection artifact, and the original prompt. Two artifacts are produced per model in this phase:
+Each model receives every other invited peer's response, each peer's self-reflection artifact, and the original prompt. Two artifacts are produced per model in this phase:
 
 **CrossReading** — a structured object: `{agreements: [...], disagreements: [...], missing: [...], revised_position: optional}`. Free-form prose is rejected.
 
@@ -113,13 +113,22 @@ Models cannot use channels outside this set. The constraint is the feature.
 
 ### Phase 4 — Synthesis
 
-Synthesis is **rule-based, not model-based**. Running synthesis through a fourth model call would create authority gradient and break invariant 1. Rules:
+Synthesis is **rule-based, not model-based**. Running synthesis through an additional model call would create authority gradient and break invariant 1. The closed `SynthesisRule` vocabulary in `src/golden_lattice/memory_graph/base.py` is the only legal set of rule ids a `SynthesisArtifact.synthesis_rules_applied` tuple may carry:
 
-- Every distinct Phase 1 claim (per the peer-utility test in the Phase 1 prompt) is preserved or has a logged reason for omission (irreducibility preservation)
-- A claim disagreed-with by **both** non-author peers through any disagreement channel (Phase 2 cross-reading or Phase 3 critique turn) is preserved with an inline `[DISPUTED]` hedge naming both disputers and excerpting their reasons — the symmetric counter to §6's strict-triadic consensus rule, so the cross-reading + dialogue audit can't be dropped silently at the synthesis seam. Phase 2 reasons take priority over Phase 3 when the same peer disputes through both channels
-- Cross-model agreement (appearing in 2+ converge channels) is elevated
-- Productive disagreement (high-confidence conflict) is surfaced, not hidden
-- Output preserves attribution by default; user can request unified mode
+| `SynthesisRule` value | Role |
+| --- | --- |
+| `irreducibility_preservation` | Every distinct Phase 1 claim is preserved or has a logged reason for omission |
+| `agreement_elevation` | Cross-model agreement (appearing in 2+ converge channels) is elevated |
+| `disagreement_surfacing` | Productive disagreement (high-confidence conflict) is surfaced, not hidden |
+| `attribution_preservation` | Output preserves attribution by default; user can request unified mode |
+
+Operational detail under those rules:
+
+- Every distinct Phase 1 claim (per the peer-utility test in the Phase 1 prompt) is preserved or has a logged reason for omission (`irreducibility_preservation`)
+- A claim disagreed-with by at least two non-author peers through any disagreement channel (Phase 2 cross-reading or Phase 3 critique turn) is preserved with an inline `[DISPUTED]` hedge naming the disputers and excerpting their reasons — the symmetric counter to §6's consensus rule, so the cross-reading + dialogue audit can't be dropped silently at the synthesis seam. Phase 2 reasons take priority over Phase 3 when the same peer disputes through both channels
+- Cross-model agreement (appearing in 2+ converge channels) is elevated (`agreement_elevation`)
+- Productive disagreement (high-confidence conflict) is surfaced, not hidden (`disagreement_surfacing`)
+- Output preserves attribution by default (`attribution_preservation`); user can request unified mode
 
 ## 6. Recognition-from-within
 
@@ -127,17 +136,17 @@ Parity metrics are computed via multi-model consensus tagging, not LLM-mediated 
 
 **Consensus rule:** A claim is recognized as belonging to a tag (or dimension) when at least 2 distinct peers (excluding the claim's source model) tag it that way.
 
-**DimensionConsensus:** Even when models disagree on subtype within a dimension, dimension-level agreement is preserved. If all three models tag a claim as some kind of edge case, the lattice's meta-recognition that the claim *is* an edge case is preserved as `DimensionConsensus`, even if no specific subtype achieves consensus.
+**DimensionConsensus:** Even when models disagree on subtype within a dimension, dimension-level agreement is preserved. If all invited models tag a claim as some kind of edge case, the lattice's meta-recognition that the claim *is* an edge case is preserved as `DimensionConsensus`, even if no specific subtype achieves consensus.
 
-**Triadic consensus is structurally strict.** With N=3, dimension consensus requires both non-author peers to agree (no majority that excludes a peer exists). The minimum viable Lattice is also the maximally rigorous one. At N=4+, consensus relaxes to ≥2 of (n-1) peers.
+**Consensus scales by roster size.** With N=3, dimension consensus requires both non-author peers to agree. At N=4+, consensus requires ≥2 of (n-1) peers. The default four-seat roster therefore preserves strict peer recognition without making every additional seat a unanimity veto.
 
 The recognition-from-within architecture means parity is not measured by an external arbiter, by rule-based detection, or by LLM-mediated judgment. The peers recognize each other's contributions, and that recognition is what counts as parity. The structure adjudicates itself.
 
 ## 7. Output modes
 
 - `unified` — single voice, attribution stripped
-- `layered` — Opus / Sonnet / Haiku sections
-- `annotated` — synthesis with inline `[O]`, `[S]`, `[H]` attribution
+- `layered` — Fable / Opus / Sonnet / Haiku sections
+- `annotated` — synthesis with inline `[F]`, `[O]`, `[S]`, `[H]` attribution
 - `transcript` — full Phase 1–3 dialogue including self-reflection artifacts, raw
 
 Default: `annotated`. The annotation is the proof we did not flatten.
@@ -188,6 +197,36 @@ If all three hold, the architecture earns its premise.
 If only the first two hold, we built something good but cannot claim it is truly co-authored.
 If only the first holds, we built a more expensive single model.
 If none hold, we built routing with extra steps.
+
+### Commitment observations (deterministic, non-cognitive)
+
+When a Session carries explicit `CommitmentTransition` artifacts, `compute_commitment_observations` (and, for N≥3, the nested `SessionMetrics.commitment_observations` field) records **observations only** — not claims of cognition, conviction, or intent. Changed claim prose never contributes; only structured transitions count. The function is pure and replay-safe.
+
+Closed `CommitmentState` vocabulary (from `src/golden_lattice/memory_graph/base.py`):
+
+- `proposed`
+- `defended`
+- `challenged`
+- `revised`
+- `withdrawn`
+- `reaffirmed`
+- `unresolved`
+
+A state change is recorded solely via an explicit `CommitmentTransition` whose `prior_state` / `next_state` are members of that set — never inferred from changed claim prose.
+
+Operational formulas:
+
+| Field | Formula |
+| --- | --- |
+| `transition_count` | \|`commitment_transitions`\| |
+| `reaffirmation_count` | \|{ t \| t.next_state = `reaffirmed` }\| |
+| `unresolved_rate` | among claims with ≥1 transition, fraction whose **latest** `next_state` is `unresolved`; `0.0` when no such claims |
+| `reversal` | a later transition whose `next_state` was already occupied earlier on that claim's path (first `prior_state` and every subsequent `next_state`) |
+| `reversal_count` | number of reversal transitions across claims |
+| `persistence_after_reversal` | among reversal transitions, fraction for which the restored `next_state` remains the claim's **final** observed state; denominator = `reversal_count`; **`None`** when `reversal_count = 0` (undefined, not silently zero) |
+| trajectories | per-claim state path `(first prior_state, …each next_state)` ordered by first `sequence_index`; also grouped by `source_model` |
+
+These measurements support longitudinal persistence/reversal studies. They do not adjudicate synthesis and introduce no judge model.
 
 ## 11. The pattern this deliberately rejects
 

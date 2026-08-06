@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from golden_lattice.events import (
+    CommitmentTransitionEvent,
     Phase0DatetimeGroundingEvent,
     Phase0FailedSearchEvent,
     Phase0FeedFrozenEvent,
@@ -38,6 +39,8 @@ from golden_lattice.memory_graph.base import (
 )
 from golden_lattice.memory_graph.schema import (
     Claim,
+    CommitmentState,
+    CommitmentTransition,
     IndependentResponse,
     SelfReflectionArtifact,
     Session,
@@ -522,7 +525,80 @@ def test_replay_lucumi_flag_event_carries_peer_divergence():
     flag_event = next(e for e in events if isinstance(e, Phase4FlagInterpretationsEvent))
     assert len(flag_event.interpretations) == 1
     interp = flag_event.interpretations[0]
-    assert interp.source_model is ModelId.OPUS
+    assert interp.source_model in (ModelId.OPUS, ModelId.LEGACY_OPUS_4_7)
     assert interp.dimension_label == "edge_case_coverage_share"
     assert interp.reading == "peer_divergence"
     assert (interp.histogram_n_zero, interp.histogram_n_one, interp.histogram_n_two) == (1, 5, 1)
+
+
+# --- Commitment transitions (Phase 1 Task 5) ------------------------------
+
+
+def test_replay_omits_commitment_transition_events_when_history_empty():
+    session = _triad_session_with_latency()
+    assert session.commitment_transitions == ()
+    events = list(replay_session_events(session))
+    assert not any(isinstance(e, CommitmentTransitionEvent) for e in events)
+
+
+def test_replay_emits_commitment_transitions_in_session_order():
+    """Replay yields the same ordered transition sequence as the Session."""
+    base = _triad_session_with_latency()
+    opus_claim = base.phase_1[ModelId.OPUS].claims[0]
+    t0 = CommitmentTransition(
+        claim_id=opus_claim.claim_id,
+        source_model=ModelId.OPUS,
+        prior_state=CommitmentState.PROPOSED,
+        next_state=CommitmentState.CHALLENGED,
+        source_event="phase_3:critique:turn_1",
+        reason="Peer challenged.",
+        sequence_index=0,
+        occurred_at=NOW + timedelta(seconds=80),
+    )
+    t1 = CommitmentTransition(
+        claim_id=opus_claim.claim_id,
+        source_model=ModelId.OPUS,
+        prior_state=CommitmentState.CHALLENGED,
+        next_state=CommitmentState.DEFENDED,
+        source_event="phase_3:critique:turn_2",
+        reason="Author defended.",
+        sequence_index=1,
+        occurred_at=NOW + timedelta(seconds=81),
+    )
+    session = Session(
+        session_id=base.session_id,
+        prompt=base.prompt,
+        prompt_hash=base.prompt_hash,
+        models_invited=base.models_invited,
+        phase_1=base.phase_1,
+        commitment_transitions=(t0, t1),
+    )
+    events = list(replay_session_events(session))
+    transitions = [e for e in events if isinstance(e, CommitmentTransitionEvent)]
+    assert len(transitions) == 2
+    assert transitions[0].transition == t0
+    assert transitions[1].transition == t1
+    assert transitions[0].transition.sequence_index == 0
+    assert transitions[1].transition.sequence_index == 1
+    # Ordered after Phase 3 turns and before Phase 4 (or session_completed if
+    # no Phase 4 artifact).
+    types = [type(e) for e in events]
+    first_ct = types.index(CommitmentTransitionEvent)
+    assert SessionStartedEvent in types[:first_ct]
+    # No Phase 4 artifact on this minimal session — transitions still precede
+    # metrics / completed bookend.
+    assert Phase4MetricsEvent in types[first_ct:]
+    assert types.index(SessionCompletedEvent) > first_ct
+    # Monotonic offsets across the pair.
+    assert transitions[0].timestamp_offset_ms <= transitions[1].timestamp_offset_ms
+
+
+def test_replay_does_not_infer_transitions_from_changed_claim_text():
+    """Changed prose alone never manufactures CommitmentTransitionEvents."""
+    session = _triad_session_with_latency()
+    # Mutate claim text is impossible on frozen Claim; instead ensure that
+    # dialogue/phase_3 content cannot appear as transition history without
+    # explicit commitment_transitions.
+    events = list(replay_session_events(session))
+    assert session.commitment_transitions == ()
+    assert [e for e in events if isinstance(e, CommitmentTransitionEvent)] == []

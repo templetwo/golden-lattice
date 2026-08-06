@@ -257,9 +257,9 @@ def test_layered_renders_per_model_sections_in_alphabetical_order():
         surfaced_disagreements=(),
     )
     # Section headers in alphabetical model.value order: haiku < opus < sonnet.
-    h_pos = out.index("=== claude-haiku-4-5 ===")
-    o_pos = out.index("=== claude-opus-4-7 ===")
-    s_pos = out.index("=== claude-sonnet-4-6 ===")
+    h_pos = out.index("=== claude-haiku-4-5-20251001 ===")
+    o_pos = out.index("=== claude-opus-5 ===")
+    s_pos = out.index("=== claude-sonnet-5 ===")
     assert h_pos < o_pos < s_pos
 
 
@@ -276,8 +276,8 @@ def test_layered_within_section_uses_phase_1_emission_order():
         surfaced_disagreements=(),
     )
     # Within Opus's section, "opus alpha" appears before "opus beta" before "opus gamma".
-    opus_section_start = out.index("=== claude-opus-4-7 ===")
-    opus_section_end = out.index("=== claude-sonnet-4-6 ===")
+    opus_section_start = out.index("=== claude-opus-5 ===")
+    opus_section_end = out.index("=== claude-sonnet-5 ===")
     opus_section = out[opus_section_start:opus_section_end]
     a_pos = opus_section.index("opus alpha")
     b_pos = opus_section.index("opus beta")
@@ -367,8 +367,8 @@ def test_layered_skips_empty_sections():
         elevations=(),
         surfaced_disagreements=(),
     )
-    assert "=== claude-opus-4-7 ===" in out
-    assert "=== claude-sonnet-4-6 ===" not in out  # all sonnet claims omitted
+    assert "=== claude-opus-5 ===" in out
+    assert "=== claude-sonnet-5 ===" not in out  # all sonnet claims omitted
 
 
 # --- Unified mode --------------------------------------------------------
@@ -466,7 +466,7 @@ def test_transcript_renders_phase_1_response_with_focus_tag_and_confidence():
         surfaced_disagreements=(),
     )
     assert "=== Phase 1 ===" in out
-    assert "claude-opus-4-7" in out
+    assert "claude-opus-5" in out
     assert "focus_tag: correctness" in out
     assert "confidence: 0.8" in out
     assert "opus alpha" in out

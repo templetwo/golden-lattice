@@ -16,9 +16,13 @@ from golden_lattice.memory_graph.base import ModelId
 
 
 MODEL_COLOR: dict[ModelId, str] = {
+    ModelId.FABLE: "bright_yellow",
     ModelId.OPUS: "magenta",
     ModelId.SONNET: "cyan",
     ModelId.HAIKU: "green",
+    ModelId.LEGACY_OPUS_4_7: "magenta",
+    ModelId.LEGACY_SONNET_4_6: "cyan",
+    ModelId.LEGACY_HAIKU_4_5: "green",
 }
 
 CHANNEL_COLOR: dict[str, str] = {
@@ -53,8 +57,12 @@ READING_GLOSS: dict[str, str] = {
 def model_label(model: ModelId) -> str:
     """Short human-readable model label, color-tagged for Rich markup."""
     short = {
+        ModelId.FABLE: "FABLE",
         ModelId.OPUS: "OPUS",
         ModelId.SONNET: "SONNET",
         ModelId.HAIKU: "HAIKU",
+        ModelId.LEGACY_OPUS_4_7: "OPUS",
+        ModelId.LEGACY_SONNET_4_6: "SONNET",
+        ModelId.LEGACY_HAIKU_4_5: "HAIKU",
     }[model]
     return f"[{MODEL_COLOR[model]}]{short}[/{MODEL_COLOR[model]}]"

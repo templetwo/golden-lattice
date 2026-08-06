@@ -9,6 +9,8 @@ from golden_lattice.memory_graph.base import FocusTag, ModelId, Phase, claim_id_
 from golden_lattice.memory_graph.metrics import compute_consensus_pair_skew
 from golden_lattice.memory_graph.schema import (
     Claim,
+    CommitmentState,
+    CommitmentTransition,
     IndependentResponse,
     Session,
 )
@@ -92,6 +94,83 @@ def test_save_and_load_roundtrip(tmp_path: Path):
     assert loaded.session_id == "rt-1"
     assert loaded.models_invited == session.models_invited
     assert set(loaded.phase_1.keys()) == set(session.phase_1.keys())
+    assert loaded.commitment_transitions == ()
+
+
+def test_save_and_load_roundtrips_commitment_transitions_exactly(tmp_path: Path):
+    """Task 5: transition history survives JsonFileSessionStore intact."""
+    store = JsonFileSessionStore(tmp_path)
+    base, claims = _triad_session("rt-commit")
+    t0 = CommitmentTransition(
+        claim_id=claims[ModelId.OPUS].claim_id,
+        source_model=ModelId.OPUS,
+        prior_state=CommitmentState.PROPOSED,
+        next_state=CommitmentState.CHALLENGED,
+        source_event="phase_3:critique:turn_1",
+        reason="Peer challenged the LRU assumption.",
+        sequence_index=0,
+        occurred_at=NOW,
+    )
+    t1 = CommitmentTransition(
+        claim_id=claims[ModelId.OPUS].claim_id,
+        source_model=ModelId.OPUS,
+        prior_state=CommitmentState.CHALLENGED,
+        next_state=CommitmentState.DEFENDED,
+        source_event="phase_3:critique:turn_2",
+        reason="Author held under pressure.",
+        sequence_index=1,
+        occurred_at=NOW,
+    )
+    session = Session(
+        session_id=base.session_id,
+        prompt=base.prompt,
+        prompt_hash=base.prompt_hash,
+        models_invited=base.models_invited,
+        phase_1=base.phase_1,
+        phase_2_taggings=base.phase_2_taggings,
+        commitment_transitions=(t0, t1),
+    )
+    store.save(session)
+    loaded = store.load("rt-commit")
+    assert loaded.commitment_transitions == (t0, t1)
+    assert loaded.commitment_transitions[0].reason == t0.reason
+    assert loaded.commitment_transitions[1].next_state is CommitmentState.DEFENDED
+
+
+def test_load_rejects_session_json_with_invalid_commitment_transition(tmp_path: Path):
+    """Invalid transitions fail on load — never silently normalized away."""
+    import json
+
+    from pydantic import ValidationError
+
+    store = JsonFileSessionStore(tmp_path)
+    base, claims = _triad_session("bad-commit")
+    t0 = CommitmentTransition(
+        claim_id=claims[ModelId.OPUS].claim_id,
+        source_model=ModelId.OPUS,
+        prior_state=CommitmentState.PROPOSED,
+        next_state=CommitmentState.CHALLENGED,
+        source_event="phase_3:critique:turn_1",
+        reason="ok edge",
+        sequence_index=0,
+        occurred_at=NOW,
+    )
+    session = Session(
+        session_id=base.session_id,
+        prompt=base.prompt,
+        prompt_hash=base.prompt_hash,
+        models_invited=base.models_invited,
+        phase_1=base.phase_1,
+        phase_2_taggings=base.phase_2_taggings,
+        commitment_transitions=(t0,),
+    )
+    store.save(session)
+    path = tmp_path / f"bad-commit{store.SUFFIX}"
+    payload = json.loads(path.read_text())
+    payload["commitment_transitions"][0]["claim_id"] = "deadbeefdeadbeef"
+    path.write_text(json.dumps(payload, indent=2))
+    with pytest.raises(ValidationError, match="unknown claim_id|Phase 1|commitment"):
+        store.load("bad-commit")
 
 
 def test_save_writes_indented_json(tmp_path: Path):

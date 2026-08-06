@@ -7,9 +7,12 @@ from pydantic import ValidationError
 
 from golden_lattice.memory_graph.schema import (
     PARITY_THRESHOLD,
+    ALLOWED_COMMITMENT_TRANSITIONS,
     Claim,
     ClaimRef,
     ClaimTraceEntry,
+    CommitmentState,
+    CommitmentTransition,
     CrossReading,
     DialogueTurn,
     Disagreement,
@@ -1020,3 +1023,319 @@ def test_metrics_refuse_invalid_share():
             edge_case_coverage_share={},
             structural_pattern_share={},
         )
+
+
+# --- CommitmentState / CommitmentTransition (Phase 1 Task 4) --------------
+#
+# Explicit structured commitment dynamics. Transitions are never inferred
+# from changed claim prose — only from CommitmentTransition artifacts.
+
+
+_COMMITMENT_VOCABULARY = (
+    "proposed",
+    "defended",
+    "challenged",
+    "revised",
+    "withdrawn",
+    "reaffirmed",
+    "unresolved",
+)
+
+
+def _valid_transition(**overrides) -> CommitmentTransition:
+    """Minimal well-formed transition; override fields under test."""
+    payload = dict(
+        claim_id="claim_abc123",
+        source_model=ModelId.OPUS,
+        prior_state=CommitmentState.PROPOSED,
+        next_state=CommitmentState.CHALLENGED,
+        source_event="phase_3:critique:turn_crit_1",
+        reason="Peer critique disputed the LRU assumption.",
+        sequence_index=0,
+        occurred_at=NOW,
+    )
+    payload.update(overrides)
+    return CommitmentTransition(**payload)
+
+
+def test_commitment_state_closed_vocabulary_is_exact():
+    values = tuple(state.value for state in CommitmentState)
+    assert values == _COMMITMENT_VOCABULARY
+    assert len(CommitmentState) == 7
+
+
+def test_commitment_state_rejects_unknown_value():
+    with pytest.raises(ValueError):
+        CommitmentState("accepted")
+
+
+def test_commitment_transition_accepts_well_formed_with_reason():
+    t = _valid_transition()
+    assert t.claim_id == "claim_abc123"
+    assert t.source_model is ModelId.OPUS
+    assert t.prior_state is CommitmentState.PROPOSED
+    assert t.next_state is CommitmentState.CHALLENGED
+    assert t.source_event == "phase_3:critique:turn_crit_1"
+    assert t.reason == "Peer critique disputed the LRU assumption."
+    assert t.supporting_artifact_ref is None
+    assert t.sequence_index == 0
+    assert t.occurred_at == NOW
+
+
+def test_commitment_transition_accepts_supporting_artifact_ref_without_reason():
+    t = _valid_transition(
+        reason=None,
+        supporting_artifact_ref="dialogue_turn:conv_opus",
+    )
+    assert t.reason is None
+    assert t.supporting_artifact_ref == "dialogue_turn:conv_opus"
+
+
+def test_commitment_transition_rejects_empty_claim_id():
+    with pytest.raises(ValidationError, match="claim_id"):
+        _valid_transition(claim_id="   ")
+
+
+def test_commitment_transition_rejects_empty_source_event():
+    with pytest.raises(ValidationError, match="source_event"):
+        _valid_transition(source_event="")
+
+
+def test_commitment_transition_rejects_missing_reason_and_supporting_ref():
+    with pytest.raises(ValidationError, match="reason|supporting_artifact_ref"):
+        _valid_transition(reason=None, supporting_artifact_ref=None)
+
+
+def test_commitment_transition_rejects_blank_reason_and_blank_supporting_ref():
+    with pytest.raises(ValidationError, match="reason|supporting_artifact_ref"):
+        _valid_transition(reason="  ", supporting_artifact_ref="")
+
+
+def test_commitment_transition_rejects_self_transition():
+    with pytest.raises(ValidationError, match="self-transition|prior_state.*next_state"):
+        _valid_transition(
+            prior_state=CommitmentState.DEFENDED,
+            next_state=CommitmentState.DEFENDED,
+        )
+
+
+def test_commitment_transition_rejects_invalid_next_state_value():
+    with pytest.raises(ValidationError):
+        _valid_transition(next_state="accepted")  # type: ignore[arg-type]
+
+
+def test_commitment_transition_rejects_impossible_edge():
+    # withdrawn is terminal in the documented machine — no reopen-as-defended.
+    with pytest.raises(ValidationError, match="not an allowed commitment transition"):
+        _valid_transition(
+            prior_state=CommitmentState.WITHDRAWN,
+            next_state=CommitmentState.DEFENDED,
+            reason="cannot silently resurrect a withdrawn commitment as defended",
+        )
+
+
+def test_commitment_transition_allowed_edges_are_documented_and_nonempty():
+    assert isinstance(ALLOWED_COMMITMENT_TRANSITIONS, frozenset)
+    assert len(ALLOWED_COMMITMENT_TRANSITIONS) > 0
+    for prior, nxt in ALLOWED_COMMITMENT_TRANSITIONS:
+        assert isinstance(prior, CommitmentState)
+        assert isinstance(nxt, CommitmentState)
+        assert prior is not nxt
+
+
+def test_commitment_transition_accepts_documented_edge():
+    assert (
+        CommitmentState.PROPOSED,
+        CommitmentState.DEFENDED,
+    ) in ALLOWED_COMMITMENT_TRANSITIONS
+    t = _valid_transition(
+        prior_state=CommitmentState.PROPOSED,
+        next_state=CommitmentState.DEFENDED,
+        reason="Author held the claim under peer pressure.",
+    )
+    assert t.next_state is CommitmentState.DEFENDED
+
+
+def test_commitment_transition_is_frozen():
+    t = _valid_transition()
+    with pytest.raises(ValidationError):
+        t.reason = "mutated"  # type: ignore[misc]
+
+
+def test_commitment_transition_serialization_is_stable():
+    t = _valid_transition(
+        supporting_artifact_ref="claim_trace:abc",
+    )
+    dumped = t.model_dump(mode="json")
+    assert dumped == {
+        "claim_id": "claim_abc123",
+        "source_model": ModelId.OPUS.value,
+        "prior_state": "proposed",
+        "next_state": "challenged",
+        "source_event": "phase_3:critique:turn_crit_1",
+        "reason": "Peer critique disputed the LRU assumption.",
+        "supporting_artifact_ref": "claim_trace:abc",
+        "sequence_index": 0,
+        "occurred_at": NOW.isoformat().replace("+00:00", "Z"),
+    }
+    restored = CommitmentTransition.model_validate(dumped)
+    assert restored == t
+
+
+def test_commitment_transition_rejects_negative_sequence_index():
+    with pytest.raises(ValidationError, match="sequence_index|greater"):
+        _valid_transition(sequence_index=-1)
+
+
+# --- Session.commitment_transitions (Phase 1 Task 5) ---------------------
+#
+# Explicit history only. Empty by default for legacy sessions. Claim refs
+# must resolve to known Phase 1 claims; invalid refs fail rather than
+# normalize. Transitions are never inferred from dialogue/text change.
+
+
+def test_session_defaults_commitment_transitions_to_empty_tuple():
+    session = _build_minimal_session()
+    assert session.commitment_transitions == ()
+    assert isinstance(session.commitment_transitions, tuple)
+
+
+def test_session_accepts_explicit_commitment_transitions_for_phase_1_claims():
+    base = _build_minimal_session()
+    opus_claim_id = next(iter(base.phase_1[ModelId.OPUS].claims)).claim_id
+    t0 = _valid_transition(
+        claim_id=opus_claim_id,
+        source_model=ModelId.OPUS,
+        sequence_index=0,
+        reason="Peer critique challenged the claim.",
+    )
+    t1 = _valid_transition(
+        claim_id=opus_claim_id,
+        source_model=ModelId.OPUS,
+        prior_state=CommitmentState.CHALLENGED,
+        next_state=CommitmentState.DEFENDED,
+        sequence_index=1,
+        reason="Author defended under pressure.",
+        source_event="phase_3:critique:turn_crit_2",
+    )
+    with_history = Session(
+        session_id=base.session_id,
+        prompt=base.prompt,
+        prompt_hash=base.prompt_hash,
+        models_invited=base.models_invited,
+        phase_1=base.phase_1,
+        commitment_transitions=(t0, t1),
+    )
+    assert with_history.commitment_transitions == (t0, t1)
+
+
+def test_session_rejects_commitment_transition_unknown_claim_id():
+    base = _build_minimal_session()
+    orphan = _valid_transition(claim_id="deadbeefdeadbeef")
+    with pytest.raises(ValidationError, match="unknown claim_id|commitment_transitions"):
+        Session(
+            session_id=base.session_id,
+            prompt=base.prompt,
+            prompt_hash=base.prompt_hash,
+            models_invited=base.models_invited,
+            phase_1=base.phase_1,
+            commitment_transitions=(orphan,),
+        )
+
+
+def test_session_rejects_commitment_transition_non_phase_1_claim_id():
+    """Commitment history addresses Phase 1 claims, not invented peer gaps."""
+    from golden_lattice.memory_graph.schema import CrossReading
+
+    opus_claim = _phase1_claim(ModelId.OPUS, "opus claim")
+    sonnet_claim = _phase1_claim(ModelId.SONNET, "sonnet claim")
+    missing = Claim(
+        claim_id=claim_id_for(ModelId.SONNET, Phase.CROSS_READING, "gap noticed"),
+        source_model=ModelId.SONNET,
+        source_phase=Phase.CROSS_READING,
+        text="gap noticed",
+    )
+    cr = CrossReading(
+        reader_model=ModelId.SONNET,
+        target_model=ModelId.OPUS,
+        missing=(missing,),
+    )
+    t = _valid_transition(
+        claim_id=missing.claim_id,
+        source_model=ModelId.SONNET,
+        reason="Cannot commit a Phase-2-only gap claim in Task 5 history.",
+    )
+    with pytest.raises(ValidationError, match="unknown claim_id|Phase 1"):
+        Session(
+            session_id="s1",
+            prompt="p",
+            prompt_hash="h1",
+            models_invited=(ModelId.OPUS, ModelId.SONNET),
+            phase_1={
+                ModelId.OPUS: _independent_response(ModelId.OPUS, "h1", (opus_claim,)),
+                ModelId.SONNET: _independent_response(ModelId.SONNET, "h1", (sonnet_claim,)),
+            },
+            phase_2=(cr,),
+            commitment_transitions=(t,),
+        )
+
+
+def test_session_rejects_duplicate_commitment_sequence_index():
+    base = _build_minimal_session()
+    cid = next(iter(base.phase_1[ModelId.OPUS].claims)).claim_id
+    t0 = _valid_transition(claim_id=cid, sequence_index=0)
+    t1 = _valid_transition(
+        claim_id=cid,
+        sequence_index=0,
+        prior_state=CommitmentState.CHALLENGED,
+        next_state=CommitmentState.DEFENDED,
+        reason="duplicate sequence index must fail",
+        source_event="phase_3:critique:turn_2",
+    )
+    with pytest.raises(ValidationError, match="sequence_index"):
+        Session(
+            session_id=base.session_id,
+            prompt=base.prompt,
+            prompt_hash=base.prompt_hash,
+            models_invited=base.models_invited,
+            phase_1=base.phase_1,
+            commitment_transitions=(t0, t1),
+        )
+
+
+def test_session_rejects_unsorted_commitment_sequence_index():
+    base = _build_minimal_session()
+    cid = next(iter(base.phase_1[ModelId.OPUS].claims)).claim_id
+    t0 = _valid_transition(claim_id=cid, sequence_index=1, reason="later first")
+    t1 = _valid_transition(
+        claim_id=cid,
+        sequence_index=0,
+        prior_state=CommitmentState.CHALLENGED,
+        next_state=CommitmentState.DEFENDED,
+        reason="earlier second — refuse silent reorder",
+        source_event="phase_3:critique:turn_2",
+    )
+    with pytest.raises(ValidationError, match="sequence_index|ordered|ascending"):
+        Session(
+            session_id=base.session_id,
+            prompt=base.prompt,
+            prompt_hash=base.prompt_hash,
+            models_invited=base.models_invited,
+            phase_1=base.phase_1,
+            commitment_transitions=(t0, t1),
+        )
+
+
+def test_session_commitment_transitions_are_frozen_on_session():
+    session = _build_minimal_session()
+    with pytest.raises(ValidationError):
+        session.commitment_transitions = ()  # type: ignore[misc]
+
+
+def test_legacy_session_json_without_commitment_transitions_loads_empty():
+    session = _build_minimal_session()
+    payload = session.model_dump(mode="json")
+    assert "commitment_transitions" in payload  # dump includes default
+    del payload["commitment_transitions"]
+    restored = Session.model_validate(payload)
+    assert restored.commitment_transitions == ()

@@ -8,6 +8,7 @@ from golden_lattice.memory_graph.base import FocusTag, ModelId, Phase, claim_id_
 from golden_lattice.memory_graph.metrics import (
     EDGE_CASE_DIMENSION,
     STRUCTURAL_PATTERN_DIMENSION,
+    compute_commitment_observations,
     compute_consensus_pair_distribution,
     compute_consensus_pair_skew,
     compute_consensus_tags,
@@ -19,6 +20,9 @@ from golden_lattice.memory_graph.metrics import (
 )
 from golden_lattice.memory_graph.schema import (
     Claim,
+    CommitmentObservations,
+    CommitmentState,
+    CommitmentTransition,
     IndependentResponse,
     Session,
 )
@@ -839,7 +843,7 @@ def test_interpret_lucumi_real_session_returns_peer_divergence():
     opus_edge = [
         f for f in flags
         if f.dimension_label == "edge_case_coverage_share"
-        and f.source_model is ModelId.OPUS
+        and f.source_model in (ModelId.OPUS, ModelId.LEGACY_OPUS_4_7)
     ]
     assert len(opus_edge) == 1
     f = opus_edge[0]
@@ -847,3 +851,350 @@ def test_interpret_lucumi_real_session_returns_peer_divergence():
     assert (f.histogram_n_zero, f.histogram_n_one, f.histogram_n_two) == (1, 5, 1)
     assert f.other_only_entries == 0
     assert f.total_claims == 7
+
+
+# --- compute_commitment_observations (Phase 1 Task 6) --------------------
+#
+# Deterministic observations over explicit CommitmentTransition artifacts.
+# Never inferred from claim prose. Not claims of cognition.
+
+
+def _ct(
+    *,
+    claim_id: str,
+    source_model: ModelId,
+    prior: CommitmentState,
+    next_: CommitmentState,
+    sequence_index: int,
+    source_event: str = "test:event",
+    reason: str = "explicit test transition",
+) -> CommitmentTransition:
+    return CommitmentTransition(
+        claim_id=claim_id,
+        source_model=source_model,
+        prior_state=prior,
+        next_state=next_,
+        source_event=source_event,
+        reason=reason,
+        sequence_index=sequence_index,
+        occurred_at=NOW,
+    )
+
+
+def test_commitment_observations_empty_history_is_clean_zero():
+    """No transitions → zero counts, unresolved_rate 0.0, persistence None."""
+    session, _ = _triad_session()
+    assert session.commitment_transitions == ()
+
+    obs = compute_commitment_observations(session)
+    assert isinstance(obs, CommitmentObservations)
+    assert obs.transition_count == 0
+    assert obs.reversal_count == 0
+    assert obs.reaffirmation_count == 0
+    assert obs.unresolved_rate == 0.0
+    assert obs.persistence_after_reversal is None
+    assert obs.session_trajectories == ()
+    assert obs.per_model_trajectories == {}
+
+
+def test_commitment_observations_nested_on_parity_metrics_by_default():
+    """compute_parity_shares attaches empty CommitmentObservations for triads."""
+    session, _ = _triad_session()
+    metrics = compute_parity_shares(session)
+    assert metrics is not None
+    assert isinstance(metrics.commitment_observations, CommitmentObservations)
+    assert metrics.commitment_observations.transition_count == 0
+    assert metrics.commitment_observations.persistence_after_reversal is None
+
+
+def test_commitment_observations_trajectories_session_and_per_model():
+    """Trajectories follow explicit ordered transitions; never prose inference."""
+    session, claims = _triad_session()
+    opus_id = claims[ModelId.OPUS].claim_id
+    sonnet_id = claims[ModelId.SONNET].claim_id
+
+    transitions = (
+        _ct(
+            claim_id=opus_id,
+            source_model=ModelId.OPUS,
+            prior=CommitmentState.PROPOSED,
+            next_=CommitmentState.CHALLENGED,
+            sequence_index=0,
+        ),
+        _ct(
+            claim_id=sonnet_id,
+            source_model=ModelId.SONNET,
+            prior=CommitmentState.PROPOSED,
+            next_=CommitmentState.DEFENDED,
+            sequence_index=1,
+        ),
+        _ct(
+            claim_id=opus_id,
+            source_model=ModelId.OPUS,
+            prior=CommitmentState.CHALLENGED,
+            next_=CommitmentState.DEFENDED,
+            sequence_index=2,
+        ),
+    )
+    session = session.model_copy(update={"commitment_transitions": transitions})
+    obs = compute_commitment_observations(session)
+
+    assert obs.transition_count == 3
+    assert len(obs.session_trajectories) == 2
+
+    by_claim = {t.claim_id: t for t in obs.session_trajectories}
+    assert by_claim[opus_id].source_model is ModelId.OPUS
+    assert by_claim[opus_id].states == (
+        CommitmentState.PROPOSED,
+        CommitmentState.CHALLENGED,
+        CommitmentState.DEFENDED,
+    )
+    assert by_claim[sonnet_id].states == (
+        CommitmentState.PROPOSED,
+        CommitmentState.DEFENDED,
+    )
+
+    # Session-level order: first-seen claim by sequence_index.
+    assert obs.session_trajectories[0].claim_id == opus_id
+    assert obs.session_trajectories[1].claim_id == sonnet_id
+
+    assert set(obs.per_model_trajectories.keys()) == {ModelId.OPUS, ModelId.SONNET}
+    assert len(obs.per_model_trajectories[ModelId.OPUS]) == 1
+    assert len(obs.per_model_trajectories[ModelId.SONNET]) == 1
+    assert obs.per_model_trajectories[ModelId.OPUS][0].states == by_claim[opus_id].states
+
+
+def test_commitment_observations_reaffirmation_count_is_next_state_reaffirmed():
+    session, claims = _triad_session()
+    opus_id = claims[ModelId.OPUS].claim_id
+    sonnet_id = claims[ModelId.SONNET].claim_id
+
+    transitions = (
+        _ct(
+            claim_id=opus_id,
+            source_model=ModelId.OPUS,
+            prior=CommitmentState.PROPOSED,
+            next_=CommitmentState.CHALLENGED,
+            sequence_index=0,
+        ),
+        _ct(
+            claim_id=opus_id,
+            source_model=ModelId.OPUS,
+            prior=CommitmentState.CHALLENGED,
+            next_=CommitmentState.REAFFIRMED,
+            sequence_index=1,
+        ),
+        _ct(
+            claim_id=sonnet_id,
+            source_model=ModelId.SONNET,
+            prior=CommitmentState.PROPOSED,
+            next_=CommitmentState.REAFFIRMED,
+            sequence_index=2,
+        ),
+        # Defended is not a reaffirmation.
+        _ct(
+            claim_id=claims[ModelId.HAIKU].claim_id,
+            source_model=ModelId.HAIKU,
+            prior=CommitmentState.PROPOSED,
+            next_=CommitmentState.DEFENDED,
+            sequence_index=3,
+        ),
+    )
+    session = session.model_copy(update={"commitment_transitions": transitions})
+    obs = compute_commitment_observations(session)
+    assert obs.reaffirmation_count == 2
+    assert obs.transition_count == 4
+
+
+def test_commitment_observations_unresolved_rate_is_latest_unresolved_over_claims():
+    """unresolved_rate = claims whose latest state is UNRESOLVED / claims with transitions."""
+    session, claims = _triad_session()
+    opus_id = claims[ModelId.OPUS].claim_id
+    sonnet_id = claims[ModelId.SONNET].claim_id
+    haiku_id = claims[ModelId.HAIKU].claim_id
+
+    transitions = (
+        # Opus ends UNRESOLVED
+        _ct(
+            claim_id=opus_id,
+            source_model=ModelId.OPUS,
+            prior=CommitmentState.PROPOSED,
+            next_=CommitmentState.CHALLENGED,
+            sequence_index=0,
+        ),
+        _ct(
+            claim_id=opus_id,
+            source_model=ModelId.OPUS,
+            prior=CommitmentState.CHALLENGED,
+            next_=CommitmentState.UNRESOLVED,
+            sequence_index=1,
+        ),
+        # Sonnet passes through UNRESOLVED but ends DEFENDED — not unresolved
+        _ct(
+            claim_id=sonnet_id,
+            source_model=ModelId.SONNET,
+            prior=CommitmentState.PROPOSED,
+            next_=CommitmentState.UNRESOLVED,
+            sequence_index=2,
+        ),
+        _ct(
+            claim_id=sonnet_id,
+            source_model=ModelId.SONNET,
+            prior=CommitmentState.UNRESOLVED,
+            next_=CommitmentState.DEFENDED,
+            sequence_index=3,
+        ),
+        # Haiku ends UNRESOLVED
+        _ct(
+            claim_id=haiku_id,
+            source_model=ModelId.HAIKU,
+            prior=CommitmentState.PROPOSED,
+            next_=CommitmentState.UNRESOLVED,
+            sequence_index=4,
+        ),
+    )
+    session = session.model_copy(update={"commitment_transitions": transitions})
+    obs = compute_commitment_observations(session)
+    # 2 of 3 claims with transitions end UNRESOLVED
+    assert abs(obs.unresolved_rate - (2 / 3)) < 1e-12
+
+
+def test_commitment_observations_reversal_is_return_to_previously_occupied_state():
+    """Reversal: later transition whose next_state was already occupied for that claim."""
+    session, claims = _triad_session()
+    opus_id = claims[ModelId.OPUS].claim_id
+
+    transitions = (
+        _ct(
+            claim_id=opus_id,
+            source_model=ModelId.OPUS,
+            prior=CommitmentState.PROPOSED,
+            next_=CommitmentState.CHALLENGED,
+            sequence_index=0,
+        ),
+        _ct(
+            claim_id=opus_id,
+            source_model=ModelId.OPUS,
+            prior=CommitmentState.CHALLENGED,
+            next_=CommitmentState.DEFENDED,
+            sequence_index=1,
+        ),
+        # Return to CHALLENGED — previously occupied → reversal
+        _ct(
+            claim_id=opus_id,
+            source_model=ModelId.OPUS,
+            prior=CommitmentState.DEFENDED,
+            next_=CommitmentState.CHALLENGED,
+            sequence_index=2,
+        ),
+    )
+    session = session.model_copy(update={"commitment_transitions": transitions})
+    obs = compute_commitment_observations(session)
+    assert obs.transition_count == 3
+    assert obs.reversal_count == 1
+    # Single reversal; restored CHALLENGED is still final → persists
+    assert obs.persistence_after_reversal == 1.0
+
+
+def test_commitment_observations_persistence_denominator_and_non_persistence():
+    """persistence_after_reversal = persisted_reversals / reversal_count; None if none.
+
+    A reversal 'persists' when the restored next_state remains the claim's
+    final observed state (no later transition leaves it).
+    """
+    session, claims = _triad_session()
+    opus_id = claims[ModelId.OPUS].claim_id
+    sonnet_id = claims[ModelId.SONNET].claim_id
+
+    transitions = (
+        # Opus: PROPOSED → CHALLENGED → DEFENDED → CHALLENGED (reversal, persists)
+        _ct(
+            claim_id=opus_id,
+            source_model=ModelId.OPUS,
+            prior=CommitmentState.PROPOSED,
+            next_=CommitmentState.CHALLENGED,
+            sequence_index=0,
+        ),
+        _ct(
+            claim_id=opus_id,
+            source_model=ModelId.OPUS,
+            prior=CommitmentState.CHALLENGED,
+            next_=CommitmentState.DEFENDED,
+            sequence_index=1,
+        ),
+        _ct(
+            claim_id=opus_id,
+            source_model=ModelId.OPUS,
+            prior=CommitmentState.DEFENDED,
+            next_=CommitmentState.CHALLENGED,
+            sequence_index=2,
+        ),
+        # Sonnet: PROPOSED → DEFENDED → CHALLENGED → DEFENDED (reversal) → REVISED
+        # restored DEFENDED is left → does not persist
+        _ct(
+            claim_id=sonnet_id,
+            source_model=ModelId.SONNET,
+            prior=CommitmentState.PROPOSED,
+            next_=CommitmentState.DEFENDED,
+            sequence_index=3,
+        ),
+        _ct(
+            claim_id=sonnet_id,
+            source_model=ModelId.SONNET,
+            prior=CommitmentState.DEFENDED,
+            next_=CommitmentState.CHALLENGED,
+            sequence_index=4,
+        ),
+        _ct(
+            claim_id=sonnet_id,
+            source_model=ModelId.SONNET,
+            prior=CommitmentState.CHALLENGED,
+            next_=CommitmentState.DEFENDED,
+            sequence_index=5,
+        ),
+        _ct(
+            claim_id=sonnet_id,
+            source_model=ModelId.SONNET,
+            prior=CommitmentState.DEFENDED,
+            next_=CommitmentState.REVISED,
+            sequence_index=6,
+        ),
+    )
+    session = session.model_copy(update={"commitment_transitions": transitions})
+    obs = compute_commitment_observations(session)
+    assert obs.reversal_count == 2
+    # 1 of 2 reversals persisted
+    assert abs(obs.persistence_after_reversal - 0.5) < 1e-12
+
+    # No reversals → persistence is None (undefined), not 0.0
+    no_rev = session.model_copy(
+        update={
+            "commitment_transitions": (
+                _ct(
+                    claim_id=opus_id,
+                    source_model=ModelId.OPUS,
+                    prior=CommitmentState.PROPOSED,
+                    next_=CommitmentState.CHALLENGED,
+                    sequence_index=0,
+                ),
+            )
+        }
+    )
+    obs_none = compute_commitment_observations(no_rev)
+    assert obs_none.reversal_count == 0
+    assert obs_none.persistence_after_reversal is None
+
+
+def test_commitment_observations_ignore_prose_and_require_explicit_artifacts():
+    """Changed claim text alone never creates observations — empty history stays empty."""
+    session, claims = _triad_session()
+    # Mutate response text via a rebuilt IndependentResponse; no transitions attached.
+    opus = session.phase_1[ModelId.OPUS]
+    rewritten = opus.model_copy(update={"response": "totally different prose about withdrawal"})
+    session = session.model_copy(
+        update={"phase_1": {**session.phase_1, ModelId.OPUS: rewritten}}
+    )
+    obs = compute_commitment_observations(session)
+    assert obs.transition_count == 0
+    assert obs.session_trajectories == ()
+    assert obs.reversal_count == 0

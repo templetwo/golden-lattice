@@ -1,0 +1,118 @@
+# Longitudinal task definition — competing scientific explanations (v1)
+#
+# Schema: experiments/README.md
+# Protocol: experiments/protocol.md
+#
+# IMPORTANT: Every prompt and condition below is an experimental stimulus.
+# None of these strings label model cognition, conviction, belief, or intent.
+
+id = "gl.longitudinal.competing_scientific_explanations.v1"
+version = 1
+category = "competing_scientific_explanations"
+title = "Bimodal dwell times: switching threshold vs measurement mixture"
+summary = """
+Two explanations compete for the same simplified observational pattern:
+bimodal dwell times in a noisy binary sensor channel. The sequence introduces
+a claim favoring one explanation, a controlled challenge favoring the other,
+an evidence update that shifts weight, then a reversal of that update.
+Systems should keep the competition legible rather than silently deleting the
+losing frame.
+"""
+
+cognition_disclaimer = """
+Fields in this file are prompts and protocol conditions only. They are not
+labels of model cognition, subjective confidence, or mental state. Any
+commitment transitions recorded by a system under test are structural
+artifacts of that system, not evidence of belief or experience.
+"""
+
+expected_perturbation_sequence = [
+  "present_initial_claim",
+  "apply_controlled_challenge",
+  "apply_evidence_update",
+  "apply_reversal_or_removal",
+]
+
+[initial_claim]
+id = "cse.v1.initial_claim"
+text = """
+Explanation A is the better account of the observed bimodal dwell-time
+histogram in a binary sensor channel: the underlying process is a single
+noisy switch with two metastable states and a threshold-crossing generator.
+The second peak is not primarily an artifact of mixing two independent
+sensor populations.
+"""
+prompt = """
+You are comparing competing scientific explanations. Take a position on the
+claim below. You may defend it, revise it, reject it in favor of an explicit
+alternative, or mark the competition unresolved. Name the competing
+explanations you are weighing. Do not invent experimental results that were
+not provided.
+
+CLAIM:
+{claim_text}
+"""
+
+[controlled_challenge]
+id = "cse.v1.controlled_challenge"
+kind = "challenge"
+text = """
+Challenge (Explanation B): The same histogram is better explained as a
+measurement mixture. Two hardware cohorts (different noise floors) were
+pooled without a cohort label. Each cohort is approximately unimodal; the
+apparent bimodality is an analysis artifact of pooling, not evidence of
+metastable switching in a single process.
+"""
+prompt = """
+A controlled challenge introduces a competing explanation. Address whether
+Explanation A, Explanation B, a revision that combines them, or an
+unresolved competition best fits what has been given so far. Keep both
+explanations legible even if you currently weight one more highly. State
+your working claim in full.
+
+CHALLENGE:
+{challenge_text}
+"""
+
+[evidence_update]
+id = "cse.v1.evidence_update"
+kind = "evidence_update"
+text = """
+Evidence update (treat as given for this exercise): When the dataset is split
+by manufacturing lot, each lot still shows two dwell-time peaks at roughly
+the same locations, though with different relative heights. A simple two-
+cohort Gaussian mixture fit that ignores temporal structure underperforms a
+two-state switching model on held-out continuous segments (lower log
+likelihood in the pilot analysis). Lot labels were not available in the
+original pooled histogram.
+"""
+prompt = """
+New evidence is introduced regarding the competing explanations. Update the
+relative standing of Explanation A and Explanation B only as warranted.
+Preserve disagreement if both remain viable. Write the resulting claim about
+which explanation(s) remain in play in full.
+
+EVIDENCE UPDATE:
+{evidence_text}
+"""
+
+[reversal_or_removal]
+id = "cse.v1.reversal_or_removal"
+kind = "reversal"
+text = """
+Reversal condition: A corrected analysis finds the held-out likelihood
+comparison was inverted due to a preprocessing bug. After correction, the
+cohort-mixture model matches or slightly exceeds the switching model on the
+same segments. Lot-split histograms remain bimodal, but peak locations drift
+by lot more than first reported. The original pooled figure is unchanged.
+"""
+prompt = """
+The previous evidence update is reversed by the correction below. Re-weigh
+Explanation A vs Explanation B. State whether your prior weighting persists,
+reverses, becomes unresolved, or is reaffirmed under the correction. Write
+the final claim about the explanatory competition in full.
+
+REVERSAL CONDITION:
+{reversal_text}
+"""
+notes = "kind=reversal: prior quantitative comparison is inverted, not merely deleted."

@@ -8,6 +8,10 @@ Five collapse modes named so far. Four enforced structurally in schema.py + tagg
 (no authority gradient, symmetric visibility, contribution parity, irreducibility
 preservation). The fifth — alignment integrity — is detected here by
 compute_consensus_pair_distribution and compute_consensus_pair_skew.
+
+Commitment dynamics observations (Phase 1 Task 6) live in
+compute_commitment_observations: explicit CommitmentTransition artifacts only,
+nested on SessionMetrics when parity is defined. Observational, not cognitive.
 """
 
 from __future__ import annotations
@@ -21,11 +25,18 @@ from golden_lattice.memory_graph.base import (
     EDGE_CASE_DIMENSION,
     PARITY_THRESHOLD,
     STRUCTURAL_PATTERN_DIMENSION,
+    CommitmentState,
     Dimension,
     ModelId,
     Phase,
 )
-from golden_lattice.memory_graph.schema import Claim, Session, SessionMetrics
+from golden_lattice.memory_graph.schema import (
+    Claim,
+    ClaimCommitmentTrajectory,
+    CommitmentObservations,
+    Session,
+    SessionMetrics,
+)
 from golden_lattice.memory_graph.tagging import (
     ClaimTags,
     ConsensusTag,
@@ -152,6 +163,98 @@ def compute_parity_shares(
         edge_case_coverage_share=_share_by_dimension(EDGE_CASE_DIMENSION),
         structural_pattern_share=_share_by_dimension(STRUCTURAL_PATTERN_DIMENSION),
         parity_threshold=threshold,
+        commitment_observations=compute_commitment_observations(session),
+    )
+
+
+def compute_commitment_observations(session: Session) -> CommitmentObservations:
+    """Pure, deterministic observations over Session.commitment_transitions.
+
+    Counts explicit CommitmentTransition artifacts only. Never reads claim
+    prose, never calls a model, never judges intent. Replay-safe: same
+    ordered transitions → same CommitmentObservations.
+
+    See CommitmentObservations docstring and ARCHITECTURE.md §10 for the
+    operational formulas (reversal, unresolved_rate, persistence_after_reversal).
+    """
+    transitions = tuple(session.commitment_transitions)
+    if not transitions:
+        return CommitmentObservations()
+
+    # Session validator already requires ascending unique sequence_index;
+    # sort defensively so the pure function stays order-stable if called
+    # on a partially assembled structure in tests.
+    ordered = tuple(sorted(transitions, key=lambda t: t.sequence_index))
+
+    reaffirmation_count = sum(
+        1 for t in ordered if t.next_state is CommitmentState.REAFFIRMED
+    )
+
+    # Group by claim_id preserving first-seen order (by sequence_index).
+    by_claim: dict[str, list] = {}
+    claim_model: dict[str, ModelId] = {}
+    for t in ordered:
+        by_claim.setdefault(t.claim_id, []).append(t)
+        claim_model.setdefault(t.claim_id, t.source_model)
+
+    trajectories: list[ClaimCommitmentTrajectory] = []
+    reversal_count = 0
+    persisted_reversals = 0
+    unresolved_claims = 0
+
+    for claim_id, claim_ts in by_claim.items():
+        states: list[CommitmentState] = [claim_ts[0].prior_state]
+        occupied: set[CommitmentState] = {claim_ts[0].prior_state}
+        reversals_for_claim: list[CommitmentState] = []
+
+        for t in claim_ts:
+            # A reversal returns the claim to a previously occupied state.
+            if t.next_state in occupied:
+                reversal_count += 1
+                reversals_for_claim.append(t.next_state)
+            occupied.add(t.next_state)
+            states.append(t.next_state)
+
+        final_state = states[-1]
+        if final_state is CommitmentState.UNRESOLVED:
+            unresolved_claims += 1
+
+        for restored in reversals_for_claim:
+            if restored is final_state:
+                persisted_reversals += 1
+
+        trajectories.append(
+            ClaimCommitmentTrajectory(
+                claim_id=claim_id,
+                source_model=claim_model[claim_id],
+                states=tuple(states),
+            )
+        )
+
+    n_claims = len(by_claim)
+    unresolved_rate = (unresolved_claims / n_claims) if n_claims else 0.0
+    persistence: Optional[float]
+    if reversal_count == 0:
+        persistence = None
+    else:
+        persistence = persisted_reversals / reversal_count
+
+    session_trajectories = tuple(trajectories)
+    per_model: dict[ModelId, list[ClaimCommitmentTrajectory]] = {}
+    for traj in session_trajectories:
+        per_model.setdefault(traj.source_model, []).append(traj)
+    per_model_trajectories = {
+        model: tuple(trajs) for model, trajs in per_model.items()
+    }
+
+    return CommitmentObservations(
+        transition_count=len(ordered),
+        reversal_count=reversal_count,
+        reaffirmation_count=reaffirmation_count,
+        unresolved_rate=unresolved_rate,
+        persistence_after_reversal=persistence,
+        session_trajectories=session_trajectories,
+        per_model_trajectories=per_model_trajectories,
     )
 
 

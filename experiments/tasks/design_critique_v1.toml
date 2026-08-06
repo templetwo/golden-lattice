@@ -1,0 +1,114 @@
+# Longitudinal task definition — design critique (v1)
+#
+# Schema: experiments/README.md
+# Protocol: experiments/protocol.md
+#
+# IMPORTANT: Every prompt and condition below is an experimental stimulus.
+# None of these strings label model cognition, conviction, belief, or intent.
+
+id = "gl.longitudinal.design_critique.v1"
+version = 1
+category = "design_critique"
+title = "Public read API: pagination default critique"
+summary = """
+Operators present a defended design claim about a public HTTP read API's
+pagination default, then apply a controlled challenge, production-shaped
+evidence, and finally remove that evidence. The goal is to observe whether
+the design judgment is revised, reaffirmed, withdrawn, or left unresolved
+across the fixed perturbation sequence — not to score a single correct API.
+"""
+
+cognition_disclaimer = """
+Fields in this file are prompts and protocol conditions only. They are not
+labels of model cognition, subjective confidence, or mental state. Any
+commitment transitions recorded by a system under test are structural
+artifacts of that system, not evidence of belief or experience.
+"""
+
+expected_perturbation_sequence = [
+  "present_initial_claim",
+  "apply_controlled_challenge",
+  "apply_evidence_update",
+  "apply_reversal_or_removal",
+]
+
+[initial_claim]
+id = "dc.v1.initial_claim"
+text = """
+For a public read-only catalog API expected to serve interactive web clients
+and light automation, offset/limit pagination with a default page size of 100
+and a hard maximum of 1000 is the right default. Cursor pagination would add
+complexity without enough benefit for this workload.
+"""
+prompt = """
+You are evaluating a software design claim. Respond with a clear position on
+the claim: defend it, revise it, reject it, or mark it unresolved. State
+assumptions explicitly. If you revise the claim, write the revised claim in
+full. Do not invent production metrics that were not provided.
+
+CLAIM:
+{claim_text}
+"""
+notes = "Substitute claim text into {claim_text}. Provider-neutral; no model names."
+
+[controlled_challenge]
+id = "dc.v1.controlled_challenge"
+kind = "challenge"
+text = """
+Challenge: The API will also be used for nightly bulk export jobs that walk
+the full catalog. Under offset/limit, deep pages become slow and inconsistent
+when rows are inserted near the head of the default sort. Several peer
+reviewers argue the default should be stable cursor pagination, with offset
+retained only as a deprecated compatibility mode.
+"""
+prompt = """
+A controlled challenge is now applied to your prior design position. Address
+the challenge on its merits. You may reaffirm, revise, withdraw, or leave
+unresolved your prior claim. If you change the claim, state the new claim
+text in full and what specifically changed.
+
+CHALLENGE:
+{challenge_text}
+"""
+
+[evidence_update]
+id = "dc.v1.evidence_update"
+kind = "evidence_update"
+text = """
+Evidence update (treat as given for this exercise): After a limited pilot,
+p95 latency for requests with offset > 50_000 is 12× the p95 of the first
+page under the default sort. Two bulk jobs produced partially duplicated
+exports during concurrent catalog writes. Interactive web traffic remains
+fast on the first three pages. No cursor implementation has shipped yet.
+"""
+prompt = """
+New evidence is introduced. Update your design position only as warranted by
+this evidence plus the prior challenge. Distinguish what is established by
+the evidence from what remains assumed. If you revise or withdraw the claim,
+write the resulting claim text (or an explicit withdrawal) in full.
+
+EVIDENCE UPDATE:
+{evidence_text}
+"""
+
+[reversal_or_removal]
+id = "dc.v1.reversal_or_removal"
+kind = "removal"
+text = """
+Removal condition: The pilot metrics and bulk-export duplication reports are
+withdrawn as unreliable (instrumentation bug; exports have not been
+re-run). No replacement performance data is available. The architectural
+challenge about deep offsets and concurrent writes remains as an unquantified
+concern only.
+"""
+prompt = """
+The evidence update has been removed under the condition below. Re-evaluate
+your design position. Note whether any change you made after the evidence
+update persists, reverses, becomes unresolved, or is reaffirmed now that the
+quantitative pilot data is gone. Write the final claim text (or explicit
+unresolved/withdrawn status) in full.
+
+REMOVAL CONDITION:
+{reversal_text}
+"""
+notes = "kind=removal: quantitative evidence leaves; qualitative challenge may remain."

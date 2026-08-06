@@ -125,7 +125,15 @@ def render_model_column(state: TuiState, model: ModelId) -> Panel:
             f"{own_tagging.self_tags_count} self claims[/]"
         ))
 
-    short_name = {ModelId.OPUS: "OPUS", ModelId.SONNET: "SONNET", ModelId.HAIKU: "HAIKU"}[model]
+    short_name = {
+        ModelId.FABLE: "FABLE",
+        ModelId.OPUS: "OPUS",
+        ModelId.SONNET: "SONNET",
+        ModelId.HAIKU: "HAIKU",
+        ModelId.LEGACY_OPUS_4_7: "OPUS",
+        ModelId.LEGACY_SONNET_4_6: "SONNET",
+        ModelId.LEGACY_HAIKU_4_5: "HAIKU",
+    }[model]
     return Panel(
         Group(*parts) if parts else Text("(empty)", style="dim"),
         title=f"[{color} bold]{short_name}[/]",
@@ -433,7 +441,15 @@ def _bar(value: float, width: int = 10) -> str:
 def _short_model(model: Optional[ModelId]) -> str:
     if model is None:
         return "?"
-    return {ModelId.OPUS: "OPUS", ModelId.SONNET: "SONNET", ModelId.HAIKU: "HAIKU"}[model]
+    return {
+        ModelId.FABLE: "FABLE",
+        ModelId.OPUS: "OPUS",
+        ModelId.SONNET: "SONNET",
+        ModelId.HAIKU: "HAIKU",
+        ModelId.LEGACY_OPUS_4_7: "OPUS",
+        ModelId.LEGACY_SONNET_4_6: "SONNET",
+        ModelId.LEGACY_HAIKU_4_5: "HAIKU",
+    }[model]
 
 
 def _render_cap_summary(state: TuiState) -> Optional[Text]:
