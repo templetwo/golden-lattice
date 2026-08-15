@@ -46,7 +46,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 from rich.console import Console
 from rich.live import Live
 
-from golden_lattice.cli.interactive import get_next_prompt
+from golden_lattice.cli.interactive import PromptSourceError, get_next_prompt, resolve_prompt_source
+from golden_lattice.events import SessionErrorEvent
 from golden_lattice.exchange.tavily_search_client import TavilySearchClient
 from golden_lattice.memory_graph.schema import Session
 from golden_lattice.memory_graph.store import JsonFileSessionStore
@@ -208,17 +209,37 @@ def _run_dashboard(
         def callback(event):
             pending.append(asyncio.create_task(server.broadcast(event)))
 
-        async def run_once(prompt: str) -> Session:
+        async def run_once(prompt: str) -> Session | None:
             server.reset_log()
             pending.clear()
-            session = await run_lattice_session_async(
-                prompt,
-                config=config,
-                client=client,
-                progress_callback=callback,
-                phase_0_client=phase_0_client,
-                search_client=search_client,
-            )
+            try:
+                session = await run_lattice_session_async(
+                    prompt,
+                    config=config,
+                    client=client,
+                    progress_callback=callback,
+                    phase_0_client=phase_0_client,
+                    search_client=search_client,
+                )
+            except Exception as exc:
+                # Keep the WebSocket/dashboard alive after provider failures.
+                # Do not expose SDK request headers or credentials in the UI.
+                message = str(exc)
+                for marker in ("sk-ant-", "x-api-key", "Authorization"):
+                    if marker in message:
+                        message = message[: message.index(marker)] + "[REDACTED]"
+                        break
+                callback(
+                    SessionErrorEvent(
+                        timestamp_offset_ms=0,
+                        message=message,
+                        phase=getattr(exc, "phase", None),
+                        model_id=getattr(exc, "model", None),
+                    )
+                )
+                await asyncio.gather(*pending, return_exceptions=True)
+                console.print(f"[red]Live session failed:[/] {message}")
+                return None
             await asyncio.gather(*pending, return_exceptions=True)
             return session
 
@@ -226,13 +247,14 @@ def _run_dashboard(
             if not interactive_mode:
                 assert initial_prompt is not None
                 session = await run_once(initial_prompt)
-                _persist_and_print(session, sessions_dir, console)
+                if session is not None:
+                    _persist_and_print(session, sessions_dir, console)
                 console.print(
                     "[dim]session_completed — dashboard stays live for 60s; "
                     "Ctrl-C to exit sooner.[/]"
                 )
                 await asyncio.sleep(60.0)
-                return 0
+                return 0 if session is not None else 1
 
             console.print(
                 "[dim]Persistent mode — submit prompts from the browser tab. "
@@ -245,7 +267,8 @@ def _run_dashboard(
                 if prompt is None:
                     return 0
                 session = await run_once(prompt)
-                _persist_and_print(session, sessions_dir, console)
+                if session is not None:
+                    _persist_and_print(session, sessions_dir, console)
         finally:
             await runner.cleanup()
 
@@ -308,7 +331,7 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         console.print(
             "[bold]Golden Lattice[/]  [dim]live session[/]\n"
-            "[dim]Three Claudes on one question. Five panels. The architecture "
+            "[dim]Four current Claude models on one question. Five panels. The architecture "
             "rendered as it happens.[/]\n"
         )
         try:
@@ -320,16 +343,24 @@ def main(argv: list[str] | None = None) -> int:
             console.print("[red]ERROR:[/] empty API key.")
             return 1
 
-    # --- Prompt source: one-shot if argv/file/pipe, else interactive loop
-    initial_prompt: str | None = None
-    if args.prompt_file is not None:
-        initial_prompt = args.prompt_file.read_text(encoding="utf-8")
-    elif args.prompt is not None:
-        initial_prompt = args.prompt
-    elif not sys.stdin.isatty():
-        initial_prompt = sys.stdin.read()
-    interactive_mode = initial_prompt is None
-    if initial_prompt is not None and not initial_prompt.strip():
+    # --- Prompt source: one-shot if argv/file, else persistent.
+    # --dashboard never consumes stdin: the browser is the prompt source.
+    # Non-dashboard non-TTY stdin is still a one-shot pipe.
+    prompt_file_text = (
+        args.prompt_file.read_text(encoding="utf-8")
+        if args.prompt_file is not None
+        else None
+    )
+    stdin_text = "" if sys.stdin.isatty() else sys.stdin.read()
+    try:
+        initial_prompt, interactive_mode = resolve_prompt_source(
+            argv_prompt=args.prompt,
+            prompt_file_text=prompt_file_text,
+            stdin_is_tty=sys.stdin.isatty(),
+            stdin_text=stdin_text,
+            dashboard=args.dashboard,
+        )
+    except PromptSourceError:
         console.print("[red]ERROR:[/] empty prompt.")
         return 1
 

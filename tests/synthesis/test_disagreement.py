@@ -141,7 +141,7 @@ def test_critique_with_two_target_claim_ids_above_threshold_surfaces():
         claims[ModelId.OPUS][0].claim_id,
         claims[ModelId.OPUS][1].claim_id,
     }
-    assert "claude-sonnet-4-6 disagrees with claude-opus-4-7" in sd.note
+    assert "claude-sonnet-5 disagrees with claude-opus-5" in sd.note
     assert "both opus claims miss the boundary" in sd.note
 
 
@@ -290,7 +290,7 @@ def test_note_follows_template_format():
     out = compute_surfaced_disagreements(session, confidence_threshold=0.7)
     assert len(out) == 1
     expected = (
-        "claude-haiku-4-5 disagrees with claude-sonnet-4-6: "
+        "claude-haiku-4-5-20251001 disagrees with claude-sonnet-5: "
         "sonnet's framing skips edge cases"
     )
     assert out[0].note == expected

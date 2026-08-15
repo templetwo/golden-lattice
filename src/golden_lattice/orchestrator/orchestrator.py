@@ -37,6 +37,7 @@ from typing import Callable, Optional
 
 from golden_lattice.events import (
     LatticeEvent,
+    ModelStreamDeltaEvent,
     Phase0DatetimeGroundingEvent,
     Phase0FailedSearchEvent,
     Phase0FeedFrozenEvent,
@@ -146,6 +147,7 @@ def _make_emitter(callback: Optional[ProgressCallback]) -> _Emitter | _NullEmitt
 
 
 DEFAULT_INVITED_MODELS: tuple[ModelId, ...] = (
+    ModelId.FABLE,
     ModelId.OPUS,
     ModelId.SONNET,
     ModelId.HAIKU,
@@ -223,6 +225,23 @@ async def run_lattice_session_async(
         session_id = _generate_session_id()
     prompt_hash = _prompt_hash(prompt)
     emitter = _make_emitter(progress_callback)
+
+    # Concrete provider clients opt into transport-level deltas without
+    # making the wire Protocols depend on a vendor SDK. Stub clients and other
+    # deterministic test clients simply do not expose this optional hook.
+    set_stream_callback = getattr(client, "set_stream_callback", None)
+    if callable(set_stream_callback):
+        set_stream_callback(
+            lambda model, phase, delta, kind: emitter.emit(
+                ModelStreamDeltaEvent(
+                    timestamp_offset_ms=emitter.now_ms(),
+                    model_id=model,
+                    phase=phase,
+                    delta=delta,
+                    delta_kind=kind,
+                )
+            )
+        )
 
     emitter.emit(SessionStartedEvent(
         timestamp_offset_ms=emitter.now_ms(),

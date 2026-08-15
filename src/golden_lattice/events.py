@@ -41,6 +41,8 @@ __all__ = [
     "Phase0SearchResultEvent",
     "Phase0FailedSearchEvent",
     "Phase0FeedFrozenEvent",
+    "ModelStreamDeltaEvent",
+    "SessionErrorEvent",
     "Phase1ResponseStartedEvent",
     "Phase1ClaimEvent",
     "Phase1ResponseCompletedEvent",
@@ -65,6 +67,8 @@ class EventType:
     PHASE_0_SEARCH_RESULT = "phase_0_search_result"
     PHASE_0_FAILED_SEARCH = "phase_0_failed_search"
     PHASE_0_FEED_FROZEN = "phase_0_feed_frozen"
+    MODEL_STREAM_DELTA = "model_stream_delta"
+    SESSION_ERROR = "session_error"
     PHASE_1_RESPONSE_STARTED = "phase_1_response_started"
     PHASE_1_CLAIM = "phase_1_claim"
     PHASE_1_RESPONSE_COMPLETED = "phase_1_response_completed"
@@ -137,6 +141,31 @@ class Phase0FeedFrozenEvent(_BaseEvent):
 
     event_type: Literal["phase_0_feed_frozen"] = "phase_0_feed_frozen"
     entry_count: int
+
+
+class ModelStreamDeltaEvent(_BaseEvent):
+    """One incremental provider delta, emitted while a model is generating.
+
+    ``delta_kind`` distinguishes ordinary text from the partial JSON emitted
+    by Anthropic while a forced tool call is being assembled. The latter is
+    intentionally surfaced as transport evidence, not treated as a parsed
+    claim until the final tool response validates.
+    """
+
+    event_type: Literal["model_stream_delta"] = "model_stream_delta"
+    model_id: ModelId
+    phase: str
+    delta: str
+    delta_kind: Literal["text", "tool_input"]
+
+
+class SessionErrorEvent(_BaseEvent):
+    """A live run failed but its transport remains available."""
+
+    event_type: Literal["session_error"] = "session_error"
+    message: str
+    phase: Optional[str] = None
+    model_id: Optional[ModelId] = None
 
 
 class Phase1ResponseStartedEvent(_BaseEvent):
@@ -225,6 +254,8 @@ LatticeEvent = Union[
     Phase0SearchResultEvent,
     Phase0FailedSearchEvent,
     Phase0FeedFrozenEvent,
+    ModelStreamDeltaEvent,
+    SessionErrorEvent,
     Phase1ResponseStartedEvent,
     Phase1ClaimEvent,
     Phase1ResponseCompletedEvent,

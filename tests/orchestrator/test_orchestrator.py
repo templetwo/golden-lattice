@@ -119,20 +119,20 @@ def test_run_lattice_session_includes_self_reflection_artifacts(stub_client):
 
 
 def test_run_lattice_session_dispatches_phase_2_for_all_pairs(stub_client):
-    """6 cross-readings (3 readers × 2 targets each) + 3 taggings."""
+    """12 cross-readings (4 readers × 3 targets each) + 4 taggings."""
     config = LatticeConfig()
     session = run_lattice_session(
         "design a cache",
         config=config,
         client=stub_client,
     )
-    assert len(session.phase_2) == 6  # n*(n-1) for n=3
-    assert len(session.phase_2_taggings) == 3
+    assert len(session.phase_2) == 12  # n*(n-1) for n=4
+    assert len(session.phase_2_taggings) == 4
     pairs = {(cr.reader_model, cr.target_model) for cr in session.phase_2}
     expected_pairs = {
         (r, t)
-        for r in (ModelId.OPUS, ModelId.SONNET, ModelId.HAIKU)
-        for t in (ModelId.OPUS, ModelId.SONNET, ModelId.HAIKU)
+        for r in (ModelId.FABLE, ModelId.OPUS, ModelId.SONNET, ModelId.HAIKU)
+        for t in (ModelId.FABLE, ModelId.OPUS, ModelId.SONNET, ModelId.HAIKU)
         if r is not t
     }
     assert pairs == expected_pairs
@@ -264,8 +264,8 @@ def test_async_api_works(stub_client):
 # --- Parity wiring: load-bearing measurement at the canonical builder ----
 
 
-def test_run_lattice_session_attaches_parity_metrics_for_triadic(stub_client):
-    """N=3 emitted Session carries metrics computed by the orchestrator.
+def test_run_lattice_session_attaches_parity_metrics_for_four_seat_roster(stub_client):
+    """N=4 emitted Session carries metrics computed by the orchestrator.
 
     ARCHITECTURE.md falsification criterion #3 (contribution parity) is the
     load-bearing measurement. compute_parity_shares is pure sync over the
@@ -278,7 +278,7 @@ def test_run_lattice_session_attaches_parity_metrics_for_triadic(stub_client):
     assert session.metrics is not None
     assert isinstance(session.metrics, SessionMetrics)
     assert set(session.metrics.distinct_claim_share.keys()) == {
-        ModelId.OPUS, ModelId.SONNET, ModelId.HAIKU,
+        ModelId.FABLE, ModelId.OPUS, ModelId.SONNET, ModelId.HAIKU,
     }
     assert session.metrics.parity_threshold == PARITY_THRESHOLD
 
@@ -361,18 +361,18 @@ def test_progress_callback_fires_full_event_sequence(stub_client):
     assert isinstance(events[0], SessionStartedEvent)
     assert isinstance(events[-1], SessionCompletedEvent)
 
-    # Per-event-type counts on a triadic session with default stub.
+    # Per-event-type counts on the four-seat session with default stub.
     counts: dict[type, int] = {}
     for e in events:
         counts[type(e)] = counts.get(type(e), 0) + 1
-    assert counts.get(Phase1ResponseStartedEvent, 0) == 3
-    assert counts.get(Phase1ResponseCompletedEvent, 0) == 3
-    assert counts.get(SelfReflectionEvent, 0) == 3
-    # Default stub produces 2 claims per model — 6 total claim events.
-    assert counts.get(Phase1ClaimEvent, 0) == 6
-    # 6 cross-readings + 3 taggings for triadic.
-    assert counts.get(Phase2CrossReadingEvent, 0) == 6
-    assert counts.get(Phase2TaggingEvent, 0) == 3
+    assert counts.get(Phase1ResponseStartedEvent, 0) == 4
+    assert counts.get(Phase1ResponseCompletedEvent, 0) == 4
+    assert counts.get(SelfReflectionEvent, 0) == 4
+    # Default stub produces 2 claims per model — 8 total claim events.
+    assert counts.get(Phase1ClaimEvent, 0) == 8
+    # 12 cross-readings + 4 taggings for the four-seat roster.
+    assert counts.get(Phase2CrossReadingEvent, 0) == 12
+    assert counts.get(Phase2TaggingEvent, 0) == 4
     # One each of Phase 4 events.
     assert counts.get(Phase4ArtifactEvent, 0) == 1
     assert counts.get(Phase4MetricsEvent, 0) == 1
