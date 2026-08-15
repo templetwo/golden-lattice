@@ -67,7 +67,7 @@ def test_phase_0_collects_proposals_from_all_invited_models(
     )
     assert session.phase_0 is not None
     proposed_models = {p.model_id for p in session.phase_0.proposals}
-    assert proposed_models == {ModelId.OPUS, ModelId.SONNET, ModelId.HAIKU}
+    assert proposed_models == {ModelId.FABLE, ModelId.OPUS, ModelId.SONNET, ModelId.HAIKU}
 
 
 def test_phase_0_unions_dedup_queries_across_proposals(
@@ -232,7 +232,7 @@ def test_phase_0_emits_grounding_proposals_results_freeze_in_order(
     assert max(proposal_idxs) < min(result_idxs + failed_idxs)
     assert max(result_idxs + failed_idxs) < frozen_idx
     assert frozen_idx < first_phase_1_idx
-    assert len(proposal_idxs) == 3  # one per invited model
+    assert len(proposal_idxs) == 4  # one per invited model
     assert len(result_idxs) == 1
     assert len(failed_idxs) == 1
 
@@ -261,7 +261,7 @@ def test_phase_0_full_pipeline_produces_substrate_valid_session(
     assert session.phase_4 is not None
     # Phase 0 feed includes grounding + 2 search results.
     assert len(session.phase_0.feed) == 3
-    # Proposals from all 3 invited models, even though Haiku proposed nothing.
-    assert len(session.phase_0.proposals) == 3
+    # Proposals from all 4 invited models, even though some proposed nothing.
+    assert len(session.phase_0.proposals) == 4
     # Parity still computes (Phase 0 does not break the parity pipeline).
     assert session.metrics is not None

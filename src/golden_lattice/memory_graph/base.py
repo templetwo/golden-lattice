@@ -32,9 +32,12 @@ INVESTIGATION_TIMEZONE = "America/New_York"
 
 
 class ModelId(str, Enum):
-    OPUS = "claude-opus-4-7"
-    SONNET = "claude-sonnet-4-6"
-    HAIKU = "claude-haiku-4-5"
+    # Current Claude API IDs. Keep these as protocol seat identities and use
+    # an explicit provider mapping when a deployment routes a seat elsewhere.
+    FABLE = "claude-fable-5"
+    OPUS = "claude-opus-5"
+    SONNET = "claude-sonnet-5"
+    HAIKU = "claude-haiku-4-5-20251001"
 
 
 class Phase(int, Enum):

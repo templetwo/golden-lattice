@@ -92,7 +92,8 @@ class StubAnthropicClient:
     def __init__(self) -> None:
         # Default scripts: minimal valid responses.
         self.phase_1_responses: dict[ModelId, IndependentResponse] = {
-            m: make_phase_1_response(m) for m in (ModelId.OPUS, ModelId.SONNET, ModelId.HAIKU)
+            m: make_phase_1_response(m)
+            for m in (ModelId.FABLE, ModelId.OPUS, ModelId.SONNET, ModelId.HAIKU)
         }
         self.phase_1_delay_seconds: dict[ModelId, float] = {}
         self.self_reflection_delay_seconds: dict[ModelId, float] = {}

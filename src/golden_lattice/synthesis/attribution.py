@@ -55,7 +55,7 @@ Within-section: claims in their Phase 1 EMISSION order, not claim_trace
 order. Layered mode shows each peer's argument as the peer made it; the
 synthesis's reweaving belongs to annotated mode.
 
-Layered section headers: "=== claude-opus-4-7 ===" — consistent with
+Layered section headers: "=== claude-opus-5 ===" — consistent with
 transcript-mode section markers; uses the canonical model identifier
 rather than introducing a parallel human-readable scheme.
 
@@ -105,9 +105,9 @@ from golden_lattice.memory_graph.schema import (
 )
 
 
-# Marker mapping per ARCHITECTURE.md §7 ([O], [S], [H]). Hardcoded for v0.
-# v1 trigger: fourth ModelId added (esp. with initial-letter collision).
+# Marker mapping per ARCHITECTURE.md §7. Fable is the fourth closed seat.
 _MARKER_BY_MODEL: dict[ModelId, str] = {
+    ModelId.FABLE: "[F]",
     ModelId.OPUS: "[O]",
     ModelId.SONNET: "[S]",
     ModelId.HAIKU: "[H]",

@@ -13,8 +13,9 @@ is instantiated, not when the module is imported.
 from __future__ import annotations
 
 import hashlib
+import inspect
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any, Awaitable, Callable, Optional
 
 from golden_lattice.exchange.phase_0_investigation import (
     build_investigation_proposal_prompt,
@@ -77,7 +78,14 @@ class AnthropicClient:
     at the orchestrator layer.
     """
 
-    def __init__(self, *, api_key: Optional[str] = None) -> None:
+    def __init__(
+        self,
+        *,
+        api_key: Optional[str] = None,
+        stream_callback: Optional[
+            Callable[[ModelId, str, str, str], None | Awaitable[None]]
+        ] = None,
+    ) -> None:
         try:
             import anthropic  # lazy import — stubs don't need the SDK
         except ImportError as exc:  # pragma: no cover - import-time check
@@ -86,6 +94,45 @@ class AnthropicClient:
                 "Install with: pip install anthropic"
             ) from exc
         self._client = anthropic.AsyncAnthropic(api_key=api_key)
+        self._stream_callback = stream_callback
+
+    def set_stream_callback(
+        self,
+        callback: Optional[Callable[[ModelId, str, str, str], None | Awaitable[None]]],
+    ) -> None:
+        """Set the per-session callback receiving provider deltas."""
+        self._stream_callback = callback
+
+    async def _stream_message(
+        self,
+        *,
+        model_id: ModelId,
+        phase: str,
+        **kwargs: Any,
+    ) -> Any:
+        """Run one Messages call through Anthropic's async streaming API.
+
+        Tool-forced Lattice calls normally stream ``input_json_delta`` rather
+        than prose ``text_delta``. Both are forwarded immediately; parsing
+        still waits for ``get_final_message()`` so partial JSON can never enter
+        the substrate as a claim.
+        """
+        async with self._client.messages.stream(**kwargs) as stream:
+            async for event in stream:
+                if getattr(event, "type", None) != "content_block_delta":
+                    continue
+                delta = getattr(event, "delta", None)
+                text = getattr(delta, "text", None)
+                kind = "text"
+                if not text:
+                    text = getattr(delta, "partial_json", None)
+                    kind = "tool_input"
+                if not text or self._stream_callback is None:
+                    continue
+                result = self._stream_callback(model_id, phase, text, kind)
+                if inspect.isawaitable(result):
+                    await result
+            return await stream.get_final_message()
 
     # --- Phase 0 ---------------------------------------------------------
 
@@ -103,7 +150,9 @@ class AnthropicClient:
         )
         tool = investigation_proposal_tool_schema(max_queries=max_queries)
         try:
-            response = await self._client.messages.create(
+            response = await self._stream_message(
+                model_id=model_id,
+                phase="phase_0_proposal",
                 model=model_id.value,
                 max_tokens=2048,
                 system=system,
@@ -141,7 +190,9 @@ class AnthropicClient:
         tool = phase_1_response_tool_schema()
         started = datetime.now(timezone.utc)
         try:
-            response = await self._client.messages.create(
+            response = await self._stream_message(
+                model_id=model_id,
+                phase="phase_1",
                 model=model_id.value,
                 max_tokens=4096,
                 system=system,
@@ -179,7 +230,9 @@ class AnthropicClient:
         )
         tool = self_reflection_tool_schema()
         try:
-            response = await self._client.messages.create(
+            response = await self._stream_message(
+                model_id=model_id,
+                phase="self_reflection",
                 model=model_id.value,
                 max_tokens=2048,
                 system=system,
@@ -228,7 +281,9 @@ class AnthropicClient:
         )
         tool = cross_reading_tool_schema()
         try:
-            response = await self._client.messages.create(
+            response = await self._stream_message(
+                model_id=reader_model,
+                phase="phase_2_cross_reading",
                 model=reader_model.value,
                 max_tokens=4096,
                 system=system,
@@ -271,7 +326,9 @@ class AnthropicClient:
         )
         tool = phase_2_tagging_tool_schema()
         try:
-            response = await self._client.messages.create(
+            response = await self._stream_message(
+                model_id=tagger_model,
+                phase="phase_2_tagging",
                 model=tagger_model.value,
                 max_tokens=4096,
                 system=system,
@@ -318,7 +375,9 @@ class AnthropicClient:
         )
         tool = phase_3_dialogue_tool_schema()
         try:
-            response = await self._client.messages.create(
+            response = await self._stream_message(
+                model_id=speaker_model,
+                phase="phase_3",
                 model=speaker_model.value,
                 max_tokens=4096,
                 system=system,

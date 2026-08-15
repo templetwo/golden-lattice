@@ -85,7 +85,7 @@ def test_phase_0_session_round_trips_through_json_store(
     # (frozen models compare by value).
     assert reloaded.phase_0 is not None
     assert reloaded.phase_0 == session.phase_0
-    assert len(reloaded.phase_0.proposals) == 3
+    assert len(reloaded.phase_0.proposals) == 4
     assert len(reloaded.phase_0.feed) == 4  # grounding + 2 results + 1 failed
 
 

@@ -80,13 +80,17 @@
 
   // ---------- constants ----------
   var COLOR = {
-    'claude-opus-4-7': 'oklch(0.72 0.16 308)',
-    'claude-sonnet-4-6': 'oklch(0.79 0.12 226)',
+    'claude-fable-5': 'oklch(0.78 0.16 35)',
+    'claude-opus-5': 'oklch(0.72 0.16 308)',
+    'claude-sonnet-5': 'oklch(0.79 0.12 226)',
+    'claude-haiku-4-5-20251001': 'oklch(0.81 0.15 158)',
     'claude-haiku-4-5': 'oklch(0.81 0.15 158)'
   };
   var SHORT = {
-    'claude-opus-4-7': 'OPUS',
-    'claude-sonnet-4-6': 'SONNET',
+    'claude-fable-5': 'FABLE',
+    'claude-opus-5': 'OPUS',
+    'claude-sonnet-5': 'SONNET',
+    'claude-haiku-4-5-20251001': 'HAIKU',
     'claude-haiku-4-5': 'HAIKU'
   };
   var CH = { critique: 'oklch(0.67 0.18 25)', augment: 'oklch(0.74 0.10 250)', converge: 'oklch(0.84 0.14 88)' };
@@ -234,6 +238,7 @@
     };
     var totalClaims = M.reduce(function (a, m) { return a + has(m); }, 0);
     var idColor = live ? 'oklch(0.67 0.18 25)' : GOLD;
+    var failure = data.error ? '<div style="margin-top:18px;padding:11px 13px;background:oklch(0.67 0.18 25 / 0.08);border:1px solid oklch(0.67 0.18 25 / 0.35);border-radius:6px;color:#e6a5a5;font-family:var(--mono);font-size:11px;line-height:1.5;"><strong>session error</strong>' + (data.error.phase ? ' · ' + esc(data.error.phase) : '') + (data.error.model_id ? ' · ' + esc(shortOf(data.error.model_id)) : '') + '<br>' + esc(data.error.message) + '</div>' : '';
 
     var tabs = (UI.sessions || []).map(function (s, i) {
       var active = UI.mode === 'replay' && i === UI.sessionIdx;
@@ -272,11 +277,11 @@
         '</div>' +
         '<div style="height:1px;background:linear-gradient(90deg,#242832,transparent);margin:22px 0 26px 0;"></div>' +
         '<div class="mono" style="font-size:10.5px;letter-spacing:0.26em;color:#5a606c;text-transform:uppercase;margin-bottom:14px;">The Prompt</div>' +
-        '<div style="font-size:30px;line-height:1.34;font-weight:400;color:#eef0f4;max-width:920px;letter-spacing:-0.01em;">' + esc(data.prompt) + '</div>' +
+        '<div style="font-size:30px;line-height:1.34;font-weight:400;color:#eef0f4;max-width:920px;letter-spacing:-0.01em;">' + esc(data.prompt) + '</div>' + failure +
         '<div style="display:flex;gap:30px;margin-top:34px;flex-wrap:wrap;align-items:center;">' +
           legend +
           '<div style="flex:1;"></div>' +
-          '<div class="mono" style="font-size:10.5px;color:#5a606c;letter-spacing:0.04em;">3 models · ' + totalClaims + ' claims · ' + (data.turns || []).length + ' turns</div>' +
+          '<div class="mono" style="font-size:10.5px;color:#5a606c;letter-spacing:0.04em;">' + M.length + ' models · ' + totalClaims + ' claims · ' + (data.turns || []).length + ' turns</div>' +
         '</div>' +
       '</div>';
   }
@@ -373,6 +378,8 @@
     var maps = D.maps;
     var cols = data.models.map(function (m) {
       var refl = data.reflections[m] || {};
+      var stream = (data.phase1[m] && data.phase1[m].stream) || '';
+      var streamHtml = stream ? '<div style="margin:0 0 12px;padding:10px 11px;background:#0f1117;border:1px solid ' + tint(m, 0.34) + ';border-left:2px solid ' + colorOf(m) + ';border-radius:0 4px 4px 0;"><div class="mono" style="font-size:9px;letter-spacing:0.12em;color:' + colorOf(m) + ';text-transform:uppercase;margin-bottom:6px;">streaming · provider delta</div><pre style="white-space:pre-wrap;word-break:break-word;margin:0;font-family:var(--mono);font-size:10px;line-height:1.45;color:#9aa0ac;max-height:180px;overflow:hidden;">' + esc(stream) + '</pre></div>' : '';
       var claims = claimsOf(data, m).map(function (c) {
         var mark = '';
         if (c.id === refl.strong) mark = '✦ '; else if (c.id === refl.weak) mark = '· ';
@@ -386,7 +393,7 @@
         '<div style="display:flex;justify-content:space-between;align-items:baseline;border-bottom:1px solid ' + tint(m, 0.32) + ';padding-bottom:8px;margin-bottom:12px;">' +
           '<span class="mono" style="font-size:11px;letter-spacing:0.14em;color:' + colorOf(m) + ';">' + esc(shortOf(m)) + '</span>' +
           '<span class="mono" style="font-size:10px;color:#5a606c;">' + esc(focus) + '</span>' +
-        '</div>' + claims +
+        '</div>' + streamHtml + claims +
         '<div class="reveal refl" data-beat="' + maps.reflR[m] + '" style="margin-top:12px;padding:11px 12px;background:oklch(0.84 0.14 88 / 0.05);border:1px solid oklch(0.84 0.14 88 / 0.16);border-radius:5px;">' +
           '<div class="mono" style="font-size:9px;letter-spacing:0.18em;color:oklch(0.84 0.14 88 / 0.8);text-transform:uppercase;margin-bottom:6px;">Self-reflection</div>' +
           '<div style="font-size:12px;line-height:1.55;color:#9aa0ac;font-style:italic;">' + esc(refl.just || '') + '</div>' +
@@ -399,8 +406,8 @@
         '<div class="spine-num"><div class="n">01</div><div class="line"></div></div>' +
         '<div class="col-pad">' +
           '<div class="phase-title">Independent Generation</div>' +
-          '<div class="phase-lead">All three models answer the same prompt simultaneously — blind to one another. Each marks its own strongest <span style="color:oklch(0.84 0.14 88);">✦</span> and weakest claim before any peer output arrives.</div>' +
-          '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-top:26px;align-items:start;">' + cols + '</div>' +
+          '<div class="phase-lead">All models answer the same prompt simultaneously — blind to one another. Each marks its own strongest <span style="color:oklch(0.84 0.14 88);">✦</span> and weakest claim before any peer output arrives.</div>' +
+          '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin-top:26px;align-items:start;">' + cols + '</div>' +
         '</div>' +
       '</div>';
   }
@@ -506,9 +513,9 @@
     }
 
     var synth = maps.synthLines.map(function (line, i) {
-      var tagM = line.match(/^\[([OSH])\]\s*/);
+      var tagM = line.match(/^\[([FOSH])\]\s*/);
       var tag = tagM ? tagM[1] : '';
-      var tagColor = tag === 'O' ? COLOR['claude-opus-4-7'] : tag === 'S' ? COLOR['claude-sonnet-4-6'] : tag === 'H' ? COLOR['claude-haiku-4-5'] : '#8b919d';
+      var tagColor = tag === 'F' ? COLOR['claude-fable-5'] : tag === 'O' ? COLOR['claude-opus-5'] : tag === 'S' ? COLOR['claude-sonnet-5'] : tag === 'H' ? COLOR['claude-haiku-4-5-20251001'] : '#8b919d';
       var rest = tagM ? line.slice(tagM[0].length) : line;
       var text = rest, disputeHtml = '';
       var di = rest.indexOf('[DISPUTED');
@@ -808,9 +815,9 @@
       liveObj = {
         id: ev.session_id, title: 'LIVE', prompt: ev.prompt, models: ev.models_invited,
         phase0: null, phase1: {}, reflections: {}, crossreadings: [], turns: [],
-        synthesis: { output: '', trace: [] }, metrics: null, elevations: []
+        synthesis: { output: '', trace: [] }, metrics: null, elevations: [], error: null
       };
-      (ev.models_invited || []).forEach(function (m) { liveObj.phase1[m] = { focus: '', conf: 0, claims: [] }; liveObj.reflections[m] = {}; });
+      (ev.models_invited || []).forEach(function (m) { liveObj.phase1[m] = { focus: '', conf: 0, claims: [], stream: '' }; liveObj.reflections[m] = {}; });
       UI.sessionInFlight = true;
     }
     var L = liveObj;
@@ -820,20 +827,22 @@
     else if (t === 'phase_0_search_result') { ensureP0(L).results.push({ query: ev.query, preview: ev.result_text_preview }); }
     else if (t === 'phase_0_failed_search') { ensureP0(L).failed.push({ query: ev.query, reason: ev.reason }); }
     else if (t === 'phase_0_feed_frozen') { if (L.phase0) L.phase0.frozen = ev.entry_count; }
-    else if (t === 'phase_1_claim') { (L.phase1[ev.model_id] = L.phase1[ev.model_id] || { claims: [] }).claims.push({ id: ev.claim_id, text: ev.text }); }
+    else if (t === 'model_stream_delta') { var streamState = L.phase1[ev.model_id] = L.phase1[ev.model_id] || { claims: [], stream: '' }; streamState.stream = (streamState.stream || '') + ev.delta; UI.liveStatus = 'streaming · ' + shortOf(ev.model_id) + ' · ' + ev.phase; }
+    else if (t === 'phase_1_claim') { (L.phase1[ev.model_id] = L.phase1[ev.model_id] || { claims: [], stream: '' }).claims.push({ id: ev.claim_id, text: ev.text }); }
     else if (t === 'phase_1_response_completed') { var p = L.phase1[ev.model_id] = L.phase1[ev.model_id] || { claims: [] }; p.focus = ev.focus_tag; p.conf = ev.confidence; }
     else if (t === 'self_reflection') { L.reflections[ev.model_id] = { strong: ev.strongest_claim_id, weak: ev.weakest_claim_id, just: ev.tag_justification || '' }; }
     else if (t === 'phase_2_cross_reading') { L.crossreadings.push({ reader: ev.reader_model, target: ev.target_model, agreements: (ev.agreements || []).map(function (a) { return a.claim_id || a; }), disagreements: (ev.disagreements || []).map(function (d) { return { id: d.target_claim_id || d.id, reason: d.reason }; }) }); }
     else if (t === 'phase_3_turn') { L.turns.push({ id: ev.turn_id, speaker: ev.speaker_model, channel: ev.channel, target: ev.target_model, content: ev.content }); }
     else if (t === 'phase_4_artifact') { L.synthesis = { output: ev.output, trace: (ev.claim_trace || []).map(function (e) { return { id: e.claim_id, disp: e.disposition }; }) }; L.elevations = ev.elevations || []; }
     else if (t === 'phase_4_metrics') { L.metrics = ev.metrics; }
+    else if (t === 'session_error') { L.error = { message: ev.message, phase: ev.phase, model_id: ev.model_id }; UI.sessionInFlight = false; }
     else if (t === 'session_completed') { UI.sessionInFlight = false; }
 
     UI.live = L;
     // Rebuild from the grown live object, then show everything (step = N).
     buildSession(L);
     UI.step = D.N;
-    UI.liveStatus = 'streaming · ' + (L.id || 'session');
+    UI.liveStatus = L.error ? 'error · provider run stopped; dashboard remains available' : (UI.liveStatus.indexOf('streaming · ') === 0 ? UI.liveStatus : 'streaming · ' + (L.id || 'session'));
     applyStep();
     syncPromptInput();
   }
