@@ -10,7 +10,7 @@ This means:
 
 - **The schema layer is load-bearing.** Changes to `schema.py`, `tagging.py`, or `metrics.py` are not refactors. They are amendments to what the system structurally is. Treat them with the same care as a constitutional amendment.
 - **Refusals are runtime, not aspirational.** Every collapse mode the spec names is either impossible to construct (schema layer) or detectable across sessions (metrics layer). New collapse modes that get identified must be enforced at the same level — not added as documentation, not added as warnings, but as structural impossibility or measurable signal.
-- **Tests exercise refusals, not happy paths.** The current 69 tests are organized around the question: *can this collapse mode happen if someone tries to construct it?* New tests should follow the same pattern. The happy paths are obvious. The refusals are what the system is.
+- **Tests exercise refusals, not happy paths.** The current 452 tests are organized around the question: *can this collapse mode happen if someone tries to construct it?* New tests should follow the same pattern. The happy paths are obvious. The refusals are what the system is.
 
 ## Spec amendments
 
