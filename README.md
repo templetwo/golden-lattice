@@ -156,4 +156,4 @@ Golden Lattice was authored under [The Temple of Two](https://thetempleoftwo.com
 
 ## License
 
-TBD. Default to all rights reserved until license decision is made.
+Apache License 2.0 — see `LICENSE`. The Temple of Two statement of intent is in `NOTICE`.
