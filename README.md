@@ -1,6 +1,6 @@
 # Golden Lattice
 
-A CLI that runs Opus, Sonnet, and Haiku as peers on the same prompt and produces a co-authored response that none of them would have produced alone. Not routing. Not voting. Not summarization. Co-authorship.
+A CLI that runs four Claude models — Fable, Opus, Sonnet, and Haiku — as peers on the same prompt and produces a co-authored response that none of them would have produced alone. Not routing. Not voting. Not summarization. Co-authorship.
 
 ## The load-bearing claim
 
@@ -9,7 +9,7 @@ Cognition emerges between models, not inside the strongest one.
 If the four invariants are violated, the system is doing routing and should be called that:
 
 1. **No authority gradient.** No model finalizes, overrides, or judges another's output.
-2. **Symmetric visibility.** All three models see the same prompt, same peer outputs, same dialogue state.
+2. **Symmetric visibility.** All peer models see the same prompt, same peer outputs, same dialogue state.
 3. **Contribution parity.** Each model's distinct perspective is preserved through synthesis. Measurable, not aspirational.
 4. **Irreducibility preservation.** No model's contribution can be fully subsumed without trace. The trace itself is the proof.
 
@@ -17,30 +17,40 @@ These invariants are not constraints. They are refusals — structural commitmen
 
 ## What is in this repo
 
-The evaluative substrate. Schema, tagging, metrics, and persistence layers that any operational layer (orchestrator, exchange wire format, synthesis engine, CLI) must satisfy before running.
+The whole protocol, running. Phase 0 investigation through Phase 4 synthesis, the evaluative substrate they are constrained by, a replay path, and two renderers over the same event stream.
 
 ```
-src/golden_lattice/memory_graph/
-├── base.py      — ModelId, Phase, claim_id_for, PARITY_THRESHOLD
-├── schema.py    — Session, Claim, IndependentResponse, CrossReading, DialogueTurn,
-│                  ClaimTraceEntry, SynthesisArtifact, SessionMetrics
-├── tagging.py   — Phase2Tagging, ClaimTags, ConsensusTag, DimensionConsensus,
-│                  EdgeCaseTag, StructuralPatternTag (closed vocabularies, v0.1)
-├── metrics.py   — compute_consensus_tags, compute_dimension_consensus,
-│                  compute_parity_shares, compute_consensus_pair_distribution,
-│                  compute_consensus_pair_skew, contested_peer_tags,
-│                  contested_self_tags
-└── store.py     — SessionStore Protocol, JsonFileSessionStore,
-                   aggregate_alignment_pair_history
+src/golden_lattice/
+├── memory_graph/  — the substrate. base.py (ModelId, Phase, claim_id_for,
+│                    PARITY_THRESHOLD), schema.py (Session, Claim,
+│                    IndependentResponse, CrossReading, DialogueTurn,
+│                    ClaimTraceEntry, SynthesisArtifact, SessionMetrics),
+│                    tagging.py (closed vocabularies), metrics.py (pure
+│                    functions over a tagged Session, no LLM calls),
+│                    phase_0.py, store.py (SessionStore Protocol,
+│                    JsonFileSessionStore)
+├── exchange/      — wire formats. Phase 0 investigation (Tavily-backed search),
+│                    Phase 1 independent generation + self-reflection,
+│                    Phase 2 cross-reading + tagging, Phase 3 dialogue
+├── orchestrator/  — parallel dispatch, protocol enforcement, timeout policy,
+│                    LatticeConfig, the Anthropic HTTP client
+├── synthesis/     — the four Phase 4 rules: irreducibility preservation,
+│                    agreement elevation, disagreement surfacing,
+│                    attribution preservation. Rule-based, deterministic.
+├── events.py      — the event protocol shared by live runs and replay
+├── replay.py      — walk a persisted Session, re-emit its events in order
+├── tui/           — Rich terminal renderer over that event stream
+├── dashboard/     — aiohttp + vanilla-JS web renderer over the same stream
+└── cli/           — interactive prompt helpers for the run scripts
 ```
 
-69 tests pass. Each test exercises one structural refusal — every collapse mode the spec names is either impossible to construct (schema layer) or detectable across sessions (metrics + store layers).
+452 tests, 441 passing on a fresh clone. The 11 skips are not failures: 10 want persisted session fixtures that live in the gitignored `sessions/` directory, and one is a live-API integration test gated behind `LATTICE_LIVE_TESTS=1`. Each test exercises one structural refusal — every collapse mode the spec names is either impossible to construct (schema layer) or detectable across sessions (metrics + store layers).
 
 ## What is not in this repo yet
 
-The operational layer. Phase 2 cross-reading wire format, the orchestrator, the synthesis engine, the CLI surface. These will ship next.
+The evaluation harness. The falsification criteria below name in advance what would prove this project is routing with extra steps; the benchmark that tests them is not here yet. Read those criteria as pre-registered, not as results.
 
-The substrate constrains them from below. Anything built downstream must satisfy these constructors and pass these metrics before it can run. The orchestrator is constrained from below before it exists.
+The substrate still constrains everything above it. Anything built downstream must satisfy these constructors and pass these metrics before it can run. The orchestrator was constrained from below before it existed.
 
 ## What this repo is not
 
@@ -84,12 +94,12 @@ User ⇄ CLI
  (parallel dispatch, protocol enforcement, timeout management,
   self-reflection artifact collection during Phase 1 idle gaps)
         ⇅
- ┌────────┬────────┬────────┐
- │  Opus  │ Sonnet │ Haiku  │
- └────────┴────────┴────────┘
+ ┌────────┬────────┬────────┬────────┐
+ │ Fable  │  Opus  │ Sonnet │ Haiku  │
+ └────────┴────────┴────────┴────────┘
         ⇅
  Exchange Layer
- (validates Phase 2/3 schema, routes peer-visible state,
+ (validates Phase 0-3 schema, routes peer-visible state,
   enforces channel constraints in Phase 3)
         ⇅
  Synthesis Engine
@@ -104,7 +114,36 @@ User ⇄ CLI
   flagged collapse-toward-routing events)
 ```
 
-Memory Graph is the substrate this repo currently implements. The remaining layers are forthcoming.
+Every layer in this diagram is implemented. The Memory Graph is the substrate the rest are built against; sessions persist as greppable JSON and replay through either renderer.
+
+## Running it
+
+Python 3.11 or newer. Runtime dependencies are `pydantic`, `rich`, `httpx`, and `aiohttp` — the Anthropic API is called over plain HTTP, so no provider SDK is required.
+
+```bash
+pip install -e ".[dev]"
+pytest
+```
+
+There is no installed console script yet. The surfaces run as modules and scripts:
+
+```bash
+# live session with the streaming TUI; prompts for a key if ANTHROPIC_API_KEY is unset
+python scripts/run_lattice_live.py "your prompt here"
+
+# same session, streamed to the web dashboard instead of the terminal
+python scripts/run_lattice_live.py --dashboard
+
+# replay a persisted session in the terminal (--speed 1.0 is lived time)
+python -m golden_lattice.tui <session_id> --speed 10
+
+# replay a persisted session in the browser
+python -m golden_lattice.dashboard replay <session_id>
+```
+
+`ANTHROPIC_API_KEY` is required for a live run. `TAVILY_API_KEY` is optional; without it the session runs with Phase 0 investigation skipped. Sessions are written to `sessions/`, which is gitignored — lattice output stays private until it is published deliberately.
+
+The peer seats the orchestrator invites are declared in `ModelId` (`src/golden_lattice/memory_graph/base.py`). Model IDs move; that enum is the one place to change them.
 
 ## Further reading
 
