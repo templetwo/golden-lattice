@@ -257,7 +257,7 @@ def test_layered_renders_per_model_sections_in_alphabetical_order():
         surfaced_disagreements=(),
     )
     # Section headers in alphabetical model.value order: haiku < opus < sonnet.
-    h_pos = out.index("=== claude-haiku-4-5-20251001 ===")
+    h_pos = out.index("=== claude-haiku-5-5 ===")
     o_pos = out.index("=== claude-opus-5 ===")
     s_pos = out.index("=== claude-sonnet-5 ===")
     assert h_pos < o_pos < s_pos

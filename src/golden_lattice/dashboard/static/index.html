@@ -83,15 +83,13 @@
     'claude-fable-5': 'oklch(0.78 0.16 35)',
     'claude-opus-5': 'oklch(0.72 0.16 308)',
     'claude-sonnet-5': 'oklch(0.79 0.12 226)',
-    'claude-haiku-4-5-20251001': 'oklch(0.81 0.15 158)',
-    'claude-haiku-4-5': 'oklch(0.81 0.15 158)'
+    'claude-haiku-5-5': 'oklch(0.81 0.15 158)',
   };
   var SHORT = {
     'claude-fable-5': 'FABLE',
     'claude-opus-5': 'OPUS',
     'claude-sonnet-5': 'SONNET',
-    'claude-haiku-4-5-20251001': 'HAIKU',
-    'claude-haiku-4-5': 'HAIKU'
+    'claude-haiku-5-5': 'HAIKU',
   };
   var CH = { critique: 'oklch(0.67 0.18 25)', augment: 'oklch(0.74 0.10 250)', converge: 'oklch(0.84 0.14 88)' };
   var CHB = { critique: 'oklch(0.67 0.18 25 / 0.4)', augment: 'oklch(0.74 0.10 250 / 0.4)', converge: 'oklch(0.84 0.14 88 / 0.45)' };
@@ -515,7 +513,7 @@
     var synth = maps.synthLines.map(function (line, i) {
       var tagM = line.match(/^\[([FOSH])\]\s*/);
       var tag = tagM ? tagM[1] : '';
-      var tagColor = tag === 'F' ? COLOR['claude-fable-5'] : tag === 'O' ? COLOR['claude-opus-5'] : tag === 'S' ? COLOR['claude-sonnet-5'] : tag === 'H' ? COLOR['claude-haiku-4-5-20251001'] : '#8b919d';
+      var tagColor = tag === 'F' ? COLOR['claude-fable-5'] : tag === 'O' ? COLOR['claude-opus-5'] : tag === 'S' ? COLOR['claude-sonnet-5'] : tag === 'H' ? COLOR['claude-haiku-5-5'] : '#8b919d';
       var rest = tagM ? line.slice(tagM[0].length) : line;
       var text = rest, disputeHtml = '';
       var di = rest.indexOf('[DISPUTED');

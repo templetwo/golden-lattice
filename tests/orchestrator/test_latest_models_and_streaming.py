@@ -22,7 +22,7 @@ def test_default_roster_uses_current_four_model_api_ids():
         "claude-fable-5",
         "claude-opus-5",
         "claude-sonnet-5",
-        "claude-haiku-4-5-20251001",
+        "claude-haiku-5-5",
     ]
 
 

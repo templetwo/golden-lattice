@@ -37,7 +37,7 @@ class ModelId(str, Enum):
     FABLE = "claude-fable-5"
     OPUS = "claude-opus-5"
     SONNET = "claude-sonnet-5"
-    HAIKU = "claude-haiku-4-5-20251001"
+    HAIKU = "claude-haiku-5-5"
 
 
 class Phase(int, Enum):

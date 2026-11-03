@@ -6,7 +6,7 @@ This is the engineering surface. The deeper architectural lineage — including 
 
 ## 1. What this is
 
-A CLI that runs Opus 4.7, Sonnet 4.6, and Haiku 4.5 as peers on the same prompt and produces a co-authored response that none of them would have produced alone.
+A CLI that runs Opus 5, Sonnet 5, and Haiku 5.5 as peers on the same prompt and produces a co-authored response that none of them would have produced alone.
 
 Not routing. Not voting. Not summarization. Co-authorship.
 
