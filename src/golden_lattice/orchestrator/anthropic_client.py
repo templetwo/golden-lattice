@@ -54,11 +54,49 @@ from golden_lattice.memory_graph.schema import (
     SelfReflectionArtifact,
 )
 from golden_lattice.memory_graph.tagging import Phase2Tagging
-from golden_lattice.orchestrator.errors import OrchestratorProviderError
+from golden_lattice.orchestrator.config import TokenAllowance
+from golden_lattice.orchestrator.errors import (
+    OrchestratorProviderError,
+    OrchestratorTruncationError,
+)
 
 
 def _prompt_hash(prompt: str) -> str:
     return hashlib.sha256(prompt.encode("utf-8")).hexdigest()[:16]
+
+
+def _attach_raw(exc: BaseException, tool_input: dict[str, Any]) -> None:
+    """Attach the model's raw tool_input to a parse failure for the eval sidecar.
+
+    Diagnostic only. The wire layer's error text stays the same. Failures to
+    attach are ignored, so a diagnostic never changes the refusal itself.
+    """
+    try:
+        exc.raw_tool_input = tool_input  # type: ignore[attr-defined]
+    except (AttributeError, TypeError):
+        pass
+
+
+_UNSUPPORTED_STRICT_KEYS = frozenset({"minimum", "maximum"})
+
+
+def _strict_tool(tool: dict[str, Any]) -> dict[str, Any]:
+    """Return the tool with strict schema enforcement on the wire.
+
+    Strict mode rejects minimum/maximum. Those bounds are removed here and
+    enforced by the wire parser instead (confidence stays in [0, 1].)
+    """
+
+    def clean(node: Any) -> Any:
+        if isinstance(node, dict):
+            return {k: clean(v) for k, v in node.items() if k not in _UNSUPPORTED_STRICT_KEYS}
+        if isinstance(node, list):
+            return [clean(v) for v in node]
+        return node
+
+    out = clean(tool)
+    out["strict"] = True
+    return out
 
 
 class AnthropicClient:
@@ -85,6 +123,7 @@ class AnthropicClient:
         stream_callback: Optional[
             Callable[[ModelId, str, str, str], None | Awaitable[None]]
         ] = None,
+        allowance: Optional[TokenAllowance] = None,
     ) -> None:
         try:
             import anthropic  # lazy import — stubs don't need the SDK
@@ -95,6 +134,7 @@ class AnthropicClient:
             ) from exc
         self._client = anthropic.AsyncAnthropic(api_key=api_key)
         self._stream_callback = stream_callback
+        self._allowance = allowance or TokenAllowance()
 
     def set_stream_callback(
         self,
@@ -102,6 +142,28 @@ class AnthropicClient:
     ) -> None:
         """Set the per-session callback receiving provider deltas."""
         self._stream_callback = callback
+
+    def _refuse_if_truncated(
+        self,
+        response: Any,
+        *,
+        model: ModelId,
+        phase: str,
+        max_tokens: int,
+    ) -> None:
+        """Refuse a response cut off at max_tokens, before any parsing.
+
+        A truncated tool-input JSON can parse to a valid but shorter payload,
+        so truncation must be refused here, not discovered downstream.
+        """
+        if getattr(response, "stop_reason", None) == "max_tokens":
+            usage = getattr(response, "usage", None)
+            raise OrchestratorTruncationError(
+                model=model,
+                phase=phase,
+                max_tokens=max_tokens,
+                output_tokens=int(getattr(usage, "output_tokens", 0) or 0),
+            )
 
     async def _stream_message(
         self,
@@ -154,7 +216,7 @@ class AnthropicClient:
                 model_id=model_id,
                 phase="phase_0_proposal",
                 model=model_id.value,
-                max_tokens=2048,
+                max_tokens=self._allowance.phase_0_proposal,
                 system=system,
                 messages=[{"role": "user", "content": user}],
                 tools=[tool],
@@ -164,15 +226,20 @@ class AnthropicClient:
             raise OrchestratorProviderError(
                 model=model_id, phase="phase_0_proposal", underlying=exc
             ) from exc
+        self._refuse_if_truncated(response, model=model_id, phase="phase_0_proposal", max_tokens=self._allowance.phase_0_proposal)
         tool_input = _extract_tool_input(response, tool["name"])
         try:
             return parse_investigation_proposal_tool_use(
                 tool_input, expected_model=model_id
             )
         except WireParseError as exc:
+            _attach_raw(exc, tool_input)
             raise WireParseError(
                 f"[model={model_id.value}, phase=phase_0_proposal] {exc}"
             ) from exc
+        except Exception as exc:
+            _attach_raw(exc, tool_input)
+            raise
 
     # --- Phase 1 ---------------------------------------------------------
 
@@ -194,10 +261,10 @@ class AnthropicClient:
                 model_id=model_id,
                 phase="phase_1",
                 model=model_id.value,
-                max_tokens=4096,
+                max_tokens=self._allowance.phase_1_response,
                 system=system,
                 messages=[{"role": "user", "content": user}],
-                tools=[tool],
+                tools=[_strict_tool(tool)],
                 tool_choice={"type": "tool", "name": tool["name"]},
             )
         except Exception as exc:
@@ -205,6 +272,7 @@ class AnthropicClient:
                 model=model_id, phase="phase_1", underlying=exc
             ) from exc
         completed = datetime.now(timezone.utc)
+        self._refuse_if_truncated(response, model=model_id, phase="phase_1", max_tokens=self._allowance.phase_1_response)
         tool_input = _extract_tool_input(response, tool["name"])
         try:
             return parse_phase_1_response_tool_use(
@@ -215,9 +283,13 @@ class AnthropicClient:
                 generation_completed_at=completed,
             )
         except WireParseError as exc:
+            _attach_raw(exc, tool_input)
             raise WireParseError(
                 f"[model={model_id.value}, phase=phase_1] {exc}"
             ) from exc
+        except Exception as exc:
+            _attach_raw(exc, tool_input)
+            raise
 
     async def submit_self_reflection(
         self,
@@ -228,22 +300,25 @@ class AnthropicClient:
         system, user = build_self_reflection_prompt(
             model_id=model_id, phase_1_response=phase_1_response
         )
-        tool = self_reflection_tool_schema()
+        tool = self_reflection_tool_schema(
+            own_claim_ids=tuple(c.claim_id for c in phase_1_response.claims)
+        )
         try:
             response = await self._stream_message(
                 model_id=model_id,
                 phase="self_reflection",
                 model=model_id.value,
-                max_tokens=2048,
+                max_tokens=self._allowance.self_reflection,
                 system=system,
                 messages=[{"role": "user", "content": user}],
-                tools=[tool],
+                tools=[_strict_tool(tool)],
                 tool_choice={"type": "tool", "name": tool["name"]},
             )
         except Exception as exc:
             raise OrchestratorProviderError(
                 model=model_id, phase="self_reflection", underlying=exc
             ) from exc
+        self._refuse_if_truncated(response, model=model_id, phase="self_reflection", max_tokens=self._allowance.self_reflection)
         tool_input = _extract_tool_input(response, tool["name"])
         own_claim_ids = {c.claim_id for c in phase_1_response.claims}
         try:
@@ -254,9 +329,13 @@ class AnthropicClient:
                 generated_at=datetime.now(timezone.utc),
             )
         except WireParseError as exc:
+            _attach_raw(exc, tool_input)
             raise WireParseError(
                 f"[model={model_id.value}, phase=self_reflection] {exc}"
             ) from exc
+        except Exception as exc:
+            _attach_raw(exc, tool_input)
+            raise
 
     # --- Phase 2 ---------------------------------------------------------
 
@@ -285,16 +364,17 @@ class AnthropicClient:
                 model_id=reader_model,
                 phase="phase_2_cross_reading",
                 model=reader_model.value,
-                max_tokens=4096,
+                max_tokens=self._allowance.phase_2_cross_reading,
                 system=system,
                 messages=[{"role": "user", "content": user}],
-                tools=[tool],
+                tools=[_strict_tool(tool)],
                 tool_choice={"type": "tool", "name": tool["name"]},
             )
         except Exception as exc:
             raise OrchestratorProviderError(
                 model=reader_model, phase="phase_2_cross_reading", underlying=exc
             ) from exc
+        self._refuse_if_truncated(response, model=reader_model, phase="phase_2_cross_reading", max_tokens=self._allowance.phase_2_cross_reading)
         tool_input = _extract_tool_input(response, tool["name"])
         try:
             return parse_cross_reading_tool_use(
@@ -304,10 +384,14 @@ class AnthropicClient:
                 valid_claim_ids=valid_claim_ids,
             )
         except WireParseError as exc:
+            _attach_raw(exc, tool_input)
             raise WireParseError(
                 f"[reader={reader_model.value}, target={target_model.value}, "
                 f"phase=phase_2_cross_reading] {exc}"
             ) from exc
+        except Exception as exc:
+            _attach_raw(exc, tool_input)
+            raise
 
     async def submit_phase_2_tagging(
         self,
@@ -330,16 +414,17 @@ class AnthropicClient:
                 model_id=tagger_model,
                 phase="phase_2_tagging",
                 model=tagger_model.value,
-                max_tokens=4096,
+                max_tokens=self._allowance.phase_2_tagging,
                 system=system,
                 messages=[{"role": "user", "content": user}],
-                tools=[tool],
+                tools=[_strict_tool(tool)],
                 tool_choice={"type": "tool", "name": tool["name"]},
             )
         except Exception as exc:
             raise OrchestratorProviderError(
                 model=tagger_model, phase="phase_2_tagging", underlying=exc
             ) from exc
+        self._refuse_if_truncated(response, model=tagger_model, phase="phase_2_tagging", max_tokens=self._allowance.phase_2_tagging)
         tool_input = _extract_tool_input(response, tool["name"])
         try:
             return parse_phase_2_tagging_tool_use(
@@ -348,6 +433,7 @@ class AnthropicClient:
                 valid_claim_ids=valid_claim_ids,
             )
         except WireParseError as exc:
+            _attach_raw(exc, tool_input)
             # Re-raise with tagger_model context so failure analysis preserves
             # which model produced the malformed emission. Without this wrap,
             # the WireParseError surfaces from the parser without model
@@ -355,6 +441,9 @@ class AnthropicClient:
             raise WireParseError(
                 f"[tagger={tagger_model.value}, phase=phase_2_tagging] {exc}"
             ) from exc
+        except Exception as exc:
+            _attach_raw(exc, tool_input)
+            raise
 
     # --- Phase 3 ---------------------------------------------------------
 
@@ -379,16 +468,17 @@ class AnthropicClient:
                 model_id=speaker_model,
                 phase="phase_3",
                 model=speaker_model.value,
-                max_tokens=4096,
+                max_tokens=self._allowance.phase_3_dialogue,
                 system=system,
                 messages=[{"role": "user", "content": user}],
-                tools=[tool],
+                tools=[_strict_tool(tool)],
                 tool_choice={"type": "tool", "name": tool["name"]},
             )
         except Exception as exc:
             raise OrchestratorProviderError(
                 model=speaker_model, phase="phase_3", underlying=exc
             ) from exc
+        self._refuse_if_truncated(response, model=speaker_model, phase="phase_3", max_tokens=self._allowance.phase_3_dialogue)
         tool_input = _extract_tool_input(response, tool["name"])
         try:
             return parse_phase_3_dialogue_tool_use(
@@ -398,9 +488,13 @@ class AnthropicClient:
                 turn_id_prefix=f"{speaker_model.value}_p3_",
             )
         except WireParseError as exc:
+            _attach_raw(exc, tool_input)
             raise WireParseError(
                 f"[speaker={speaker_model.value}, phase=phase_3] {exc}"
             ) from exc
+        except Exception as exc:
+            _attach_raw(exc, tool_input)
+            raise
 
 
 def _extract_tool_input(response: Any, tool_name: str) -> dict[str, Any]:

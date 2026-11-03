@@ -54,3 +54,28 @@ class LatticeConfig(BaseModel):
                 f"confidence_threshold {self.confidence_threshold} outside [0, 1]"
             )
         return self
+
+
+class TokenAllowance(BaseModel):
+    """Per-phase output token caps, one number per phase, equal for every peer.
+
+    ARCHITECTURE §5 refuses differentiated budget across models. Every peer
+    gets the same cap for a phase; how a peer spends it is not controlled here.
+    Defaults are the re-pilot caps from the 2026-11-03 pilot review.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    phase_0_proposal: int = 4096
+    phase_1_response: int = 16384
+    self_reflection: int = 4096
+    phase_2_cross_reading: int = 8192
+    phase_2_tagging: int = 8192
+    phase_3_dialogue: int = 12288
+
+    @model_validator(mode="after")
+    def _positive(self) -> "TokenAllowance":
+        for name, value in self.model_dump().items():
+            if value <= 0:
+                raise ValueError(f"token allowance {name} must be positive")
+        return self

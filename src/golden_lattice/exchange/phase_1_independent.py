@@ -120,8 +120,10 @@ def phase_1_response_tool_schema() -> dict[str, Any]:
                     "type": "array",
                     "items": {"type": "string"},
                     "description": (
-                        "Distinct claim texts from your response. Each becomes a "
-                        "Phase 1 claim with a content-addressed claim_id."
+                        "Distinct claim texts from your response, as a JSON array "
+                        "with one string per claim. Never a single string, never "
+                        "nested objects. Each becomes a Phase 1 claim with a "
+                        "content-addressed claim_id."
                     ),
                 },
             },
@@ -129,8 +131,18 @@ def phase_1_response_tool_schema() -> dict[str, Any]:
     }
 
 
-def self_reflection_tool_schema() -> dict[str, Any]:
-    """Anthropic tool schema for emitting a self-reflection during latency gap."""
+def self_reflection_tool_schema(
+    own_claim_ids: Optional[tuple[str, ...]] = None,
+) -> dict[str, Any]:
+    """Anthropic tool schema for emitting a self-reflection during latency gap.
+
+    When own_claim_ids is given, both id fields are constrained to an enum of
+    the model's own Phase 1 claim_ids. A foreign or slug id then cannot be
+    emitted at all, which is preferred over refusing it after the fact.
+    """
+    id_schema: dict[str, Any] = {"type": "string"}
+    if own_claim_ids:
+        id_schema = {"type": "string", "enum": list(own_claim_ids)}
     return {
         "name": SELF_REFLECTION_TOOL_NAME,
         "description": (
@@ -148,11 +160,11 @@ def self_reflection_tool_schema() -> dict[str, Any]:
             ],
             "properties": {
                 "strongest_claim_id": {
-                    "type": "string",
+                    **id_schema,
                     "description": "claim_id of your strongest Phase 1 claim.",
                 },
                 "weakest_claim_id": {
-                    "type": "string",
+                    **id_schema,
                     "description": (
                         "claim_id of your weakest Phase 1 claim. Must differ from "
                         "strongest_claim_id."

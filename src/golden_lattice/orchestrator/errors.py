@@ -49,6 +49,31 @@ class OrchestratorTimeoutError(OrchestratorError):
         super().__init__(msg)
 
 
+class OrchestratorTruncationError(OrchestratorError):
+    """A model stopped at its max_tokens cap. Refused before parsing.
+
+    Under V0 this is a hard fail, typed and attributed. The partial tool
+    input is never parsed, so a shortened claim list cannot enter a session.
+    """
+
+    def __init__(
+        self,
+        *,
+        model: ModelId,
+        phase: str,
+        max_tokens: int,
+        output_tokens: int,
+    ) -> None:
+        self.model = model
+        self.phase = phase
+        self.max_tokens = max_tokens
+        self.output_tokens = output_tokens
+        super().__init__(
+            f"{model.value} hit max_tokens={max_tokens} during {phase} "
+            f"(output_tokens={output_tokens}); response refused before parsing."
+        )
+
+
 class OrchestratorProviderError(OrchestratorError):
     """A provider (Anthropic) call failed in a way that's not a timeout —
     API error, rate limit, malformed response, etc."""
