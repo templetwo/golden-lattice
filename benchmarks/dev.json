@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "split": "dev",
+  "status": "placeholder",
+  "tasks": [
+    {
+      "id": "dev-01-field-sync",
+      "kind": "system_design",
+      "prompt": "A regional utility wants a field-inspection app for about 400 technicians. Each technician works offline for long stretches in basements and rural substations, then syncs when signal returns. Inspections include photos (up to 30 per visit, roughly 4 MB each), checklist answers, and signatures. Supervisors need a live view of open inspections across all crews within five minutes of a sync. Compliance requires that no inspection record is ever silently overwritten, and that every edit can be traced to a device and a time. Two technicians may edit the same work order while offline. The client runs on rugged Android tablets with 32 GB storage and intermittent LTE. The backend is currently a single PostgreSQL instance on premises, and the utility has no cloud budget approved yet. Propose an architecture for offline capture, sync, conflict handling, and photo transfer. Say where you would accept eventual consistency, where you would not, and what you would measure in the first pilot to know whether the design holds."
+    },
+    {
+      "id": "dev-02-rate-limiter",
+      "kind": "system_design",
+      "prompt": "A public API serves about 20,000 requests per second across 60 regions. Customers are billed per call and the terms promise that a customer who stays under their plan limit is never throttled. Plans are defined per API key, with separate limits per endpoint group and a burst allowance of up to ten seconds of traffic. Abuse is a live problem: a few keys send traffic in short synchronized waves that exhaust shared capacity even when each key looks within its limit on a minute-by-minute view. Edge nodes can see local traffic immediately but global counts only with delay, typically 200 to 800 milliseconds. Storage for counters must survive a region outage without double-billing customers who retry. Design a rate limiter that honours the promise to customers, handles synchronized bursts, and tolerates the delay in global counts. Explain what happens when an edge node loses contact with the counter store, which errors you would tolerate, and how you would test the limiter before it touches billing."
+    },
+    {
+      "id": "dev-03-retry-review",
+      "kind": "code_review",
+      "prompt": "A teammate proposes this retry helper for a payments client. Review it for correctness, safety, and what it would do in production. The helper wraps every outbound call made by the service, including charge creation.\n\n```python\nimport time, random\n\ndef call_with_retry(fn, *args, attempts=5, base=0.5, **kwargs):\n    last = None\n    for i in range(attempts):\n        try:\n            return fn(*args, **kwargs)\n        except Exception as exc:\n            last = exc\n            time.sleep(base * (2 ** i) + random.random())\n    raise last\n\ndef create_charge(client, amount_cents, customer_id):\n    return call_with_retry(\n        client.post, \"/v1/charges\",\n        json={\"amount\": amount_cents, \"customer\": customer_id},\n    )\n```\n\nThe service runs in three regions and sees roughly 2 million charges per day. The client library returns HTTP errors as exceptions, and timeouts raise a separate exception class. Give your verdict, list each defect with the input or condition that triggers it, and propose a corrected version that a senior reviewer would approve without further comment. Note which of the defects matter most for a payments path where a duplicate charge is far worse than a delayed one. State what you could not determine from the snippet alone, and say what logging or idempotency evidence you would ask the author to add before merging."
+    },
+    {
+      "id": "dev-04-orm-review",
+      "kind": "code_review",
+      "prompt": "A pull request adds an endpoint that lists support tickets with their latest customer note and the name of the assigned agent. The reviewer asked whether the query is efficient enough to ship. The relevant code is below, using a typical ORM with lazy relationships.\n\n```python\ndef list_tickets(db, status, limit=50):\n    tickets = db.query(Ticket).filter(Ticket.status == status).limit(limit).all()\n    results = []\n    for t in tickets:\n        note = db.query(Note).filter(Note.ticket_id == t.id).order_by(Note.created_at.desc()).first()\n        agent_name = t.agent.name if t.agent else None\n        results.append({\n            \"id\": t.id,\n            \"subject\": t.subject,\n            \"latest_note\": note.body if note else None,\n            \"agent\": agent_name,\n        })\n    return results\n```\n\nThe tickets table has about 4 million rows, with an index on status but none on notes.ticket_id. The endpoint is called from a dashboard that refreshes every 30 seconds for about 200 agents. Review the function. Identify each performance and correctness problem, estimate its effect on query count and latency qualitatively, and propose a rewrite. Say what you would check in the database before and after the change, and whether any part of the result could differ between the old and new version."
+    },
+    {
+      "id": "dev-05-build-or-buy",
+      "kind": "decision_analysis",
+      "prompt": "A nine-person company builds scheduling software for independent clinics. The founders must decide whether to run their own Postgres cluster on rented bare metal, or move to a managed database service that costs about 2.4 times as much per month but removes the on-call burden that currently falls on two engineers. Revenue is growing about 8 percent a month. Two of the company's six largest customers have asked for a signed data processing agreement and an audit trail of who accessed patient-linked records, and the managed service would make both easier to deliver. The engineers are strong with Postgres but have not run replication failover in production for over a year, and a failover drill last quarter took 47 minutes against a target of 10. Leadership has six months of runway at the current burn, and any cost increase comes directly out of the hiring plan for a second backend engineer. Analyse the decision. Identify the assumptions that would change the answer, say which of them you can check cheaply before committing, and recommend one option with the conditions under which you would reverse it."
+    }
+  ]
+}
