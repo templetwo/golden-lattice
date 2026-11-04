@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Optional, Sequence
 
+from golden_lattice.evaluation.audit import audit_session, parity_readings
 from golden_lattice.evaluation.benchmark import Task
 from golden_lattice.evaluation.cost import (
     CEILING_USD,
@@ -126,6 +127,9 @@ def run_pilot(
             (run_dir / f"{session_id}.session.json").write_text(
                 session.model_dump_json(indent=2), encoding="utf-8"
             )
+            session_dict = json.loads(session.model_dump_json())
+            record["parity"] = parity_readings(session_dict.get("metrics") or {})
+            record["audit"] = audit_session(session_dict)
             record["status"] = "completed"
         except BudgetExceeded as exc:
             record["status"] = "budget_exceeded_mid_session"
