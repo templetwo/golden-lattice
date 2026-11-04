@@ -4,7 +4,8 @@
 // append to a text node. On completion the page hydrates from disk.
 import { esc } from './util.js';
 import { familyOf, labelOf } from './seats.js';
-import { renderSession, refreshLive, appendStream } from './session.js';
+import { renderSession, refreshLive, updateWriting, clearWriting } from './session.js';
+import { readableStream, streamText } from './stream.js';
 
 const HYDRATE_TRIES = 5;
 const HYDRATE_GAP_MS = 1000;
@@ -45,11 +46,32 @@ function freshSession(ev) {
     live: true, artArrived: false, metricsArrived: false, inFlight: true, error: null,
     id: ev.session_id, title: 'LIVE', prompt: ev.prompt, models,
     seats: models.map((m) => ({ id: m, family: familyOf(m), label: labelOf(m), legacy: false, focus: '', conf: 0, claim_count: 0 })),
-    phase0: null, phase1: Object.fromEntries(models.map((m) => [m, { stream: '' }])), reflections: {},
+    phase0: null, phase1: Object.fromEntries(models.map((m) => [m, { response: '' }])), reflections: {},
+    writing: {},
     claims: [], synthesis_lines: [], pairs: [], turns: [], interpretations: [], metrics: null,
     elevations: [], synthesis: { output: '', trace: [] }, stats: {}, metrics_recomputed: false,
     unattached_critiques: [],
   };
+}
+
+// The readable text a seat has written in its current phase.
+export function writingText(w) {
+  if (!w) return '';
+  const fromTool = streamText(readableStream(w.raw || ''));
+  return [w.prose || '', fromTool].filter(Boolean).join('\n\n');
+}
+
+// When a seat's Phase 1 stream ends, keep its answer for section 01.
+export function initialAnswerText(w) {
+  const segs = readableStream((w && w.raw) || '');
+  return segs.filter((s) => s.key === 'response').map((s) => s.text).join('\n\n') || ((w && w.prose) || '');
+}
+
+function keepInitialAnswer(L, model) {
+  const w = L.writing[model];
+  if (!w || w.phase !== 'phase_1') return;
+  const answer = initialAnswerText(w);
+  if (answer) L.phase1[model] = { ...(L.phase1[model] || {}), response: answer };
 }
 
 function ensureP0(L) {
@@ -140,11 +162,16 @@ export function applyEvent(state, ev) {
     case 'phase_0_search_result': ensureP0(L).results.push({ query: ev.query, preview: ev.result_text_preview }); return ['00'];
     case 'phase_0_failed_search': ensureP0(L).failed.push({ query: ev.query, reason: ev.reason }); return ['00'];
     case 'phase_0_feed_frozen': ensureP0(L).frozen = ev.entry_count; return ['00'];
-    case 'model_stream_delta':
-      L.phase1[ev.model_id] = L.phase1[ev.model_id] || { stream: '' };
-      L.phase1[ev.model_id].stream += ev.delta;
-      state.status = `streaming · ${labelOf(ev.model_id)} · ${ev.phase}`;
+    case 'model_stream_delta': {
+      let w = L.writing[ev.model_id];
+      if (!w || w.phase !== ev.phase) {
+        keepInitialAnswer(L, ev.model_id);
+        w = L.writing[ev.model_id] = { phase: ev.phase, raw: '', prose: '' };
+      }
+      if (ev.delta_kind === 'text') w.prose += ev.delta; else w.raw += ev.delta;
+      state.status = `streaming · ${labelOf(ev.model_id)}`;
       return 'stream';
+    }
     case 'phase_1_claim': {
       L.claims.push({
         id: ev.claim_id, author: ev.model_id, author_family: familyOf(ev.model_id), text: ev.text, index: L.claims.length,
@@ -156,6 +183,7 @@ export function applyEvent(state, ev) {
       restat(L); return ['01', '02'];
     }
     case 'phase_1_response_completed': {
+      keepInitialAnswer(L, ev.model_id);
       const seat = L.seats.find((s) => s.id === ev.model_id);
       if (seat) { seat.focus = ev.focus_tag; seat.conf = ev.confidence; }
       return ['01'];
@@ -264,14 +292,31 @@ export function startLive(root) {
     syncInput();
   };
 
+  // At most one repaint per seat per frame, however fast deltas arrive.
+  const pendingWriting = new Set();
+  const scheduleWriting = (model) => {
+    if (pendingWriting.has(model)) return;
+    pendingWriting.add(model);
+    requestAnimationFrame(() => {
+      pendingWriting.delete(model);
+      const w = state.L && state.L.writing[model];
+      if (w) updateWriting(model, w.phase, writingText(w));
+      if (w && w.phase === 'phase_1') {
+        w.answer = initialAnswerText(w);
+        refreshLive(state.L, ['01']);
+      }
+    });
+  };
+
   const conn = connectLive({
     onStatus: (s) => { state.status = s; syncInput(); },
     onEvent: async (ev) => {
       const changed = applyEvent(state, ev);
       if (changed == null) return;
       if (changed === 'all') { state.hydrated = false; renderSession(root, state.L, { mode: 'live' }); renderBar(); return; }
-      if (changed === 'stream') { appendStream(ev.model_id, ev.delta); syncInput(); return; }
+      if (changed === 'stream') { scheduleWriting(ev.model_id); syncInput(); return; }
       if (changed === 'completed') {
+        clearWriting();
         state.status = 'completed · loading the persisted record';
         syncInput();
         const captured = state.L;

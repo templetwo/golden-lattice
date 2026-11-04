@@ -175,3 +175,8 @@ def test_every_surfaced_note_on_a_claim_is_kept(make_full_session):
     assert c["sonnet one"]["surfaced_note"] == (
         "opus and haiku both push back on sonnet one · a second note on sonnet one"
     )
+
+
+def test_each_seat_initial_answer_prose_is_in_the_shape(make_full_session):
+    n = normalize_session(make_full_session())
+    assert all(n["phase1"][m]["response"] == "prose" for m in n["models"])

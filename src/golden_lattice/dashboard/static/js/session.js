@@ -7,6 +7,7 @@ import {
   disputesView, feedSkippedText, parityLineHtml, openingStep, critiquesCaption, filterForClaim,
   challengeLabel, outcomeWord, stepDisagreement,
 } from './notes.js';
+import { phaseActivity } from './stream.js';
 
 const TAG_FAMILY = { F: 'fable', O: 'opus', S: 'sonnet', H: 'haiku' };
 const SPLIT_MIN = 0.28;
@@ -62,11 +63,16 @@ function sectionSeats() {
     const strong = refl.strong && claimById(refl.strong);
     const weak = refl.weak && claimById(refl.weak);
     const shown = on(`r:${seat.id}`);
-    const stream = mode === 'live' ? `<pre class="stream" data-stream="${esc(seat.id)}">${esc(((S.phase1 || {})[seat.id] || {}).stream || '')}</pre>` : '';
+    const p1 = (S.phase1 || {})[seat.id] || {};
+    const w = (S.writing || {})[seat.id];
+    let answer = p1.response || '';
+    if (S.live && w && w.phase === 'phase_1' && w.answer) answer = w.answer;
+    const answerShown = S.live ? !!answer : (answer && on(`r:${seat.id}`) || (answer && (S.claims || []).some((c) => c.author === seat.id && on(`c:${c.id}`))));
+    const answerHtml = answerShown ? `<div class="answer"><div class="k">initial answer</div>${answer.split(/\n\s*\n/).map((para) => `<p>${esc(para)}</p>`).join('')}</div>` : '';
     return `
       <div class="seat-col">
         <div class="k">${seatName(seat.id)} · ${esc(seat.focus || '')} · confidence ${Number(seat.conf || 0).toFixed(2)} · ${seat.claim_count} claims</div>
-        ${stream}
+        ${answerHtml}
         ${shown ? `
           <p class="refl">${esc(refl.just || '')}</p>
           ${strong ? `<p class="small-serif"><span class="k">strongest</span> ${esc(strong.text)}</p>` : ''}
@@ -249,6 +255,7 @@ function frameHtml() {
       <button class="details-btn" data-details="1" aria-expanded="${ui.details}">Details</button>
     </header>
     <div class="mast-seats">${seats}</div>
+    ${mode === 'live' ? '<section class="writing" id="gl-writing" aria-live="polite" aria-label="Writing now" hidden><div class="k">writing now</div><div class="writing-cards"></div></section>' : ''}
     <div class="details" ${ui.details ? '' : 'hidden'}><div class="k">model ids</div>${ids}<div class="k" style="margin-top:6px">session</div><div class="mono">${esc(S.id || '')}</div></div>
     <div class="body">
       <nav class="rail" aria-label="Sections">${rail}</nav>
@@ -532,9 +539,32 @@ export function refreshLive(session, sections) {
   });
 }
 
-export function appendStream(modelId, delta) {
-  const el = root && root.querySelector(`[data-stream="${CSS.escape(modelId)}"]`);
-  if (el) { el.appendChild(document.createTextNode(delta)); el.scrollTop = el.scrollHeight; }
+// Live: the "Writing now" strip, one card per seat, readable text only.
+export function updateWriting(modelId, phase, text) {
+  const strip = root && root.querySelector('#gl-writing');
+  if (!strip) return;
+  if (S.writing && S.writing[modelId]) S.writing[modelId].text = text;
+  let card = strip.querySelector(`[data-writing="${CSS.escape(modelId)}"]`);
+  if (!card) {
+    card = document.createElement('div');
+    card.className = 'writing-card';
+    card.setAttribute('data-writing', modelId);
+    card.innerHTML = `<div class="writing-hd">${seatName(modelId)} <span class="k activity"></span></div><div class="writing-text"></div>`;
+    strip.querySelector('.writing-cards').appendChild(card);
+  }
+  card.querySelector('.activity').textContent = phaseActivity(phase);
+  const body = card.querySelector('.writing-text');
+  const stick = body.scrollHeight - body.scrollTop - body.clientHeight < 24;
+  body.textContent = text || '…';
+  if (stick) body.scrollTop = body.scrollHeight;
+  strip.hidden = false;
+}
+
+export function clearWriting() {
+  const strip = root && root.querySelector('#gl-writing');
+  if (!strip) return;
+  strip.hidden = true;
+  strip.querySelector('.writing-cards').innerHTML = '';
 }
 
 // ---------- route ----------

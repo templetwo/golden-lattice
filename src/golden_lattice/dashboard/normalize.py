@@ -336,6 +336,7 @@ def normalize_session(session: Session) -> dict[str, Any]:
         phase1[model_id] = {
             "focus": resp.focus_tag,
             "conf": resp.confidence,
+            "response": resp.response,
             "claims": [{"id": c.claim_id, "text": c.text} for c in resp.claims],
         }
         if resp.self_reflection_artifacts:

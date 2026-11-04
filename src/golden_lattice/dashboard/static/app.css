@@ -330,3 +330,13 @@ table.mx th { font-size: 11px; color: #8b919d; }
 @media (max-width: 860px) {
   .hdr, .r { grid-template-columns: 80px minmax(0, 1fr) 40px 56px 56px 50px 110px; gap: 8px; }
 }
+
+/* Live: writing now */
+.writing { margin: 0 22px 8px; padding: 10px 12px 12px; background: var(--panel); border: 1px solid rgba(227, 93, 76, 0.28); border-radius: 7px; }
+.writing[hidden] { display: none; }
+.writing-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; margin-top: 8px; }
+.writing-card { min-width: 0; background: var(--panel-2); border-radius: 6px; padding: 8px 10px; }
+.writing-hd { display: flex; gap: 8px; align-items: baseline; }
+.writing-text { margin-top: 6px; max-height: 9.5em; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 15px; line-height: 1.6; color: #cfd3db; }
+.answer { margin-top: 10px; }
+.answer p { margin: 6px 0 0; font-size: 15.5px; line-height: 1.65; color: #d4d8df; overflow-wrap: anywhere; }
