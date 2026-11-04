@@ -13,6 +13,7 @@ namesake color.
 from __future__ import annotations
 
 from golden_lattice.memory_graph.base import ModelId, SeatFamily, seat_family, seat_label
+from golden_lattice.memory_graph.metrics import READING_GLOSS  # noqa: F401  (re-export)
 
 
 FAMILY_COLOR: dict[SeatFamily, str] = {
@@ -44,13 +45,6 @@ READING_COLOR: dict[str, str] = {
     "ambiguous": "dim white",
 }
 
-READING_GLOSS: dict[str, str] = {
-    "not_recognized": "Genuine recognition asymmetry — peers did not see these claims as dimension-relevant.",
-    "vocabulary_failed": "The closed vocabulary did not cover these contributions. Vocab needs work, not the model.",
-    "peer_divergence": "Peers split per-claim on this model's contributions. Neither vocab failure nor under-contribution.",
-    "low_claim_volume": "Too few claims to compute meaningfully. Measurement-underdetermined; not a parity verdict.",
-    "ambiguous": "Histogram does not match a clean pattern. More sessions needed before declaring.",
-}
 
 
 def model_label(model: ModelId) -> str:

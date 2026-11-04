@@ -847,3 +847,12 @@ def test_interpret_lucumi_real_session_returns_peer_divergence():
     assert (f.histogram_n_zero, f.histogram_n_one, f.histogram_n_two) == (1, 5, 1)
     assert f.other_only_entries == 0
     assert f.total_claims == 7
+
+
+def test_reading_gloss_covers_every_reading():
+    from typing import get_args
+
+    from golden_lattice.memory_graph.metrics import READING_GLOSS, FlagReading
+
+    assert set(READING_GLOSS) == set(get_args(FlagReading))
+    assert "not a parity verdict" in READING_GLOSS["low_claim_volume"]

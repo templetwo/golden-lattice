@@ -255,6 +255,17 @@ class FlagInterpretation(BaseModel):
     total_claims: int = 0
 
 
+# One honest gloss per reading. Lives beside the readings so every
+# renderer (TUI, dashboard) prints the same words.
+READING_GLOSS: dict[FlagReading, str] = {
+    "not_recognized": "Genuine recognition asymmetry — peers did not see these claims as dimension-relevant.",
+    "vocabulary_failed": "The closed vocabulary did not cover these contributions. Vocab needs work, not the model.",
+    "peer_divergence": "Peers split per-claim on this model's contributions. Neither vocab failure nor under-contribution.",
+    "low_claim_volume": "Too few claims to compute meaningfully. Measurement-underdetermined; not a parity verdict.",
+    "ambiguous": "Histogram does not match a clean pattern. More sessions needed before declaring.",
+}
+
+
 _DIMENSION_BY_LABEL: dict[str, Dimension] = {
     "edge_case_coverage_share": EDGE_CASE_DIMENSION,
     "structural_pattern_share": STRUCTURAL_PATTERN_DIMENSION,
