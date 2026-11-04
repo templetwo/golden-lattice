@@ -143,7 +143,9 @@ python -m golden_lattice.dashboard replay <session_id>
 
 `ANTHROPIC_API_KEY` is required for a live run. `TAVILY_API_KEY` is optional; without it the session runs with Phase 0 investigation skipped. Sessions are written to `sessions/`, which is gitignored — lattice output stays private until it is published deliberately.
 
-The peer seats the orchestrator invites are declared in `ModelId` (`src/golden_lattice/memory_graph/base.py`). Model IDs move; that enum is the one place to change them.
+The web dashboard has two pages. `/` is the Record: every persisted run, newest first, with how contested each was, and a strip across runs showing each seat's share of distinct claims against the 15% line, who pushes back on whom, and every parity flag with its reading. `/session/<id>` replays one run around where the seats disagreed and why: a rail selects one section, a second can be pinned beside it (keys `0`–`4`, `p`, `Esc`), and each disputed claim opens to every reader's reasons in full and what synthesis did with it. `/session/live` is the same page fed by a live run. Files in `sessions/` that fail to load are listed on the Record, not hidden.
+
+The peer seats the orchestrator invites are declared in `ModelId` (`src/golden_lattice/memory_graph/base.py`). Model IDs move; that enum is the one place to change them. Earlier seat ids stay in the enum as `LEGACY_*` members so older sessions keep loading; they are never invited to a live run.
 
 ## Further reading
 
