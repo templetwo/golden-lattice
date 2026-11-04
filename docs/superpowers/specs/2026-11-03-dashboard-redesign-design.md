@@ -519,3 +519,49 @@ and B merged), `session-shape-v3.html` (streamlined, approved),
 `windowed-v3.html` (tiled vs rail and pin; rail and pin chosen),
 `library-v3.html` (the Record, chart fixed). All used real rows from
 `session_20260516_204119_ed014de7` and the twelve-run record.
+
+## 12. Reading pass (2026-11-04)
+
+A direction for the second pass, brought in by Anthony after PR #2 opened. It
+keeps the disagreement-first layout and rail-and-pin, and makes the pages a
+comfortable place to read and investigate. The journey it serves: find an
+interesting run, understand the disagreement, read each position, see what
+changed in the final answer. Success test: open a run, find a disputed claim,
+understand both positions, and see its outcome without losing your place.
+
+Priorities, in order:
+
+1. **Reading comfort.** Claims, reasons, turns and output lines at 16-17px
+   with line-height near 1.65; labels and controls larger and brighter; same
+   dark palette and seat colors. Full model ids and the session id move into
+   an expandable details area in the Session masthead. The prompt stays one
+   line at body size (it never becomes display type, §7).
+2. **Plain section names, numbers kept:** 00 Research, 01 Initial answers,
+   02 Disagreements, 03 Discussion, 04 Final answer.
+3. **An expanded claim tells the story in order:** the claim; its outcome
+   (retained, changed, omitted, with the hedge, note, new wording or
+   omission reason); who challenged it, split into "During cross-reading"
+   (Phase 2 reasons) and "Later in discussion" (Phase 3 critiques), each in
+   full; who endorsed it; "View in final answer". The row mark keeps one
+   glyph and gains an accessible label ("Challenged by two readers").
+4. **Claim and answer stay connected.** A selected claim and its output line
+   stay highlighted until another is chosen. Previous and Next disagreement
+   step through disputed claims in table order. Following an output link
+   leaves a "Back to claim" control. Pin controls are always visible. The two
+   panes can be resized, and each pane header has "Focus this pane".
+5. **Reading and replay are separate choices.** A completed run opens to read
+   (fully revealed, §5.5 ruling). "Replay how it developed" switches the
+   transport to named phase stops, previous and next step, play and speed;
+   "Back to reading" returns.
+6. **The Record gets an obvious starting point.** The cross-session strip
+   opens as a one-line summary with "Show details" for the chart, pairs and
+   flags. Prompts wrap to two lines. Runs sort by newest, most disputed, or
+   flagged. "both" becomes "2+ readers". Search, sort and scroll position
+   survive a trip to a session and back.
+
+My calls: body reading text is 16px and output lines 16.5px (the brief's
+range); labels move from 9.5-10px to 11-12px; the details area and the strip's
+expanded state are remembered per browser (localStorage, best effort); the
+pane split is remembered the same way; Previous/Next wraps at the ends; "Back
+to claim" lives at the top of the Final answer pane while it applies;
+"flagged" sort puts flagged runs first, then newest.
