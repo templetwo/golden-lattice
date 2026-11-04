@@ -33,7 +33,7 @@ def test_stats_count_claims_not_events(make_full_session):
     s = normalize_session(make_full_session())["stats"]
     assert s == {
         "claims": 6, "disputed": 3, "both": 1, "elevated": 1, "omitted": 1,
-        "modified": 1, "critiques": 2, "augments": 1, "converges": 2, "missing": 1,
+        "modified": 1, "critiques": 2, "critiques_attached": 2, "augments": 1, "converges": 2, "missing": 1,
     }
 
 
@@ -119,3 +119,55 @@ def test_load_normalized_reports_unloadable(tmp_path, make_full_session):
     assert [s["id"] for s in bundle.sessions] == ["session_20260504_120000_abcd1234"]
     assert bundle.unloadable[0]["id"] == "session_bad"
     assert bundle.unloadable[0]["error"]
+
+
+# --- final review fix pass ---------------------------------------------------
+
+
+def test_two_claims_with_the_same_text_each_get_their_line(make_full_session):
+    n = normalize_session(make_full_session(shared_text=True))
+    by_author = {(c["author_family"], c["text"]): c for c in n["claims"]}
+    assert by_author[("opus", "opus one")]["synthesis_line"] == 0
+    assert by_author[("haiku", "opus one")]["synthesis_line"] == 4
+    assert n["synthesis_lines"][4]["claim_id"] == by_author[("haiku", "opus one")]["id"]
+
+
+def test_same_text_prefers_the_claim_whose_family_matches_the_line_tag(make_full_session):
+    session = make_full_session(shared_text=True)
+    lines = session.phase_4.output.split("\n")
+    lines[0], lines[4] = lines[4], lines[0]          # "[H] opus one" now comes first
+    session = session.model_copy(update={"phase_4": session.phase_4.model_copy(update={"output": "\n".join(lines)})})
+    n = normalize_session(session)
+    by_author = {(c["author_family"], c["text"]): c for c in n["claims"]}
+    assert by_author[("haiku", "opus one")]["synthesis_line"] == 0
+    assert by_author[("opus", "opus one")]["synthesis_line"] == 4
+
+
+def test_unloadable_error_says_why(tmp_path):
+    (tmp_path / "session_bad.session.json").write_text("{}")
+    error = load_normalized(tmp_path).unloadable[0]["error"]
+    assert "validation error" in error
+    assert "session_id" in error and "Field required" in error
+
+
+def test_incomplete_session_is_reported_not_hidden(tmp_path, make_full_session):
+    JsonFileSessionStore(tmp_path).save(make_full_session(incomplete=True))
+    bundle = load_normalized(tmp_path)
+    assert bundle.sessions == []
+    assert bundle.unloadable == [
+        {"id": "session_20260504_120000_abcd1234", "error": "incomplete: no Phase 4 synthesis in this file"}
+    ]
+
+
+def test_critiques_with_no_phase_1_target_are_kept_and_counted(make_full_session):
+    n = normalize_session(make_full_session(unattached=True))
+    assert n["stats"]["critiques"] == 3 and n["stats"]["critiques_attached"] == 2
+    assert [u["turn_id"] for u in n["unattached_critiques"]] == ["t6"]
+    assert n["unattached_critiques"][0]["content"] == "haiku critiques a missing claim"
+
+
+def test_every_surfaced_note_on_a_claim_is_kept(make_full_session):
+    c = _by_text(normalize_session(make_full_session(unattached=True)))
+    assert c["sonnet one"]["surfaced_note"] == (
+        "opus and haiku both push back on sonnet one · a second note on sonnet one"
+    )

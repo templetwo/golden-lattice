@@ -72,7 +72,14 @@ def make_full_session(
     dyad: bool = False,
     session_id: str = "session_20260504_120000_abcd1234",
     created_offset_days: int = 0,
+    shared_text: bool = False,
+    unattached: bool = False,
+    incomplete: bool = False,
 ) -> Session:
+    """shared_text: Haiku's second claim reuses the text "opus one".
+    unattached: adds a critique aimed only at a Phase 2 missing claim and a
+    second surfaced disagreement naming "sonnet one".
+    incomplete: no Phase 4 (a run that died before synthesis)."""
     if legacy:
         O, S, H = ModelId.LEGACY_OPUS_4_7, ModelId.LEGACY_SONNET_4_6, ModelId.LEGACY_HAIKU_4_5
     else:
@@ -80,7 +87,7 @@ def make_full_session(
 
     o1, o2 = _claim(O, "opus one"), _claim(O, "opus two")
     s1, s2 = _claim(S, "sonnet one"), _claim(S, "sonnet two")
-    h1, h2 = _claim(H, "haiku one"), _claim(H, "haiku two")
+    h1, h2 = _claim(H, "haiku one"), _claim(H, "opus one" if shared_text else "haiku two")
     missing = _claim(S, "sonnet says opus missed this", Phase.CROSS_READING)
 
     s_reads_o = CrossReading(
@@ -139,12 +146,14 @@ def make_full_session(
         DialogueTurn(turn_id="t4", speaker_model=H, channel="converge", target_model=O,
                      target_claim_ids=(o2.claim_id,), content="agree too"),
         t5,
-    )
+    ) + ((DialogueTurn(turn_id="t6", speaker_model=H, channel="critique", target_model=S,
+                       target_claim_ids=(missing.claim_id,), content="haiku critiques a missing claim"),)
+         if unattached else ())
     hedged = (
         f"sonnet one [DISPUTED — {O.value}: 'opus disagrees with sonnet one'; "
         f"{H.value}: 'haiku disagrees with sonnet one']"
     )
-    output = "\n".join(["[O] opus one", "[O] opus two", f"[S] {hedged}", "[H] haiku one", "[H] haiku two"])
+    output = "\n".join(["[O] opus one", "[O] opus two", f"[S] {hedged}", "[H] haiku one", f"[H] {h2.text}"])
     metrics = (
         SessionMetrics(
             distinct_claim_share={O: 0.34, S: 0.33, H: 0.33},
@@ -176,7 +185,8 @@ def make_full_session(
             elevations=(Elevation(claim_ids=(o2.claim_id,), converge_turn_ids=("t3", "t4")),),
             surfaced_disagreements=(
                 SurfacedDisagreement(claim_ids=(s1.claim_id, o1.claim_id), note="opus and haiku both push back on sonnet one"),
-            ),
-        ),
+            ) + ((SurfacedDisagreement(claim_ids=(s1.claim_id, o2.claim_id), note="a second note on sonnet one"),)
+                 if unattached else ()),
+        ) if not incomplete else None,
         metrics=metrics,
     )

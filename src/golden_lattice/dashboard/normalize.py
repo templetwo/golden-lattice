@@ -172,11 +172,11 @@ def _claims(session: Session, lines: list[dict[str, Any]]) -> list[dict[str, Any
     artifact = session.phase_4
     trace = {e.claim_id: e for e in artifact.claim_trace} if artifact else {}
     elevated = {cid for e in artifact.elevations for cid in e.claim_ids} if artifact else set()
-    notes: dict[str, str] = {}
+    notes: dict[str, list[str]] = {}
     if artifact:
         for sd in artifact.surfaced_disagreements:
             for cid in sd.claim_ids:
-                notes.setdefault(cid, sd.note)
+                notes.setdefault(cid, []).append(sd.note)
 
     out: list[dict[str, Any]] = []
     index = 0
@@ -203,7 +203,7 @@ def _claims(session: Session, lines: list[dict[str, Any]]) -> list[dict[str, Any
                 "omission_reason": entry.omission_reason if entry else None,
                 "synthesis_line": None,
                 "disputed_hedge": None,
-                "surfaced_note": notes.get(c.claim_id),
+                "surfaced_note": " · ".join(notes[c.claim_id]) if c.claim_id in notes else None,
                 "elevated": c.claim_id in elevated,
             })
             index += 1
@@ -211,17 +211,24 @@ def _claims(session: Session, lines: list[dict[str, Any]]) -> list[dict[str, Any
     # Link synthesis lines to claims: exact claim text first, then the
     # modified text with its hedge stripped. One claim per line, one line
     # per claim; unmatched lines keep claim_id None.
-    by_text: dict[str, dict[str, Any]] = {}
-    by_modified: dict[str, dict[str, Any]] = {}
+    by_text: dict[str, list[dict[str, Any]]] = {}
+    by_modified: dict[str, list[dict[str, Any]]] = {}
     for c in out:
-        by_text.setdefault(c["text"], c)
+        by_text.setdefault(c["text"], []).append(c)
         if c["modified_text"]:
-            by_modified.setdefault(_split_hedge(c["modified_text"])[0], c)
+            by_modified.setdefault(_split_hedge(c["modified_text"])[0], []).append(c)
+    tag_family = {"F": "fable", "O": "opus", "S": "sonnet", "H": "haiku"}
+
+    def _pick(candidates: list[dict[str, Any]], tag: str) -> Optional[dict[str, Any]]:
+        free = [c for c in candidates if c["synthesis_line"] is None and c["disposition"] != "omitted"]
+        same = [c for c in free if c["author_family"] == tag_family.get(tag)]
+        return (same or free or [None])[0]
+
     for line in lines:
-        claim = by_text.get(line["text"])
-        if claim is None or claim["synthesis_line"] is not None:
-            claim = by_modified.get(line["text"])
-        if claim is None or claim["synthesis_line"] is not None or claim["disposition"] == "omitted":
+        claim = _pick(by_text.get(line["text"], []), line["tag"]) or _pick(
+            by_modified.get(line["text"], []), line["tag"]
+        )
+        if claim is None:
             continue
         claim["synthesis_line"] = line["index"]
         line["claim_id"] = claim["id"]
@@ -235,8 +242,26 @@ def _claims(session: Session, lines: list[dict[str, Any]]) -> list[dict[str, Any
     return out
 
 
+def _phase_1_ids(session: Session) -> set[str]:
+    return {c.claim_id for r in session.phase_1.values() for c in r.claims}
+
+
+def _unattached_critiques(session: Session) -> list[dict[str, Any]]:
+    """Critiques whose targets are all outside Phase 1 (e.g. a Phase 2
+    missing claim). They have no row in 02, so 03 shows them."""
+    ids = _phase_1_ids(session)
+    return [
+        {"speaker": t.speaker_model.value, "turn_id": t.turn_id, "content": t.content,
+         "target": t.target_model.value if t.target_model else None,
+         "target_claim_ids": list(t.target_claim_ids)}
+        for t in session.phase_3
+        if t.channel == "critique" and not (set(t.target_claim_ids) & ids)
+    ]
+
+
 def _stats(claims: list[dict[str, Any]], session: Session) -> dict[str, int]:
     channels = [t.channel for t in session.phase_3]
+    phase_1_ids = _phase_1_ids(session)
     return {
         "claims": len(claims),
         "disputed": sum(1 for c in claims if c["disputed_by"]),
@@ -245,6 +270,10 @@ def _stats(claims: list[dict[str, Any]], session: Session) -> dict[str, int]:
         "omitted": sum(1 for c in claims if c["disposition"] == "omitted"),
         "modified": sum(1 for c in claims if c["disposition"] == "modified"),
         "critiques": channels.count("critique"),
+        "critiques_attached": sum(
+            1 for t in session.phase_3
+            if t.channel == "critique" and set(t.target_claim_ids) & phase_1_ids
+        ),
         "augments": channels.count("augment"),
         "converges": channels.count("converge"),
         "missing": sum(len(cr.missing) for cr in session.phase_2),
@@ -390,6 +419,7 @@ def normalize_session(session: Session) -> dict[str, Any]:
         "synthesis_lines": lines,
         "stats": _stats(claims, session),
         "pairs": _pairs(session),
+        "unattached_critiques": _unattached_critiques(session),
         "interpretations": _interpretations(interpreted),
         "metrics_recomputed": session.metrics is None and recomputed is not None,
         "created_at": session.created_at.isoformat(),
@@ -400,6 +430,19 @@ def _is_complete(session: Session) -> bool:
     """Complete through Phase 4 with at least one Phase 1 response — the
     selection criterion for the replay bundle (handoff §Replay data source)."""
     return bool(session.phase_1) and session.phase_4 is not None
+
+
+def _why(exc: Exception) -> str:
+    """One line that says why a file failed: the headline plus, for a
+    pydantic error, the first field and its message (e.g. an unknown seat id)."""
+    lines = [ln.strip() for ln in str(exc).splitlines() if ln.strip()]
+    if not lines:
+        return type(exc).__name__
+    head = lines[0]
+    if len(lines) >= 3 and "validation error" in head:
+        detail = lines[2].split(" [type=")[0]
+        return f"{head}: {lines[1]}: {detail}"
+    return head
 
 
 @dataclass
@@ -420,11 +463,13 @@ def load_normalized(sessions_dir: Path, *, limit: Optional[int] = None) -> Norma
         try:
             session = store.load(session_id)
             if not _is_complete(session):
+                bundle.unloadable.append(
+                    {"id": session_id, "error": "incomplete: no Phase 4 synthesis in this file"}
+                )
                 continue
             bundle.sessions.append(normalize_session(session))
         except Exception as exc:  # report, do not sink the bundle
-            first = (str(exc).splitlines() or [type(exc).__name__])[0]
-            bundle.unloadable.append({"id": session_id, "error": first})
+            bundle.unloadable.append({"id": session_id, "error": _why(exc)})
             continue
         if limit is not None and len(bundle.sessions) >= limit:
             break

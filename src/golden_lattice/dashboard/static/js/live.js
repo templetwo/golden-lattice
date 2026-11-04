@@ -101,8 +101,12 @@ function applyArtifact(L, ev) {
   });
   const used = new Set();
   L.synthesis_lines.forEach((line) => {
-    const c = L.claims.find((x) => !used.has(x.id) && x.disposition !== 'omitted'
-      && (x.text === line.text || (x.modified_text && x.modified_text.split('[DISPUTED')[0].trim() === line.text)));
+    const fam = { F: 'fable', O: 'opus', S: 'sonnet', H: 'haiku' }[line.tag];
+    const free = (x) => !used.has(x.id) && x.disposition !== 'omitted';
+    const byText = L.claims.filter((x) => free(x) && x.text === line.text);
+    const byMod = L.claims.filter((x) => free(x) && x.modified_text && x.modified_text.split('[DISPUTED')[0].trim() === line.text);
+    const pick = (list) => list.find((x) => x.author_family === fam) || list[0];
+    const c = pick(byText) || pick(byMod);
     if (!c) return;
     used.add(c.id); c.synthesis_line = line.index; line.claim_id = c.id;
     c.disputed_hedge = line.hedge || (c.modified_text && c.modified_text.includes('[DISPUTED') ? c.modified_text.slice(c.modified_text.indexOf('[DISPUTED')).trim() : null);

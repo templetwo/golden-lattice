@@ -200,3 +200,6 @@ details.foot div { margin-top: 6px; }
 .transport.live { border-top-color: rgba(227, 93, 76, 0.35); }
 .live-error { margin: 8px 20px 0; padding: 9px 12px; background: rgba(227, 93, 76, 0.08); border: 1px solid rgba(227, 93, 76, 0.35); border-radius: 6px; color: #e6a5a5; line-height: 1.5; }
 .live-row { background: rgba(227, 93, 76, 0.05); }
+
+/* Reading text wraps; panes hide horizontal overflow, so nothing may be clipped. */
+.voice p, .row .txt, .turn p, .line, .note, .hedge, .refl, .small-serif, .caption, .flag { overflow-wrap: anywhere; }

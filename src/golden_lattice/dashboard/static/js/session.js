@@ -1,8 +1,9 @@
 // The Session page (spec §6.2): rail with one window and a pin.
 // Renders only from the normalized session shape; computes no metrics.
-import { esc, runDate, lsGet, lsSet, READING_WORDS, DIMENSION_WORDS } from './util.js';
+import { esc, runDate } from './util.js';
 import { labelOf, colorOf, familyColor } from './seats.js';
 import { buildBeats, disputeBeat, phaseLabel, PLAY_PERIOD_MS, SECTIONS } from './beats.js';
+import { disputesView, feedSkippedText, parityLineHtml, openingStep, critiquesCaption } from './notes.js';
 
 const TITLES = { '00': 'feed', '01': 'seats', '02': 'disputes', '03': 'dialogue', '04': 'synthesis' };
 const LONG = { '00': 'Investigation', '01': 'Independent', '02': 'Where they disagreed', '03': 'Dialogue', '04': 'Synthesis' };
@@ -31,10 +32,7 @@ function revealedDisputers(c) {
 // ---------- 00 · feed ----------
 function sectionFeed() {
   const p0 = S.phase0;
-  if (!p0 && S.live) return '<p class="lead">No investigation events yet.</p>';
-  if (!p0) {
-    return `<p class="lead">Investigation was skipped. The shared feed held only the temporal grounding; the run went straight to independent generation.</p>`;
-  }
+  if (!p0) return `<p class="lead">${esc(feedSkippedText(!!S.live))}</p>`;
   const props = (p0.proposals || []).map((p, i) => on(`prop${i}`) ? `
     <div class="prop"><div class="k">${seatName(p.model)} · proposes ${p.count}</div>
       ${(p.queries || []).map((q) => `<div class="q mono">${esc(q)}</div>`).join('')}</div>` : '').join('');
@@ -123,10 +121,9 @@ function sectionDisputes() {
     elevated: on('art') ? st.elevated : 0,
     omitted: on('art') ? st.omitted : 0,
   };
-  let filter = ui.filter;
-  let note = '';
-  if (!readingsIn) { if (filter === 'disputed') filter = 'all'; note = 'readers have not cross-read yet'; }
-  else if (st.disputed === 0) { filter = 'all'; note = 'no reader disputed anything in this run'; }
+  const view = disputesView({ live: !!S.live, complete: !S.live || S.artArrived, readingsIn, filter: ui.filter, stats: st, claims: S.claims });
+  const filter = view.filter;
+  const note = view.note || '';
 
   const finalCount = (c) => (c.disputed_by || []).length;
   const seatOrder = Object.fromEntries((S.seats || []).map((s, i) => [s.id, i]));
@@ -165,24 +162,16 @@ function sectionDialogue() {
   const turns = (S.turns || []).filter((t) => t.channel !== 'critique' && on(`t:${t.id}`)).map((t) => `
     <div class="turn"><div class="k">${seatName(t.speaker)} · <span class="${t.channel}">${t.channel}</span> · ${t.target ? seatName(t.target) : 'all'}${elevatedTurns.has(t.id) && on('art') ? ' · <span class="converge">✦ elevated</span>' : ''}</div>
       <p>${esc(t.content)}</p></div>`).join('');
-  const crit = (S.stats || {}).critiques || 0;
-  return `<p class="caption">${crit} critique${crit === 1 ? ' is' : 's are'} on ${crit === 1 ? 'its claim' : 'their claims'} in 02.</p>${turns || '<p class="caption">no augment or converge turns yet</p>'}`;
+  const loose = (S.unattached_critiques || []).filter((k) => on(`t:${k.turn_id}`)).map((k) => `
+    <div class="turn"><div class="k">${seatName(k.speaker)} · <span class="critique">critique</span> · ${k.target ? seatName(k.target) : 'all'} · <span class="dim">no Phase 1 claim</span></div>
+      <p>${esc(k.content)}</p></div>`).join('');
+  return `<p class="caption">${esc(critiquesCaption(S.stats))}</p>${turns || '<p class="caption">no augment or converge turns yet</p>'}${loose}`;
 }
 
 // ---------- 04 · synthesis ----------
 function parityLine() {
   if (!on('metrics')) return '<p class="mono small dim">parity · pending</p>';
-  if (!S.metrics) {
-    return `<p class="mono small dim">parity is undefined at ${(S.seats || []).length < 3 ? 'two seats' : 'this session'}</p>`;
-  }
-  const rec = S.metrics_recomputed ? ' · <span class="dimmer">recomputed</span>' : '';
-  const readings = S.interpretations || [];
-  if (readings.length) {
-    return readings.map((i) => `<p class="mono small"><span class="converge">flag</span> · ${seatName(i.model)} · ${esc(DIMENSION_WORDS[i.dimension] || i.dimension)} · ${esc(READING_WORDS[i.reading] || i.reading)}${rec}<br><span class="serif-gloss">${esc(i.gloss)}</span></p>`).join('');
-  }
-  const shares = S.metrics.distinct_claim_share || {};
-  const low = Object.entries(shares).sort((a, b) => a[1] - b[1])[0];
-  return `<p class="mono small">parity <span class="present">holds</span> · threshold ${S.metrics.parity_threshold} · lowest share ${low ? `${esc(labelOf(low[0]))} ${low[1].toFixed(2)}` : '—'}${rec}</p>`;
+  return parityLineHtml(S);
 }
 
 function sectionSynthesis() {
@@ -341,7 +330,6 @@ export function openClaim(id) {
 // ---------- replay ----------
 function setStep(step) {
   ui.step = Math.max(0, Math.min(B.N, step));
-  lsSet(`gl-replay-step-${S.id}`, ui.step);
   renderPanes(); renderTransport();
 }
 function stop() { if (timer) clearInterval(timer); timer = null; ui.playing = false; renderTransport(); }
@@ -405,8 +393,7 @@ export function renderSession(rootEl, session, opts = {}) {
   if (mode === 'live') {
     ui.step = B.N;
   } else {
-    const saved = Number(lsGet(`gl-replay-step-${S.id}`, B.N));
-    ui.step = Number.isFinite(saved) ? Math.max(0, Math.min(B.N, saved)) : B.N;
+    ui.step = openingStep(B);
   }
   ui.filter = (S.stats || {}).disputed === 0 && !S.live ? 'all' : 'disputed';
   root.innerHTML = frameHtml();
