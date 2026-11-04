@@ -48,6 +48,7 @@ function freshSession(ev) {
     phase0: null, phase1: Object.fromEntries(models.map((m) => [m, { stream: '' }])), reflections: {},
     claims: [], synthesis_lines: [], pairs: [], turns: [], interpretations: [], metrics: null,
     elevations: [], synthesis: { output: '', trace: [] }, stats: {}, metrics_recomputed: false,
+    unattached_critiques: [],
   };
 }
 
@@ -70,7 +71,8 @@ function restat(L) {
     elevated: L.claims.filter((c) => c.elevated).length,
     omitted: L.claims.filter((c) => c.disposition === 'omitted').length,
     modified: L.claims.filter((c) => c.disposition === 'modified').length,
-    critiques: ch('critique'), augments: ch('augment'), converges: ch('converge'),
+    critiques: ch('critique'), critiques_attached: ch('critique') - (L.unattached_critiques || []).length,
+    augments: ch('augment'), converges: ch('converge'),
     missing: L.pairs.reduce((a, p) => a + (p.missing || 0), 0),
   };
 }
@@ -167,12 +169,19 @@ export function applyEvent(state, ev) {
     case 'phase_3_turn': {
       L.turns.push({ id: ev.turn_id, speaker: ev.speaker_model, channel: ev.channel, target: ev.target_model, content: ev.content });
       if (ev.channel === 'critique') {
+        let attached = 0;
         (ev.target_claim_ids || []).forEach((cid) => {
           const c = L.claims.find((x) => x.id === cid);
           if (!c) return;
+          attached += 1;
           c.critiques.push({ speaker: ev.speaker_model, turn_id: ev.turn_id, content: ev.content });
           c.disputed_by = invitedOrder(L, c.disputed_by.concat([ev.speaker_model]));
         });
+        // Aimed only at claims with no row (e.g. Phase 2 missing claims): 03 shows it.
+        if (!attached) {
+          L.unattached_critiques.push({ speaker: ev.speaker_model, turn_id: ev.turn_id, content: ev.content,
+            target: ev.target_model, target_claim_ids: ev.target_claim_ids || [] });
+        }
       }
       restat(L); return ['02', '03'];
     }
@@ -194,6 +203,12 @@ export function applyEvent(state, ev) {
 }
 
 // ---------- hydration ----------
+// A completion fetch is applied only if the run it was fetched for is still
+// the one on screen, and the response is that run (review of PR #2, finding 1).
+export function acceptHydration(state, captured, full) {
+  return !!full && state.L === captured && full.id === captured.id;
+}
+
 async function hydrate(id) {
   for (let i = 0; i < HYDRATE_TRIES; i++) {
     try {
@@ -259,8 +274,10 @@ export function startLive(root) {
       if (changed === 'completed') {
         state.status = 'completed · loading the persisted record';
         syncInput();
-        const full = await hydrate(state.L.id);
-        if (full) {
+        const captured = state.L;
+        const full = await hydrate(captured.id);
+        if (state.L !== captured) return;   // a newer run started while we waited
+        if (acceptHydration(state, captured, full)) {
           state.hydrated = true;
           state.status = `completed · ${state.L.id}`;
           renderSession(root, full, { mode: 'live' });

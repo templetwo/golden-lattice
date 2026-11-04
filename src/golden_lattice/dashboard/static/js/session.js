@@ -3,7 +3,7 @@
 import { esc, runDate } from './util.js';
 import { labelOf, colorOf, familyColor } from './seats.js';
 import { buildBeats, disputeBeat, phaseLabel, PLAY_PERIOD_MS, SECTIONS } from './beats.js';
-import { disputesView, feedSkippedText, parityLineHtml, openingStep, critiquesCaption } from './notes.js';
+import { disputesView, feedSkippedText, parityLineHtml, openingStep, critiquesCaption, filterForClaim } from './notes.js';
 
 const TITLES = { '00': 'feed', '01': 'seats', '02': 'disputes', '03': 'dialogue', '04': 'synthesis' };
 const LONG = { '00': 'Investigation', '01': 'Independent', '02': 'Where they disagreed', '03': 'Dialogue', '04': 'Synthesis' };
@@ -121,7 +121,7 @@ function sectionDisputes() {
     elevated: on('art') ? st.elevated : 0,
     omitted: on('art') ? st.omitted : 0,
   };
-  const view = disputesView({ live: !!S.live, complete: !S.live || S.artArrived, readingsIn, filter: ui.filter, stats: st, claims: S.claims });
+  const view = disputesView({ session: S, readingsIn, filter: ui.filter });
   const filter = view.filter;
   const note = view.note || '';
 
@@ -320,7 +320,7 @@ export function jumpToLine(index) {
 export function openClaim(id) {
   if (!visible('02')) ui.active = '02';
   const c = claimById(id);
-  if (c && ui.filter === 'disputed' && !revealedDisputers(c).length) ui.filter = 'all';
+  if (c) ui.filter = filterForClaim(ui.filter, c, revealedDisputers(c).length);
   ui.open.add(id);
   writeHash(); renderPanes();
   const el = root.querySelector(`[data-open="${CSS.escape(id)}"]`);

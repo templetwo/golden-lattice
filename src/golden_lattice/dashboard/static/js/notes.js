@@ -8,7 +8,14 @@ const seatName = (id) => `<span class="seat-name" style="color:${colorOf(id)}">$
 // The disputes table's effective filter and the one note it carries.
 // A live run knows per-pair counts during cross-reading but not which claim
 // each dispute names, so it must never say nobody disputed (review, Important 2).
-export function disputesView({ live, complete, readingsIn, filter, stats, claims }) {
+// Per-claim reasons are complete only for a persisted session (replayed or
+// hydrated); a live object knows per-pair counts at most, even after synthesis
+// arrives (review of PR #2, finding 4).
+export function disputesView({ session, readingsIn, filter }) {
+  const live = !!session.live;
+  const complete = !live;
+  const stats = session.stats;
+  const claims = session.claims;
   if (!readingsIn) return { filter: filter === 'disputed' ? 'all' : filter, note: 'readers have not cross-read yet' };
   const reasonsKnown = (claims || []).some((c) => (c.disagreements || []).length);
   if (live && !complete && !reasonsKnown) {
@@ -17,6 +24,15 @@ export function disputesView({ live, complete, readingsIn, filter, stats, claims
   }
   if (!(stats || {}).disputed) return { filter: 'all', note: 'no reader disputed anything in this run' };
   return { filter, note: null };
+}
+
+// The filter that keeps `claim` visible when a synthesis link opens it
+// (review of PR #2, finding 3). Unchanged when the claim already shows.
+export function filterForClaim(filter, claim, revealedDisputers) {
+  if (filter === 'disputed' && revealedDisputers > 0) return filter;
+  if (filter === 'elevated' && claim.elevated) return filter;
+  if (filter === 'omitted' && claim.disposition === 'omitted') return filter;
+  return 'all';
 }
 
 export function feedSkippedText(live) {

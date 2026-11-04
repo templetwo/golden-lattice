@@ -8,27 +8,23 @@ import {
 const claim = (o = {}) => ({ disagreements: [], disputed_by: [], ...o });
 
 test('live run with counts but no per-claim reasons never says nobody disputed', () => {
-  const v = disputesView({ live: true, complete: false, readingsIn: true, filter: 'disputed',
-    stats: { disputed: 0 }, claims: [claim()] });
+  const v = disputesView({ session: { live: true, stats: { disputed: 0 }, claims: [claim()] }, readingsIn: true, filter: 'disputed' });
   assert.equal(v.filter, 'all');
   assert.equal(v.note, "readers' per-claim reasons arrive when the run completes");
 });
 
 test('a finished run with zero disputes says so and shows every claim', () => {
-  const v = disputesView({ live: false, complete: true, readingsIn: true, filter: 'disputed',
-    stats: { disputed: 0 }, claims: [claim()] });
+  const v = disputesView({ session: { stats: { disputed: 0 }, claims: [claim()] }, readingsIn: true, filter: 'disputed' });
   assert.deepEqual(v, { filter: 'all', note: 'no reader disputed anything in this run' });
 });
 
 test('before cross-reading the note says readers have not cross-read yet', () => {
-  const v = disputesView({ live: false, complete: true, readingsIn: false, filter: 'disputed',
-    stats: { disputed: 3 }, claims: [] });
+  const v = disputesView({ session: { stats: { disputed: 3 }, claims: [] }, readingsIn: false, filter: 'disputed' });
   assert.deepEqual(v, { filter: 'all', note: 'readers have not cross-read yet' });
 });
 
 test('an ordinary disputed view keeps the chosen filter and adds no note', () => {
-  const v = disputesView({ live: false, complete: true, readingsIn: true, filter: 'elevated',
-    stats: { disputed: 3 }, claims: [] });
+  const v = disputesView({ session: { stats: { disputed: 3 }, claims: [] }, readingsIn: true, filter: 'elevated' });
   assert.deepEqual(v, { filter: 'elevated', note: null });
 });
 
