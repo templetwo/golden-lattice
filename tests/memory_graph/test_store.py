@@ -257,3 +257,9 @@ def test_every_persisted_session_in_repo_sessions_dir_loads():
         pytest.skip("no persisted sessions on this machine")
     for session_id in ids:
         store.load(session_id)
+
+
+def test_legacy_fixture_loads_and_keeps_its_ids():
+    store = JsonFileSessionStore(Path(__file__).resolve().parents[1] / "fixtures")
+    session = store.load("session_20260504_000000_legacy01")
+    assert ModelId.LEGACY_OPUS_4_7 in session.models_invited

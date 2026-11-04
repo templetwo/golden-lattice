@@ -34,10 +34,17 @@ limit, not a normalization choice.
 
 from __future__ import annotations
 
+import re
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
 
-from golden_lattice.memory_graph.metrics import compute_parity_shares
+from golden_lattice.memory_graph.base import LEGACY_MODEL_IDS, seat_family, seat_label
+from golden_lattice.memory_graph.metrics import (
+    READING_GLOSS,
+    compute_parity_shares,
+    interpret_parity_flags,
+)
 from golden_lattice.memory_graph.phase_0 import (
     DateTimeGrounding,
     FailedSearch,
@@ -114,6 +121,184 @@ def _normalize_phase0(session: Session) -> Optional[dict[str, Any]]:
     }
 
 
+_TAG_RE = re.compile(r"^\[([A-Z])\]\s*")
+
+
+def _split_hedge(text: str) -> tuple[str, Optional[str]]:
+    """Split a trailing '[DISPUTED ...]' hedge off a synthesis line or text."""
+    idx = text.find("[DISPUTED")
+    if idx < 0:
+        return text.strip(), None
+    return text[:idx].strip(), text[idx:].strip()
+
+
+def _synthesis_lines(output: str) -> list[dict[str, Any]]:
+    lines: list[dict[str, Any]] = []
+    for raw in (output or "").split("\n"):
+        if not raw.strip():
+            continue
+        m = _TAG_RE.match(raw)
+        tag = m.group(1) if m else ""
+        body = raw[m.end():] if m else raw
+        text, hedge = _split_hedge(body)
+        lines.append({"index": len(lines), "tag": tag, "text": text, "hedge": hedge, "claim_id": None})
+    return lines
+
+
+def _ordered(models: list[str], invited: list[str]) -> list[str]:
+    seen = set(models)
+    return [m for m in invited if m in seen]
+
+
+def _claims(session: Session, lines: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    invited = [m.value for m in session.models_invited]
+    agreed: dict[str, list[str]] = {}
+    disagreements: dict[str, list[dict[str, str]]] = {}
+    for cr in session.phase_2:
+        for a in cr.agreements:
+            agreed.setdefault(a.claim_id, []).append(cr.reader_model.value)
+        for d in cr.disagreements:
+            disagreements.setdefault(d.target_claim_id, []).append(
+                {"reader": cr.reader_model.value, "reason": d.reason}
+            )
+    critiques: dict[str, list[dict[str, str]]] = {}
+    for t in session.phase_3:
+        if t.channel != "critique":
+            continue
+        for cid in t.target_claim_ids:
+            critiques.setdefault(cid, []).append(
+                {"speaker": t.speaker_model.value, "turn_id": t.turn_id, "content": t.content}
+            )
+    artifact = session.phase_4
+    trace = {e.claim_id: e for e in artifact.claim_trace} if artifact else {}
+    elevated = {cid for e in artifact.elevations for cid in e.claim_ids} if artifact else set()
+    notes: dict[str, str] = {}
+    if artifact:
+        for sd in artifact.surfaced_disagreements:
+            for cid in sd.claim_ids:
+                notes.setdefault(cid, sd.note)
+
+    out: list[dict[str, Any]] = []
+    index = 0
+    for model in session.models_invited:
+        resp = session.phase_1.get(model)
+        if resp is None:
+            continue
+        for c in resp.claims:
+            entry = trace.get(c.claim_id)
+            dis = disagreements.get(c.claim_id, [])
+            crit = critiques.get(c.claim_id, [])
+            out.append({
+                "id": c.claim_id,
+                "author": model.value,
+                "author_family": seat_family(model),
+                "text": c.text,
+                "index": index,
+                "agreed_by": _ordered(agreed.get(c.claim_id, []), invited),
+                "disagreements": dis,
+                "critiques": crit,
+                "disputed_by": _ordered([d["reader"] for d in dis] + [k["speaker"] for k in crit], invited),
+                "disposition": entry.disposition if entry else None,
+                "modified_text": entry.modified_text if entry else None,
+                "omission_reason": entry.omission_reason if entry else None,
+                "synthesis_line": None,
+                "disputed_hedge": None,
+                "surfaced_note": notes.get(c.claim_id),
+                "elevated": c.claim_id in elevated,
+            })
+            index += 1
+
+    # Link synthesis lines to claims: exact claim text first, then the
+    # modified text with its hedge stripped. One claim per line, one line
+    # per claim; unmatched lines keep claim_id None.
+    by_text: dict[str, dict[str, Any]] = {}
+    by_modified: dict[str, dict[str, Any]] = {}
+    for c in out:
+        by_text.setdefault(c["text"], c)
+        if c["modified_text"]:
+            by_modified.setdefault(_split_hedge(c["modified_text"])[0], c)
+    for line in lines:
+        claim = by_text.get(line["text"])
+        if claim is None or claim["synthesis_line"] is not None:
+            claim = by_modified.get(line["text"])
+        if claim is None or claim["synthesis_line"] is not None or claim["disposition"] == "omitted":
+            continue
+        claim["synthesis_line"] = line["index"]
+        line["claim_id"] = claim["id"]
+    for c in out:
+        hedge = None
+        if c["synthesis_line"] is not None:
+            hedge = lines[c["synthesis_line"]]["hedge"]
+        if hedge is None and c["modified_text"]:
+            hedge = _split_hedge(c["modified_text"])[1]
+        c["disputed_hedge"] = hedge
+    return out
+
+
+def _stats(claims: list[dict[str, Any]], session: Session) -> dict[str, int]:
+    channels = [t.channel for t in session.phase_3]
+    return {
+        "claims": len(claims),
+        "disputed": sum(1 for c in claims if c["disputed_by"]),
+        "both": sum(1 for c in claims if len(c["disputed_by"]) >= 2),
+        "elevated": sum(1 for c in claims if c["elevated"]),
+        "omitted": sum(1 for c in claims if c["disposition"] == "omitted"),
+        "modified": sum(1 for c in claims if c["disposition"] == "modified"),
+        "critiques": channels.count("critique"),
+        "augments": channels.count("augment"),
+        "converges": channels.count("converge"),
+        "missing": sum(len(cr.missing) for cr in session.phase_2),
+    }
+
+
+def _pairs(session: Session) -> list[dict[str, Any]]:
+    return [
+        {
+            "reader": cr.reader_model.value,
+            "target": cr.target_model.value,
+            "disputed": len(cr.disagreements),
+            "endorsed": len(cr.agreements),
+            "missing": len(cr.missing),
+        }
+        for cr in session.phase_2
+    ]
+
+
+def _seats(session: Session) -> list[dict[str, Any]]:
+    seats = []
+    for model in session.models_invited:
+        resp = session.phase_1.get(model)
+        seats.append({
+            "id": model.value,
+            "family": seat_family(model),
+            "label": seat_label(model),
+            "legacy": model in LEGACY_MODEL_IDS,
+            "focus": resp.focus_tag.value if resp else "",
+            "conf": resp.confidence if resp else 0.0,
+            "claim_count": len(resp.claims) if resp else 0,
+        })
+    return seats
+
+
+def _interpretations(session: Session) -> list[dict[str, Any]]:
+    out = []
+    for f in interpret_parity_flags(session):
+        out.append({
+            "model": f.source_model.value,
+            "family": seat_family(f.source_model),
+            "dimension": f.dimension_label,
+            "reading": f.reading,
+            "gloss": READING_GLOSS[f.reading],
+            "share": f.share,
+            "histogram_n_zero": f.histogram_n_zero,
+            "histogram_n_one": f.histogram_n_one,
+            "histogram_n_two": f.histogram_n_two,
+            "other_only_entries": f.other_only_entries,
+            "total_claims": f.total_claims,
+        })
+    return out
+
+
 def normalize_session(session: Session) -> dict[str, Any]:
     """Build the single dashboard render shape from a persisted Session."""
     phase1: dict[str, Any] = {}
@@ -177,10 +362,15 @@ def normalize_session(session: Session) -> dict[str, Any]:
 
     # Use persisted metrics when present; otherwise recompute (older sessions
     # predate the parity wiring), mirroring replay's idempotent fallback.
-    metrics_model = (
-        session.metrics if session.metrics is not None else compute_parity_shares(session)
-    )
+    recomputed = compute_parity_shares(session) if session.metrics is None else None
+    metrics_model = session.metrics if session.metrics is not None else recomputed
     metrics = metrics_model.model_dump(mode="json") if metrics_model is not None else None
+    interpreted = session if session.metrics is not None else (
+        session.model_copy(update={"metrics": recomputed}) if recomputed is not None else session
+    )
+
+    lines = _synthesis_lines(artifact.output if artifact is not None else "")
+    claims = _claims(session, lines)
 
     return {
         "id": session.session_id,
@@ -195,6 +385,14 @@ def normalize_session(session: Session) -> dict[str, Any]:
         "synthesis": synthesis,
         "metrics": metrics,
         "elevations": elevations,
+        "seats": _seats(session),
+        "claims": claims,
+        "synthesis_lines": lines,
+        "stats": _stats(claims, session),
+        "pairs": _pairs(session),
+        "interpretations": _interpretations(interpreted),
+        "metrics_recomputed": session.metrics is None and recomputed is not None,
+        "created_at": session.created_at.isoformat(),
     }
 
 
@@ -204,28 +402,37 @@ def _is_complete(session: Session) -> bool:
     return bool(session.phase_1) and session.phase_4 is not None
 
 
-def normalized_sessions(
-    sessions_dir: Path, *, limit: Optional[int] = None
-) -> list[dict[str, Any]]:
-    """Load every complete session under `sessions_dir`, normalized, newest first.
+@dataclass
+class NormalizedBundle:
+    """Every loadable complete session, normalized, plus every file that failed."""
 
-    Newest-first by session id (the ids are timestamp-prefixed, so this is a
-    chronological sort). `limit` caps how many are returned.
-    """
+    sessions: list[dict[str, Any]] = field(default_factory=list)
+    unloadable: list[dict[str, str]] = field(default_factory=list)
+
+
+def load_normalized(sessions_dir: Path, *, limit: Optional[int] = None) -> NormalizedBundle:
+    """Newest first. A file that fails to load or normalize is reported, never hidden."""
+    bundle = NormalizedBundle()
+    if not Path(sessions_dir).exists():
+        return bundle
     store = JsonFileSessionStore(sessions_dir)
-    out: list[dict[str, Any]] = []
     for session_id in sorted(store.list_sessions(), reverse=True):
         try:
             session = store.load(session_id)
-        except Exception:
+            if not _is_complete(session):
+                continue
+            bundle.sessions.append(normalize_session(session))
+        except Exception as exc:  # report, do not sink the bundle
+            first = (str(exc).splitlines() or [type(exc).__name__])[0]
+            bundle.unloadable.append({"id": session_id, "error": first})
             continue
-        if not _is_complete(session):
-            continue
-        try:
-            out.append(normalize_session(session))
-        except Exception:
-            # A single malformed session must not sink the whole bundle.
-            continue
-        if limit is not None and len(out) >= limit:
+        if limit is not None and len(bundle.sessions) >= limit:
             break
-    return out
+    return bundle
+
+
+def normalized_sessions(
+    sessions_dir: Path, *, limit: Optional[int] = None
+) -> list[dict[str, Any]]:
+    """Load every complete session under `sessions_dir`, normalized, newest first."""
+    return load_normalized(sessions_dir, limit=limit).sessions
