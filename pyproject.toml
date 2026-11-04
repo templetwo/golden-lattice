@@ -18,6 +18,13 @@ dependencies = [
 dev = [
     "pytest>=8.0",
 ]
+# The anthropic SDK is needed for live runs (AnthropicClient imports it lazily).
+live = [
+    "anthropic>=1.0",
+]
+
+[project.scripts]
+golden-lattice = "golden_lattice.cli.__main__:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/golden_lattice"]
