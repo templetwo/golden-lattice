@@ -1,7 +1,11 @@
 """The single render shape the dashboard reads, built from a persisted Session."""
 
 from golden_lattice.dashboard.normalize import load_normalized, normalize_session
+from golden_lattice.memory_graph.base import ModelId
 from golden_lattice.memory_graph.store import JsonFileSessionStore
+
+# Current seat ids come from the enum, so a model-id move never breaks these tests.
+O, S, H = ModelId.OPUS.value, ModelId.SONNET.value, ModelId.HAIKU.value
 
 
 def _by_text(n):
@@ -11,19 +15,19 @@ def _by_text(n):
 def test_claims_carry_readers_and_fate(make_full_session):
     n = normalize_session(make_full_session())
     c = _by_text(n)
-    assert c["sonnet one"]["disputed_by"] == ["claude-opus-5", "claude-haiku-4-5-20251001"]
+    assert c["sonnet one"]["disputed_by"] == [O, H]
     assert [d["reason"] for d in c["sonnet one"]["disagreements"]] == [
         "opus disagrees with sonnet one",
         "haiku disagrees with sonnet one",
     ]
     assert c["sonnet one"]["critiques"] == [
-        {"speaker": "claude-opus-5", "turn_id": "t1", "content": "opus critiques sonnet one in dialogue"}
+        {"speaker": O, "turn_id": "t1", "content": "opus critiques sonnet one in dialogue"}
     ]
     assert c["sonnet one"]["disposition"] == "modified"
     assert c["sonnet one"]["disputed_hedge"].startswith("[DISPUTED")
     assert c["sonnet one"]["surfaced_note"] == "opus and haiku both push back on sonnet one"
-    assert c["opus two"]["disputed_by"] == ["claude-haiku-4-5-20251001"]  # critique only
-    assert c["opus two"]["agreed_by"] == ["claude-sonnet-5", "claude-haiku-4-5-20251001"]
+    assert c["opus two"]["disputed_by"] == [H]  # critique only
+    assert c["opus two"]["agreed_by"] == [S, H]
     assert c["opus two"]["elevated"] is True
     assert c["sonnet two"]["disposition"] == "omitted"
     assert c["sonnet two"]["omission_reason"] == "redundant with opus two"
@@ -62,11 +66,11 @@ def test_synthesis_lines_unmatched_and_duplicate(make_full_session):
 def test_pairs_one_per_cross_reading(make_full_session):
     pairs = {(p["reader"], p["target"]): p for p in normalize_session(make_full_session())["pairs"]}
     assert len(pairs) == 6
-    assert pairs[("claude-haiku-4-5-20251001", "claude-opus-5")] == {
-        "reader": "claude-haiku-4-5-20251001", "target": "claude-opus-5",
+    assert pairs[(H, O)] == {
+        "reader": H, "target": O,
         "disputed": 0, "endorsed": 2, "missing": 0,
     }
-    assert pairs[("claude-sonnet-5", "claude-opus-5")]["missing"] == 1
+    assert pairs[(S, O)]["missing"] == 1
 
 
 def test_interpretations_carry_reading_and_gloss(make_full_session):

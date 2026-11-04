@@ -16,9 +16,10 @@ def test_legacy_ids_are_members():
     assert ModelId("claude-opus-4-7") is ModelId.LEGACY_OPUS_4_7
     assert ModelId("claude-sonnet-4-6") is ModelId.LEGACY_SONNET_4_6
     assert ModelId("claude-haiku-4-5") is ModelId.LEGACY_HAIKU_4_5
-    assert LEGACY_MODEL_IDS == frozenset(
-        {ModelId.LEGACY_OPUS_4_7, ModelId.LEGACY_SONNET_4_6, ModelId.LEGACY_HAIKU_4_5}
-    )
+    # The May 2026 ids are always legacy. Later id moves add members here
+    # (e.g. claude-haiku-4-5-20251001 once Haiku moves on), so this is a subset.
+    assert {ModelId.LEGACY_OPUS_4_7, ModelId.LEGACY_SONNET_4_6, ModelId.LEGACY_HAIKU_4_5} <= LEGACY_MODEL_IDS
+    assert all(m.name.startswith("LEGACY_") for m in LEGACY_MODEL_IDS)
 
 
 def test_every_member_has_a_family():
