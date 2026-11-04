@@ -1,0 +1,47 @@
+/* Golden Lattice dashboard. Dark only (spec §7).
+   Seat colors pass the dataviz palette validator on #0c0d11:
+   node validate_palette.js "#d76549,#8c42aa,#01a2c5,#348f4f" --mode dark --surface "#0c0d11"
+   Seat names are always printed beside a colored mark; color never carries identity alone. */
+
+:root {
+  --seat-fable: #d76549;
+  --seat-opus: #8c42aa;
+  --seat-sonnet: #01a2c5;
+  --seat-haiku: #348f4f;
+
+  --critique: #e35d4c;
+  --augment: #6f94e0;
+  --converge: #e0b64a;
+  --present: #45c28a;
+
+  --bg: #0c0d11;
+  --panel: #0f1117;
+  --panel-2: #14161d;
+  --border: #242832;
+  --border-soft: #1c1f27;
+  --text: #d7dbe4;
+  --text-bright: #eef0f4;
+  --text-mid: #aab0bc;
+  --dim: #707682;
+  --dimmer: #4b505b;
+
+  --serif: 'Spectral', Georgia, 'Times New Roman', serif;
+  --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; background: var(--bg); }
+body {
+  -webkit-font-smoothing: antialiased;
+  color: var(--text);
+  font-family: var(--serif);
+  font-size: 14px;
+  line-height: 1.55;
+  min-height: 100vh;
+}
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 5px; border: 2px solid var(--bg); }
+::-webkit-scrollbar-thumb:hover { background: #323744; }
+a { color: inherit; }
+.mono { font-family: var(--mono); }
