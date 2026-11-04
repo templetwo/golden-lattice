@@ -1,6 +1,7 @@
 // The Record (spec §6.1): library list with a cross-session strip above it.
 // Reads bundle.record only; computes nothing beyond layout.
-import { esc, runDate, READING_WORDS, DIMENSION_WORDS } from './util.js';
+import { esc, runDate, lsGet, lsSet, READING_WORDS, DIMENSION_WORDS } from './util.js';
+import { sortRuns, recordSummary } from './notes.js';
 import { FAMILY_ORDER, familyColor } from './seats.js';
 import { connectLive } from './live.js';
 
@@ -170,44 +171,91 @@ function unloadableHtml(unloadable) {
   return `<details class="foot"><summary class="caption">${unloadable.length} file${unloadable.length === 1 ? '' : 's'} could not be loaded</summary>${list}</details>`;
 }
 
+// Search, sort and scroll survive a trip to a session and back (spec §12).
+const NAV_KEY = 'gl-record-nav';
+function readNav() {
+  try { return JSON.parse(sessionStorage.getItem(NAV_KEY) || '{}'); } catch (e) { return {}; }
+}
+function writeNav(patch) {
+  try { sessionStorage.setItem(NAV_KEY, JSON.stringify({ ...readNav(), ...patch })); } catch (e) { /* private mode */ }
+}
+
+const SORTS = [['newest', 'Newest'], ['disputed', 'Most disputed'], ['flagged', 'Flagged']];
+
 export function renderRecord(root, bundle) {
   const record = bundle.record;
   const n = record.runs.length;
   const chart = chartSvg(record);
+  const nav = readNav();
+  const sort = SORTS.some(([k]) => k === nav.sort) ? nav.sort : 'newest';
+  const stripOpen = lsGet('gl-strip-open', '0') === '1';
+  const sortBtns = SORTS.map(([k, label]) => `<button class="sort-btn ${k === sort ? 'on' : ''}" data-sort="${k}">${label}</button>`).join('');
   root.innerHTML = `
   <div class="record-page">
     <header class="top">
-      <span class="k wide">Golden Lattice · the record · ${n} run${n === 1 ? '' : 's'}</span>
-      <input class="search" type="search" placeholder="search prompts…" aria-label="Search prompts">
-      <a class="k link" href="/explainer">explainer</a>
-      <a class="k link converge" href="/session/live">go live</a>
+      <span class="k wide">Golden Lattice · the record</span>
+      <input class="search" type="search" placeholder="Search prompts…" aria-label="Search prompts">
+      <a class="nav-link" href="/explainer">Explainer</a>
+      <a class="nav-link converge" href="/session/live">Go live</a>
     </header>
-    <section class="strip">
-      <div class="cell cell-chart">
-        <h4>Distinct-claim share by seat, per run</h4>
-        ${chart.svg}
-        <div class="tip" hidden></div>
-        <p class="caption">${esc(chart.caption)}</p>
+    <section class="overview">
+      <div class="summary-line"><span class="summary">${esc(recordSummary(record))}</span>
+        <button class="details-btn" data-strip="1" aria-expanded="${stripOpen}">${stripOpen ? 'Hide details' : 'Show details'}</button></div>
+      <div class="strip" ${stripOpen ? '' : 'hidden'}>
+        <div class="cell cell-chart">
+          <h4>Distinct-claim share by seat, per run</h4>
+          ${chart.svg}
+          <div class="tip" hidden></div>
+          <p class="caption">${esc(chart.caption)}</p>
+        </div>
+        <div class="cell"><h4>Who pushes back on whom</h4>${pairsTable(record)}</div>
+        <div class="cell"><h4>Flags</h4>${flagsCell(record, n)}</div>
       </div>
-      <div class="cell"><h4>Who pushes back on whom</h4>${pairsTable(record)}</div>
-      <div class="cell"><h4>Flags</h4>${flagsCell(record, n)}</div>
     </section>
     <div class="list">
-      <div class="hdr"><span>when</span><span>prompt</span><span>claims</span><span>disputed</span><span>both</span><span>✦</span><span>parity</span></div>
+      <div class="list-tools"><span class="k">Sort</span>${sortBtns}</div>
+      <div class="hdr"><span>when</span><span>prompt</span><span>claims</span><span>disputed</span><span title="claims challenged by two or more readers">2+ readers</span><span title="claims elevated by agreement">elevated</span><span>parity</span></div>
       <div id="gl-live-row" hidden></div>
-      <div class="rows">${n ? rowsHtml(record.runs) : '<p class="caption">No completed runs to replay yet.</p>'}</div>
+      <div class="rows">${n ? rowsHtml(sortRuns(record.runs, sort)) : '<p class="caption">No completed runs to replay yet.</p>'}</div>
       ${unloadableHtml(bundle.unloadable)}
     </div>
   </div>`;
   wireChartTooltip(root, record);
   watchInFlight(root, bundle);
+
   const search = root.querySelector('.search');
-  search.addEventListener('input', () => {
+  const applySearch = () => {
     const q = search.value.trim().toLowerCase();
     root.querySelectorAll('.rows .r').forEach((row) => {
       row.hidden = q && !row.getAttribute('data-prompt').includes(q);
     });
-  });
+  };
+  search.value = nav.q || '';
+  applySearch();
+  search.addEventListener('input', () => { applySearch(); writeNav({ q: search.value }); });
+
+  root.onclick = (e) => {
+    const sb = e.target.closest('[data-sort]');
+    if (sb) { writeNav({ sort: sb.getAttribute('data-sort'), y: window.scrollY }); renderRecord(root, bundle); return; }
+    const st = e.target.closest('[data-strip]');
+    if (st) {
+      const open = lsGet('gl-strip-open', '0') !== '1';
+      lsSet('gl-strip-open', open ? '1' : '0');
+      root.querySelector('.strip').hidden = !open;
+      st.setAttribute('aria-expanded', String(open));
+      st.textContent = open ? 'Hide details' : 'Show details';
+      return;
+    }
+    if (e.target.closest('.rows .r')) writeNav({ y: window.scrollY });
+  };
+  if (nav.y) {
+    // Re-apply until the page has finished loading (fonts, late layout), then stop.
+    const y = nav.y;
+    const restore = () => { if (Math.abs(window.scrollY - y) > 2) window.scrollTo(0, y); };
+    requestAnimationFrame(restore);
+    [120, 400].forEach((ms) => setTimeout(restore, ms));
+    if (document.readyState !== 'complete') window.addEventListener('load', restore, { once: true });
+  }
 }
 
 // The in-flight row: while a run is live on this host, it sits at the top of
