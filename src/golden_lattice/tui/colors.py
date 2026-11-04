@@ -12,15 +12,17 @@ namesake color.
 
 from __future__ import annotations
 
-from golden_lattice.memory_graph.base import ModelId
+from golden_lattice.memory_graph.base import ModelId, SeatFamily, seat_family, seat_label
 
 
-MODEL_COLOR: dict[ModelId, str] = {
-    ModelId.FABLE: "bright_yellow",
-    ModelId.OPUS: "magenta",
-    ModelId.SONNET: "cyan",
-    ModelId.HAIKU: "green",
+FAMILY_COLOR: dict[SeatFamily, str] = {
+    "fable": "bright_yellow",
+    "opus": "magenta",
+    "sonnet": "cyan",
+    "haiku": "green",
 }
+
+MODEL_COLOR: dict[ModelId, str] = {m: FAMILY_COLOR[seat_family(m)] for m in ModelId}
 
 CHANNEL_COLOR: dict[str, str] = {
     "critique": "red",
@@ -53,10 +55,5 @@ READING_GLOSS: dict[str, str] = {
 
 def model_label(model: ModelId) -> str:
     """Short human-readable model label, color-tagged for Rich markup."""
-    short = {
-        ModelId.FABLE: "FABLE",
-        ModelId.OPUS: "OPUS",
-        ModelId.SONNET: "SONNET",
-        ModelId.HAIKU: "HAIKU",
-    }[model]
+    short = seat_label(model)
     return f"[{MODEL_COLOR[model]}]{short}[/{MODEL_COLOR[model]}]"

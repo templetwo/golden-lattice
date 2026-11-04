@@ -665,3 +665,10 @@ def test_full_pipeline_produces_substrate_valid_synthesis_artifact_per_mode():
         )
         assert full.phase_4 is artifact
         assert full.phase_4.output_mode is mode
+
+
+def test_marker_for_legacy_ids_follows_family():
+    from golden_lattice.synthesis.attribution import _attribution_marker
+
+    assert _attribution_marker(ModelId.LEGACY_OPUS_4_7) == "[O]"
+    assert _attribution_marker(ModelId.LEGACY_HAIKU_4_5) == "[H]"

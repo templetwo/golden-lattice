@@ -38,6 +38,36 @@ class ModelId(str, Enum):
     OPUS = "claude-opus-5"
     SONNET = "claude-sonnet-5"
     HAIKU = "claude-haiku-4-5-20251001"
+    # Legacy seat ids. They exist so sessions persisted in May 2026 still
+    # validate: claim ids hash the seat id string, so the stored ids cannot
+    # be rewritten. Never invited to a live run (see DEFAULT_INVITED_MODELS).
+    LEGACY_OPUS_4_7 = "claude-opus-4-7"
+    LEGACY_SONNET_4_6 = "claude-sonnet-4-6"
+    LEGACY_HAIKU_4_5 = "claude-haiku-4-5"
+
+
+LEGACY_MODEL_IDS: frozenset[ModelId] = frozenset(
+    {ModelId.LEGACY_OPUS_4_7, ModelId.LEGACY_SONNET_4_6, ModelId.LEGACY_HAIKU_4_5}
+)
+
+# A seat's family is the protocol identity that survives model id moves.
+# Labels, colors, attribution markers and cross-session aggregates key on it.
+SeatFamily = Literal["fable", "opus", "sonnet", "haiku"]
+SEAT_FAMILY_ORDER: tuple[SeatFamily, ...] = ("fable", "opus", "sonnet", "haiku")
+
+
+def seat_family(model: "ModelId | str") -> SeatFamily:
+    """The family name contained in a seat id. Raises for an unknown family."""
+    text = model.value if isinstance(model, ModelId) else str(model)
+    for family in SEAT_FAMILY_ORDER:
+        if family in text:
+            return family
+    raise ValueError(f"No seat family in model id {text!r}.")
+
+
+def seat_label(model: "ModelId | str") -> str:
+    """Upper-case family label, e.g. 'OPUS'."""
+    return seat_family(model).upper()
 
 
 class Phase(int, Enum):

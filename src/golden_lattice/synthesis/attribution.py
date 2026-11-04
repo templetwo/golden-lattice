@@ -93,6 +93,8 @@ from golden_lattice.memory_graph.base import (
     ModelId,
     OutputMode,
     Phase,
+    SeatFamily,
+    seat_family,
 )
 from golden_lattice.memory_graph.schema import (
     Claim,
@@ -106,11 +108,11 @@ from golden_lattice.memory_graph.schema import (
 
 
 # Marker mapping per ARCHITECTURE.md §7. Fable is the fourth closed seat.
-_MARKER_BY_MODEL: dict[ModelId, str] = {
-    ModelId.FABLE: "[F]",
-    ModelId.OPUS: "[O]",
-    ModelId.SONNET: "[S]",
-    ModelId.HAIKU: "[H]",
+_MARKER_BY_FAMILY: dict[SeatFamily, str] = {
+    "fable": "[F]",
+    "opus": "[O]",
+    "sonnet": "[S]",
+    "haiku": "[H]",
 }
 
 
@@ -146,12 +148,7 @@ def render_output(
 
 def _attribution_marker(model: ModelId) -> str:
     """Return the [O]/[S]/[H] marker for a model. Hardcoded v0 mapping."""
-    if model not in _MARKER_BY_MODEL:
-        raise ValueError(
-            f"No attribution marker defined for {model.value}. v1 trigger: "
-            "extend _MARKER_BY_MODEL when a new ModelId is added."
-        )
-    return _MARKER_BY_MODEL[model]
+    return _MARKER_BY_FAMILY[seat_family(model)]
 
 
 def _phase_1_claims_by_id(session: Session) -> dict[str, Claim]:

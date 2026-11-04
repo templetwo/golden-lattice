@@ -247,3 +247,13 @@ def test_alignment_pair_history_skew_detects_dominance(tmp_path: Path):
     skew = compute_consensus_pair_skew(aggregate)
     # 5x {Sonnet, Haiku}, 1x {Opus, Haiku} → skew = 5.0
     assert skew == 5.0
+
+
+def test_every_persisted_session_in_repo_sessions_dir_loads():
+    sessions_dir = Path(__file__).resolve().parents[2] / "sessions"
+    store = JsonFileSessionStore(sessions_dir)
+    ids = store.list_sessions() if sessions_dir.exists() else ()
+    if not ids:
+        pytest.skip("no persisted sessions on this machine")
+    for session_id in ids:
+        store.load(session_id)
