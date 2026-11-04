@@ -377,3 +377,16 @@ def test_session_page_and_static_served(tmp_path):
         assert status == 200 and "--seat-opus" in css
 
     _serve(tmp_path, check)
+
+
+def test_static_files_are_served_no_cache(tmp_path):
+    """Modules are revalidated on every load, so an updated dashboard is
+    never shadowed by a heuristically cached app.js."""
+
+    async def check(port):
+        async with ClientSession() as http:
+            async with http.get(f"http://127.0.0.1:{port}/static/app.js") as resp:
+                assert resp.status == 200
+                assert resp.headers.get("Cache-Control") == "no-cache"
+
+    _serve(tmp_path, check)

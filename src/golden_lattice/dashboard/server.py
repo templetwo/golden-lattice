@@ -32,6 +32,11 @@ _INDEX_PATH = _STATIC_DIR / "index.html"
 _EXPLAINER_PATH = _STATIC_DIR / "explainer.html"
 
 
+async def _no_cache_static(request: web.Request, response: web.StreamResponse) -> None:
+    if request.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "no-cache"
+
+
 def _default_sessions_dir() -> Path:
     """The repo's sessions/ directory, resolved from this module's location."""
     return Path(__file__).resolve().parents[3] / "sessions"
@@ -49,6 +54,9 @@ class DashboardServer:
         self.app.router.add_get("/sessions/{session_id}", self._handle_session)
         self.app.router.add_get("/ws", self._handle_ws)
         self.app.router.add_static("/static/", _STATIC_DIR, show_index=False)
+        # Revalidate static modules on every load so an updated dashboard is
+        # never shadowed by a heuristically cached app.js.
+        self.app.on_response_prepare.append(_no_cache_static)
         # Directory the replay bundle is built from. The /sessions endpoint
         # normalizes every complete session here into the dashboard's render
         # shape, keeping replay and live identical (both feed one render layer).
