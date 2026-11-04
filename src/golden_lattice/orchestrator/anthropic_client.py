@@ -358,7 +358,9 @@ class AnthropicClient:
             target_claims=target_claims,
             target_self_reflection=target_self_reflection,
         )
-        tool = cross_reading_tool_schema()
+        tool = cross_reading_tool_schema(
+            target_claim_ids=tuple(c.claim_id for c in target_claims)
+        )
         try:
             response = await self._stream_message(
                 model_id=reader_model,
@@ -408,7 +410,10 @@ class AnthropicClient:
             own_claims=own_claims,
             peer_claims=peer_claims,
         )
-        tool = phase_2_tagging_tool_schema()
+        tool = phase_2_tagging_tool_schema(
+            claim_ids=tuple(c.claim_id for c in own_claims)
+            + tuple(c.claim_id for c in peer_claims)
+        )
         try:
             response = await self._stream_message(
                 model_id=tagger_model,
@@ -462,7 +467,12 @@ class AnthropicClient:
             own_phase_1_response=own_phase_1_response,
             peer_phase_1_blocks=peer_phase_1_blocks,
         )
-        tool = phase_3_dialogue_tool_schema()
+        tool = phase_3_dialogue_tool_schema(
+            target_models=tuple(m.value for m, _, _ in peer_phase_1_blocks),
+            claim_ids=tuple(
+                c.claim_id for _, _, claims in peer_phase_1_blocks for c in claims
+            ),
+        )
         try:
             response = await self._stream_message(
                 model_id=speaker_model,

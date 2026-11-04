@@ -35,12 +35,14 @@ def test_phase_3_tool_schema_advertises_closed_channel_vocabulary():
     assert set(enum) == {"critique", "augment", "converge"}
 
 
-def test_phase_3_tool_schema_marks_only_channel_and_content_required():
-    """target_model and target_claim_ids are conditionally required by the parser,
-    not the JSON schema. Schema-level required is the minimum every turn must have."""
+def test_phase_3_tool_schema_requires_every_turn_field():
+    """Strict mode: every property is required. target_model and target_claim_ids
+    are nullable, so a non-targeted turn sends null rather than omitting the key.
+    The parser still enforces the conditional rules."""
     schema = phase_3_dialogue_tool_schema()
     item_schema = schema["input_schema"]["properties"]["turns"]["items"]
-    assert set(item_schema["required"]) == {"channel", "content"}
+    assert set(item_schema["required"]) == set(item_schema["properties"])
+    assert item_schema["required"] == ["channel", "target_model", "target_claim_ids", "content"]
 
 
 # --- Prompt builders -----------------------------------------------------

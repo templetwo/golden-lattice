@@ -91,7 +91,10 @@ PHASE_3_DIALOGUE_TOOL_NAME = "emit_phase_3_dialogue"
 _VALID_CHANNELS: tuple[DialogueChannel, ...] = ("critique", "augment", "converge")
 
 
-def phase_3_dialogue_tool_schema() -> dict[str, Any]:
+def phase_3_dialogue_tool_schema(
+    target_models: Optional[tuple[str, ...]] = None,
+    claim_ids: Optional[tuple[str, ...]] = None,
+) -> dict[str, Any]:
     """Anthropic tool schema for emitting a Phase 3 dialogue batch.
 
     One tool call per model per Phase 3. The model emits a list of turns; each
@@ -100,6 +103,12 @@ def phase_3_dialogue_tool_schema() -> dict[str, Any]:
     content. Cap enforcement happens at the parser, not in the JSON schema —
     aggregate-vs-per-peer caps require counting, which JSON Schema can't express.
     """
+    target_model_schema: dict[str, Any] = {"type": "string"}
+    if target_models:
+        target_model_schema = {"type": "string", "enum": list(target_models)}
+    claim_id_schema: dict[str, Any] = {"type": "string"}
+    if claim_ids:
+        claim_id_schema = {"type": "string", "enum": list(claim_ids)}
     return {
         "name": PHASE_3_DIALOGUE_TOOL_NAME,
         "description": (
@@ -118,26 +127,29 @@ def phase_3_dialogue_tool_schema() -> dict[str, Any]:
                     "items": {
                         "type": "object",
                         "additionalProperties": False,
-                        "required": ["channel", "content"],
+                        "required": ["channel", "target_model", "target_claim_ids", "content"],
                         "properties": {
                             "channel": {
                                 "type": "string",
                                 "enum": list(_VALID_CHANNELS),
                             },
                             "target_model": {
-                                "type": "string",
+                                "anyOf": [target_model_schema, {"type": "null"}],
                                 "description": (
-                                    "Required for critique; optional for "
-                                    "augment and converge."
+                                    "The peer you address. Required for critique. "
+                                    "Use null for augment and converge unless you "
+                                    "address one peer."
                                 ),
                             },
                             "target_claim_ids": {
-                                "type": "array",
-                                "items": {"type": "string"},
+                                "anyOf": [
+                                    {"type": "array", "items": claim_id_schema},
+                                    {"type": "null"},
+                                ],
                                 "description": (
-                                    "Required non-empty for critique; "
-                                    "optional otherwise. Cannot be present "
-                                    "without target_model."
+                                    "Claim ids of the addressed peer. Required, "
+                                    "non-empty for critique. Use null otherwise. "
+                                    "Must be null when target_model is null."
                                 ),
                             },
                             "content": {"type": "string"},

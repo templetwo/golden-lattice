@@ -50,12 +50,19 @@ CROSS_READING_TOOL_NAME = "emit_cross_reading"
 PHASE_2_TAGGING_TOOL_NAME = "emit_phase_2_tagging"
 
 
-def cross_reading_tool_schema() -> dict[str, Any]:
+def cross_reading_tool_schema(
+    target_claim_ids: Optional[tuple[str, ...]] = None,
+) -> dict[str, Any]:
     """Anthropic tool schema for emitting a CrossReading.
 
     The model emits agreement claim_id refs, disagreements (claim_id + reason),
     and missing-claim TEXTS (claim_ids are assigned post-parse from content hashes).
+    When target_claim_ids is given, every claim_id reference is an enum of the
+    target's own claims, so a foreign or near-miss id cannot be emitted.
     """
+    id_schema: dict[str, Any] = {"type": "string"}
+    if target_claim_ids:
+        id_schema = {"type": "string", "enum": list(target_claim_ids)}
     return {
         "name": CROSS_READING_TOOL_NAME,
         "description": (
@@ -71,7 +78,7 @@ def cross_reading_tool_schema() -> dict[str, Any]:
                 "agreements": {
                     "type": "array",
                     "description": "claim_ids of target's claims you agree with.",
-                    "items": {"type": "string"},
+                    "items": id_schema,
                 },
                 "disagreements": {
                     "type": "array",
@@ -81,7 +88,7 @@ def cross_reading_tool_schema() -> dict[str, Any]:
                         "additionalProperties": False,
                         "required": ["target_claim_id", "reason"],
                         "properties": {
-                            "target_claim_id": {"type": "string"},
+                            "target_claim_id": id_schema,
                             "reason": {"type": "string"},
                         },
                     },
@@ -99,21 +106,29 @@ def cross_reading_tool_schema() -> dict[str, Any]:
     }
 
 
-def phase_2_tagging_tool_schema() -> dict[str, Any]:
+def phase_2_tagging_tool_schema(
+    claim_ids: Optional[tuple[str, ...]] = None,
+) -> dict[str, Any]:
     """Anthropic tool schema for emitting a Phase2Tagging.
 
     Model emits per-claim tags split into peer_tags (claims authored by other models)
     and self_tags (claims authored by this model). Closed vocabularies enforced.
+    Every property is required: an empty tag array means "does not apply", so the
+    model never has to omit a field. When claim_ids is given, claim_id is an enum
+    of the visible claims.
     """
     edge_case_values = [t.value for t in EdgeCaseTag]
     structural_values = [t.value for t in StructuralPatternTag]
+    id_schema: dict[str, Any] = {"type": "string"}
+    if claim_ids:
+        id_schema = {"type": "string", "enum": list(claim_ids)}
 
     claim_tags_schema = {
         "type": "object",
         "additionalProperties": False,
-        "required": ["claim_id"],
+        "required": ["claim_id", "edge_case_tags", "structural_pattern_tags"],
         "properties": {
-            "claim_id": {"type": "string"},
+            "claim_id": id_schema,
             "edge_case_tags": {
                 "type": "array",
                 "items": {"type": "string", "enum": edge_case_values},
