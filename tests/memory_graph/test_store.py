@@ -263,3 +263,22 @@ def test_legacy_fixture_loads_and_keeps_its_ids():
     store = JsonFileSessionStore(Path(__file__).resolve().parents[1] / "fixtures")
     session = store.load("session_20260504_000000_legacy01")
     assert ModelId.LEGACY_OPUS_4_7 in session.models_invited
+
+
+def test_session_fixtures_are_tracked_by_git():
+    """The repo ignores *.session.json so lattice output stays private; test
+    fixtures must be carved out of that rule or a fresh clone loses them."""
+    import shutil
+    import subprocess
+
+    git = shutil.which("git")
+    repo = Path(__file__).resolve().parents[2]
+    if git is None or not (repo / ".git").exists():
+        pytest.skip("not a git checkout")
+    fixtures = sorted((repo / "tests" / "fixtures").glob("*.session.json"))
+    assert fixtures, "no session fixtures found"
+    tracked = subprocess.run(
+        [git, "ls-files", "--", "tests/fixtures"], cwd=repo, capture_output=True, text=True, check=True,
+    ).stdout.split()
+    for f in fixtures:
+        assert f"tests/fixtures/{f.name}" in tracked, f"{f.name} is not tracked (ignored by *.session.json?)"

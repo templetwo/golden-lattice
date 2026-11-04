@@ -1,0 +1,353 @@
+{
+  "session_id": "session_20260504_000000_legacy01",
+  "prompt": "p",
+  "prompt_hash": "h",
+  "created_at": "2026-05-04T12:00:00Z",
+  "models_invited": [
+    "claude-opus-4-7",
+    "claude-sonnet-4-6",
+    "claude-haiku-4-5"
+  ],
+  "phase_0": null,
+  "phase_1": {
+    "claude-opus-4-7": {
+      "model_id": "claude-opus-4-7",
+      "prompt_hash": "h",
+      "response": "prose",
+      "focus_tag": "correctness",
+      "confidence": 0.8,
+      "claims": [
+        {
+          "claim_id": "0891eaa12b5656a5",
+          "source_model": "claude-opus-4-7",
+          "source_phase": 1,
+          "text": "opus one",
+          "parent_claim_ids": [],
+          "tool_provenance": []
+        },
+        {
+          "claim_id": "a7f612526033f4b6",
+          "source_model": "claude-opus-4-7",
+          "source_phase": 1,
+          "text": "opus two",
+          "parent_claim_ids": [],
+          "tool_provenance": []
+        }
+      ],
+      "self_reflection_artifacts": [
+        {
+          "model_id": "claude-opus-4-7",
+          "generated_at": "2026-05-04T12:00:01.500000Z",
+          "strongest_claim_id": "0891eaa12b5656a5",
+          "weakest_claim_id": "a7f612526033f4b6",
+          "tag_justification": "why this tag"
+        }
+      ],
+      "generation_started_at": "2026-05-04T12:00:00Z",
+      "generation_completed_at": "2026-05-04T12:00:01Z",
+      "latency_used_for_reflection_ms": 0
+    },
+    "claude-sonnet-4-6": {
+      "model_id": "claude-sonnet-4-6",
+      "prompt_hash": "h",
+      "response": "prose",
+      "focus_tag": "correctness",
+      "confidence": 0.8,
+      "claims": [
+        {
+          "claim_id": "afb611b2ad1079d5",
+          "source_model": "claude-sonnet-4-6",
+          "source_phase": 1,
+          "text": "sonnet one",
+          "parent_claim_ids": [],
+          "tool_provenance": []
+        },
+        {
+          "claim_id": "d71f65a3fe587341",
+          "source_model": "claude-sonnet-4-6",
+          "source_phase": 1,
+          "text": "sonnet two",
+          "parent_claim_ids": [],
+          "tool_provenance": []
+        }
+      ],
+      "self_reflection_artifacts": [
+        {
+          "model_id": "claude-sonnet-4-6",
+          "generated_at": "2026-05-04T12:00:01.500000Z",
+          "strongest_claim_id": "afb611b2ad1079d5",
+          "weakest_claim_id": "d71f65a3fe587341",
+          "tag_justification": "why this tag"
+        }
+      ],
+      "generation_started_at": "2026-05-04T12:00:00Z",
+      "generation_completed_at": "2026-05-04T12:00:01Z",
+      "latency_used_for_reflection_ms": 0
+    },
+    "claude-haiku-4-5": {
+      "model_id": "claude-haiku-4-5",
+      "prompt_hash": "h",
+      "response": "prose",
+      "focus_tag": "correctness",
+      "confidence": 0.8,
+      "claims": [
+        {
+          "claim_id": "5466794ef8bdeeef",
+          "source_model": "claude-haiku-4-5",
+          "source_phase": 1,
+          "text": "haiku one",
+          "parent_claim_ids": [],
+          "tool_provenance": []
+        },
+        {
+          "claim_id": "551b6122c150c730",
+          "source_model": "claude-haiku-4-5",
+          "source_phase": 1,
+          "text": "haiku two",
+          "parent_claim_ids": [],
+          "tool_provenance": []
+        }
+      ],
+      "self_reflection_artifacts": [
+        {
+          "model_id": "claude-haiku-4-5",
+          "generated_at": "2026-05-04T12:00:01.500000Z",
+          "strongest_claim_id": "5466794ef8bdeeef",
+          "weakest_claim_id": "551b6122c150c730",
+          "tag_justification": "why this tag"
+        }
+      ],
+      "generation_started_at": "2026-05-04T12:00:00Z",
+      "generation_completed_at": "2026-05-04T12:00:01Z",
+      "latency_used_for_reflection_ms": 0
+    }
+  },
+  "phase_2": [
+    {
+      "reader_model": "claude-sonnet-4-6",
+      "target_model": "claude-opus-4-7",
+      "agreements": [
+        {
+          "claim_id": "a7f612526033f4b6"
+        }
+      ],
+      "disagreements": [
+        {
+          "target_claim_id": "0891eaa12b5656a5",
+          "reason": "sonnet disagrees with opus one"
+        }
+      ],
+      "missing": [
+        {
+          "claim_id": "c0402a4f56f615d4",
+          "source_model": "claude-sonnet-4-6",
+          "source_phase": 2,
+          "text": "sonnet says opus missed this",
+          "parent_claim_ids": [],
+          "tool_provenance": []
+        }
+      ]
+    },
+    {
+      "reader_model": "claude-haiku-4-5",
+      "target_model": "claude-opus-4-7",
+      "agreements": [
+        {
+          "claim_id": "0891eaa12b5656a5"
+        },
+        {
+          "claim_id": "a7f612526033f4b6"
+        }
+      ],
+      "disagreements": [],
+      "missing": []
+    },
+    {
+      "reader_model": "claude-opus-4-7",
+      "target_model": "claude-sonnet-4-6",
+      "agreements": [],
+      "disagreements": [
+        {
+          "target_claim_id": "afb611b2ad1079d5",
+          "reason": "opus disagrees with sonnet one"
+        }
+      ],
+      "missing": []
+    },
+    {
+      "reader_model": "claude-haiku-4-5",
+      "target_model": "claude-sonnet-4-6",
+      "agreements": [],
+      "disagreements": [
+        {
+          "target_claim_id": "afb611b2ad1079d5",
+          "reason": "haiku disagrees with sonnet one"
+        }
+      ],
+      "missing": []
+    },
+    {
+      "reader_model": "claude-opus-4-7",
+      "target_model": "claude-haiku-4-5",
+      "agreements": [
+        {
+          "claim_id": "5466794ef8bdeeef"
+        }
+      ],
+      "disagreements": [],
+      "missing": []
+    },
+    {
+      "reader_model": "claude-sonnet-4-6",
+      "target_model": "claude-haiku-4-5",
+      "agreements": [
+        {
+          "claim_id": "5466794ef8bdeeef"
+        },
+        {
+          "claim_id": "551b6122c150c730"
+        }
+      ],
+      "disagreements": [],
+      "missing": []
+    }
+  ],
+  "phase_2_taggings": [],
+  "phase_3": [
+    {
+      "turn_id": "t1",
+      "speaker_model": "claude-opus-4-7",
+      "channel": "critique",
+      "target_model": "claude-sonnet-4-6",
+      "target_claim_ids": [
+        "afb611b2ad1079d5"
+      ],
+      "content": "opus critiques sonnet one in dialogue"
+    },
+    {
+      "turn_id": "t2",
+      "speaker_model": "claude-haiku-4-5",
+      "channel": "critique",
+      "target_model": "claude-opus-4-7",
+      "target_claim_ids": [
+        "a7f612526033f4b6"
+      ],
+      "content": "haiku critiques opus two"
+    },
+    {
+      "turn_id": "t3",
+      "speaker_model": "claude-sonnet-4-6",
+      "channel": "converge",
+      "target_model": "claude-opus-4-7",
+      "target_claim_ids": [
+        "a7f612526033f4b6"
+      ],
+      "content": "agree"
+    },
+    {
+      "turn_id": "t4",
+      "speaker_model": "claude-haiku-4-5",
+      "channel": "converge",
+      "target_model": "claude-opus-4-7",
+      "target_claim_ids": [
+        "a7f612526033f4b6"
+      ],
+      "content": "agree too"
+    },
+    {
+      "turn_id": "t5",
+      "speaker_model": "claude-sonnet-4-6",
+      "channel": "augment",
+      "target_model": null,
+      "target_claim_ids": [],
+      "content": "sonnet adds"
+    }
+  ],
+  "phase_4": {
+    "output": "[O] opus one\n[O] opus two\n[S] sonnet one [DISPUTED — claude-opus-4-7: 'opus disagrees with sonnet one'; claude-haiku-4-5: 'haiku disagrees with sonnet one']\n[H] haiku one\n[H] haiku two",
+    "output_mode": "annotated",
+    "claim_trace": [
+      {
+        "claim_id": "0891eaa12b5656a5",
+        "disposition": "present",
+        "modified_text": null,
+        "omission_reason": null
+      },
+      {
+        "claim_id": "a7f612526033f4b6",
+        "disposition": "present",
+        "modified_text": null,
+        "omission_reason": null
+      },
+      {
+        "claim_id": "afb611b2ad1079d5",
+        "disposition": "modified",
+        "modified_text": "sonnet one [DISPUTED — claude-opus-4-7: 'opus disagrees with sonnet one'; claude-haiku-4-5: 'haiku disagrees with sonnet one']",
+        "omission_reason": null
+      },
+      {
+        "claim_id": "d71f65a3fe587341",
+        "disposition": "omitted",
+        "modified_text": null,
+        "omission_reason": "redundant with opus two"
+      },
+      {
+        "claim_id": "5466794ef8bdeeef",
+        "disposition": "present",
+        "modified_text": null,
+        "omission_reason": null
+      },
+      {
+        "claim_id": "551b6122c150c730",
+        "disposition": "present",
+        "modified_text": null,
+        "omission_reason": null
+      }
+    ],
+    "synthesis_rules_applied": [
+      "irreducibility_preservation",
+      "agreement_elevation",
+      "disagreement_surfacing",
+      "attribution_preservation"
+    ],
+    "elevations": [
+      {
+        "claim_ids": [
+          "a7f612526033f4b6"
+        ],
+        "converge_turn_ids": [
+          "t3",
+          "t4"
+        ]
+      }
+    ],
+    "surfaced_disagreements": [
+      {
+        "claim_ids": [
+          "afb611b2ad1079d5",
+          "0891eaa12b5656a5"
+        ],
+        "note": "opus and haiku both push back on sonnet one"
+      }
+    ]
+  },
+  "metrics": {
+    "distinct_claim_share": {
+      "claude-opus-4-7": 0.34,
+      "claude-sonnet-4-6": 0.33,
+      "claude-haiku-4-5": 0.33
+    },
+    "edge_case_coverage_share": {
+      "claude-opus-4-7": 0.5,
+      "claude-sonnet-4-6": 0.1,
+      "claude-haiku-4-5": 0.4
+    },
+    "structural_pattern_share": {
+      "claude-opus-4-7": 0.4,
+      "claude-sonnet-4-6": 0.3,
+      "claude-haiku-4-5": 0.3
+    },
+    "parity_threshold": 0.15,
+    "irreducibility_violations": []
+  }
+}
