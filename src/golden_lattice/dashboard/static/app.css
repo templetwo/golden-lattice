@@ -340,3 +340,22 @@ table.mx th { font-size: 11px; color: #8b919d; }
 .writing-text { margin-top: 6px; max-height: 9.5em; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 15px; line-height: 1.6; color: #cfd3db; }
 .answer { margin-top: 10px; }
 .answer p { margin: 6px 0 0; font-size: 15.5px; line-height: 1.65; color: #d4d8df; overflow-wrap: anywhere; }
+
+/* Rendered Markdown in prose (answers, reasons, critiques, turns) */
+.md { overflow-wrap: anywhere; }
+.md p { margin: 6px 0 0; }
+.md p:first-child { margin-top: 4px; }
+.voice .md p, .turn .md p { font-size: 16px; line-height: 1.65; color: #cfd3db; }
+.answer .md p, .answer .md li { font-size: 15.5px; line-height: 1.65; color: #d4d8df; }
+.refl .md p { font-size: 15px; font-style: italic; color: #a9afba; }
+.md strong { color: var(--text-bright); font-weight: 600; }
+.md em { font-style: italic; }
+.md code { font-family: var(--mono); font-size: 0.86em; background: #1b1e26; border: 1px solid var(--border-soft); border-radius: 4px; padding: 0 4px; }
+.md pre { margin: 8px 0 0; padding: 10px 12px; background: #0b0c10; border: 1px solid var(--border-soft); border-radius: 6px; overflow-x: auto; }
+.md pre code { background: none; border: 0; padding: 0; font-size: 12.5px; line-height: 1.55; color: #c4c9d2; }
+.md ul, .md ol { margin: 6px 0 0; padding-left: 22px; }
+.md li { margin-top: 3px; font-size: 16px; line-height: 1.6; color: #cfd3db; }
+.md .md-h { margin: 14px 0 0; font-family: var(--mono); font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #c4c9d2; font-weight: 500; }
+.md blockquote { margin: 8px 0 0; padding-left: 12px; border-left: 2px solid var(--border); color: var(--text-mid); }
+.md hr { border: 0; border-top: 1px solid var(--border-soft); margin: 12px 0; }
+.md a { color: var(--augment); }

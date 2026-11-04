@@ -8,6 +8,9 @@ import {
   challengeLabel, outcomeWord, stepDisagreement,
 } from './notes.js';
 import { phaseActivity } from './stream.js';
+import { renderMarkdown } from './markdown.js';
+
+const md = (text) => `<div class="md">${renderMarkdown(text)}</div>`;
 
 const TAG_FAMILY = { F: 'fable', O: 'opus', S: 'sonnet', H: 'haiku' };
 const SPLIT_MIN = 0.28;
@@ -68,13 +71,13 @@ function sectionSeats() {
     let answer = p1.response || '';
     if (S.live && w && w.phase === 'phase_1' && w.answer) answer = w.answer;
     const answerShown = S.live ? !!answer : (answer && on(`r:${seat.id}`) || (answer && (S.claims || []).some((c) => c.author === seat.id && on(`c:${c.id}`))));
-    const answerHtml = answerShown ? `<div class="answer"><div class="k">initial answer</div>${answer.split(/\n\s*\n/).map((para) => `<p>${esc(para)}</p>`).join('')}</div>` : '';
+    const answerHtml = answerShown ? `<div class="answer"><div class="k">initial answer</div>${md(answer)}</div>` : '';
     return `
       <div class="seat-col">
         <div class="k">${seatName(seat.id)} · ${esc(seat.focus || '')} · confidence ${Number(seat.conf || 0).toFixed(2)} · ${seat.claim_count} claims</div>
         ${answerHtml}
         ${shown ? `
-          <p class="refl">${esc(refl.just || '')}</p>
+          <div class="refl">${md(refl.just || '')}</div>
           ${strong ? `<p class="small-serif"><span class="k">strongest</span> ${esc(strong.text)}</p>` : ''}
           ${weak ? `<p class="small-serif"><span class="k">weakest</span> ${esc(weak.text)}</p>` : ''}` : '<p class="caption">self-reflection not yet in</p>'}
       </div>`;
@@ -111,13 +114,13 @@ function outcomeBlock(c) {
 function challengeBlocks(c, disputers) {
   const cross = disputers.flatMap((r) => (c.disagreements || [])
     .filter((d) => d.reader === r && on(`x:${r}>${c.author}`))
-    .map((d) => `<div class="voice">${seatName(r)}<p>${esc(d.reason)}</p></div>`));
+    .map((d) => `<div class="voice">${seatName(r)}${md(d.reason)}</div>`));
   const later = disputers.flatMap((r) => (c.critiques || [])
     .filter((k) => k.speaker === r && on(`t:${k.turn_id}`))
     .map((k) => {
       const after = (c.agreed_by || []).includes(r) && !(c.disagreements || []).some((d) => d.reader === r)
         ? ' <span class="k">after endorsing it in cross-reading</span>' : '';
-      return `<div class="voice">${seatName(r)}${after}<p>${esc(k.content)}</p></div>`;
+      return `<div class="voice">${seatName(r)}${after}${md(k.content)}</div>`;
     }));
   if (!cross.length && !later.length) return '<p class="caption">No reader challenged this claim.</p>';
   return `<div class="story-h">Challenged by</div>
@@ -194,10 +197,10 @@ function sectionDialogue() {
   const elevatedTurns = new Set((S.elevations || []).flatMap((e) => e.converge_turn_ids || []));
   const turns = (S.turns || []).filter((t) => t.channel !== 'critique' && on(`t:${t.id}`)).map((t) => `
     <div class="turn"><div class="k">${seatName(t.speaker)} · <span class="${t.channel}">${t.channel}</span> · ${t.target ? seatName(t.target) : 'all'}${elevatedTurns.has(t.id) && on('art') ? ' · <span class="converge">✦ elevated</span>' : ''}</div>
-      <p>${esc(t.content)}</p></div>`).join('');
+      ${md(t.content)}</div>`).join('');
   const loose = (S.unattached_critiques || []).filter((k) => on(`t:${k.turn_id}`)).map((k) => `
     <div class="turn"><div class="k">${seatName(k.speaker)} · <span class="critique">critique</span> · ${k.target ? seatName(k.target) : 'all'} · <span class="dim">no Phase 1 claim</span></div>
-      <p>${esc(k.content)}</p></div>`).join('');
+      ${md(k.content)}</div>`).join('');
   return `<p class="caption">${esc(critiquesCaption(S.stats))}</p>${turns || '<p class="caption">no augment or converge turns yet</p>'}${loose}`;
 }
 
