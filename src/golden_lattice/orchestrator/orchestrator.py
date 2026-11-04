@@ -147,11 +147,10 @@ def _make_emitter(callback: Optional[ProgressCallback]) -> _Emitter | _NullEmitt
 
 
 DEFAULT_INVITED_MODELS: tuple[ModelId, ...] = (
-    ModelId.FABLE,
     ModelId.OPUS,
     ModelId.SONNET,
     ModelId.HAIKU,
-)
+)  # the three live seats; Fable 5.1 rejects forced tool choice and is not invited by default
 
 
 def _generate_session_id() -> str:

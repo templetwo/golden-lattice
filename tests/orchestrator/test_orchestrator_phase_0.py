@@ -58,7 +58,7 @@ def test_phase_0_collects_proposals_from_all_invited_models(
     """One InvestigationProposal per invited model, regardless of whether
     that model proposed any queries."""
     config = LatticeConfig()
-    session = run_lattice_session(
+    session = run_four(
         "p",
         config=config,
         client=stub_client,
@@ -202,7 +202,7 @@ def test_phase_0_emits_grounding_proposals_results_freeze_in_order(
 
     events: list = []
     config = LatticeConfig()
-    run_lattice_session(
+    run_four(
         "p",
         config=config,
         client=stub_client,
@@ -249,7 +249,7 @@ def test_phase_0_full_pipeline_produces_substrate_valid_session(
         "s query": "Sonnet result.",
     }
     config = LatticeConfig()
-    session = run_lattice_session(
+    session = run_four(
         "p",
         config=config,
         client=stub_client,
@@ -265,3 +265,19 @@ def test_phase_0_full_pipeline_produces_substrate_valid_session(
     assert len(session.phase_0.proposals) == 4
     # Parity still computes (Phase 0 does not break the parity pipeline).
     assert session.metrics is not None
+
+
+from golden_lattice.memory_graph.base import ModelId as _FourSeatModelId  # noqa: E402
+
+FOUR_SEATS = (
+    _FourSeatModelId.FABLE,
+    _FourSeatModelId.OPUS,
+    _FourSeatModelId.SONNET,
+    _FourSeatModelId.HAIKU,
+)
+
+
+def run_four(*args, **kwargs):
+    """Four-seat roster for protocol tests that exercise four seats. The default is three."""
+    kwargs.setdefault("invited_models", FOUR_SEATS)
+    return run_lattice_session(*args, **kwargs)

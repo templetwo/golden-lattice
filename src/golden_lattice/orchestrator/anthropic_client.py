@@ -227,7 +227,7 @@ class AnthropicClient:
                 model=model_id, phase="phase_0_proposal", underlying=exc
             ) from exc
         self._refuse_if_truncated(response, model=model_id, phase="phase_0_proposal", max_tokens=self._allowance.phase_0_proposal)
-        tool_input = _extract_tool_input(response, tool["name"])
+        tool_input = _extract_tool_input(response, tool["name"], model=model_id, phase="phase_0_proposal")
         try:
             return parse_investigation_proposal_tool_use(
                 tool_input, expected_model=model_id
@@ -273,7 +273,7 @@ class AnthropicClient:
             ) from exc
         completed = datetime.now(timezone.utc)
         self._refuse_if_truncated(response, model=model_id, phase="phase_1", max_tokens=self._allowance.phase_1_response)
-        tool_input = _extract_tool_input(response, tool["name"])
+        tool_input = _extract_tool_input(response, tool["name"], model=model_id, phase="phase_1")
         try:
             return parse_phase_1_response_tool_use(
                 tool_input,
@@ -319,7 +319,7 @@ class AnthropicClient:
                 model=model_id, phase="self_reflection", underlying=exc
             ) from exc
         self._refuse_if_truncated(response, model=model_id, phase="self_reflection", max_tokens=self._allowance.self_reflection)
-        tool_input = _extract_tool_input(response, tool["name"])
+        tool_input = _extract_tool_input(response, tool["name"], model=model_id, phase="self_reflection")
         own_claim_ids = {c.claim_id for c in phase_1_response.claims}
         try:
             return parse_self_reflection_tool_use(
@@ -377,7 +377,7 @@ class AnthropicClient:
                 model=reader_model, phase="phase_2_cross_reading", underlying=exc
             ) from exc
         self._refuse_if_truncated(response, model=reader_model, phase="phase_2_cross_reading", max_tokens=self._allowance.phase_2_cross_reading)
-        tool_input = _extract_tool_input(response, tool["name"])
+        tool_input = _extract_tool_input(response, tool["name"], model=reader_model, phase="phase_2_cross_reading")
         try:
             return parse_cross_reading_tool_use(
                 tool_input,
@@ -430,7 +430,7 @@ class AnthropicClient:
                 model=tagger_model, phase="phase_2_tagging", underlying=exc
             ) from exc
         self._refuse_if_truncated(response, model=tagger_model, phase="phase_2_tagging", max_tokens=self._allowance.phase_2_tagging)
-        tool_input = _extract_tool_input(response, tool["name"])
+        tool_input = _extract_tool_input(response, tool["name"], model=tagger_model, phase="phase_2_tagging")
         try:
             return parse_phase_2_tagging_tool_use(
                 tool_input,
@@ -489,7 +489,7 @@ class AnthropicClient:
                 model=speaker_model, phase="phase_3", underlying=exc
             ) from exc
         self._refuse_if_truncated(response, model=speaker_model, phase="phase_3", max_tokens=self._allowance.phase_3_dialogue)
-        tool_input = _extract_tool_input(response, tool["name"])
+        tool_input = _extract_tool_input(response, tool["name"], model=speaker_model, phase="phase_3")
         try:
             return parse_phase_3_dialogue_tool_use(
                 tool_input,
@@ -507,13 +507,15 @@ class AnthropicClient:
             raise
 
 
-def _extract_tool_input(response: Any, tool_name: str) -> dict[str, Any]:
+def _extract_tool_input(
+    response: Any, tool_name: str, *, model: ModelId, phase: str
+) -> dict[str, Any]:
     """Extract the tool_use block's input dict from an Anthropic messages response."""
     for block in response.content:
         if getattr(block, "type", None) == "tool_use" and block.name == tool_name:
             return dict(block.input)
     raise OrchestratorProviderError(
-        model=ModelId.OPUS,  # placeholder — caller has better context
-        phase="response_parsing",
+        model=model,
+        phase=phase,
         underlying=ValueError(f"No tool_use block named {tool_name!r} in response"),
     )

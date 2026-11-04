@@ -32,10 +32,10 @@ class LatticeConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     api_key: Optional[str] = None
-    timeout_phase_1_seconds: float = 90.0
-    timeout_self_reflection_seconds: float = 30.0
-    timeout_phase_2_seconds: float = 60.0
-    timeout_phase_3_seconds: float = 60.0
+    timeout_phase_1_seconds: float = 300.0
+    timeout_self_reflection_seconds: float = 90.0
+    timeout_phase_2_seconds: float = 180.0
+    timeout_phase_3_seconds: float = 240.0
     confidence_threshold: float = 0.7
     output_mode: OutputMode = DEFAULT_OUTPUT_MODE
 

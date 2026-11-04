@@ -66,7 +66,7 @@ def test_phase_0_session_round_trips_through_json_store(
     stub_search_client.fail_reasons = {"haiku fail q": "stub timeout"}
 
     config = LatticeConfig()
-    session = run_lattice_session(
+    session = run_four(
         "p",
         config=config,
         client=stub_client,
@@ -251,3 +251,19 @@ def test_pre_amendment_persisted_sessions_still_load_with_phase_0_none():
         )
         # And other invariants still hold on these.
         assert isinstance(session, Session)
+
+
+from golden_lattice.memory_graph.base import ModelId as _FourSeatModelId  # noqa: E402
+
+FOUR_SEATS = (
+    _FourSeatModelId.FABLE,
+    _FourSeatModelId.OPUS,
+    _FourSeatModelId.SONNET,
+    _FourSeatModelId.HAIKU,
+)
+
+
+def run_four(*args, **kwargs):
+    """Four-seat roster for protocol tests that exercise four seats. The default is three."""
+    kwargs.setdefault("invited_models", FOUR_SEATS)
+    return run_lattice_session(*args, **kwargs)

@@ -11,15 +11,14 @@ from golden_lattice.memory_graph.base import ModelId
 from golden_lattice.orchestrator import AnthropicClient, DEFAULT_INVITED_MODELS
 
 
-def test_default_roster_uses_current_four_model_api_ids():
+def test_default_roster_is_the_three_live_seats():
+    # Fable 5.1 rejects forced tool choice, so it is not invited by default.
     assert DEFAULT_INVITED_MODELS == (
-        ModelId.FABLE,
         ModelId.OPUS,
         ModelId.SONNET,
         ModelId.HAIKU,
     )
     assert [model.value for model in DEFAULT_INVITED_MODELS] == [
-        "claude-fable-5",
         "claude-opus-5",
         "claude-sonnet-5",
         "claude-haiku-5-5",

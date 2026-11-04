@@ -121,7 +121,7 @@ def test_run_lattice_session_includes_self_reflection_artifacts(stub_client):
 def test_run_lattice_session_dispatches_phase_2_for_all_pairs(stub_client):
     """12 cross-readings (4 readers × 3 targets each) + 4 taggings."""
     config = LatticeConfig()
-    session = run_lattice_session(
+    session = run_four(
         "design a cache",
         config=config,
         client=stub_client,
@@ -274,7 +274,7 @@ def test_run_lattice_session_attaches_parity_metrics_for_four_seat_roster(stub_c
     where the lattice meets the world.
     """
     config = LatticeConfig()
-    session = run_lattice_session("p", config=config, client=stub_client)
+    session = run_four("p", config=config, client=stub_client)
     assert session.metrics is not None
     assert isinstance(session.metrics, SessionMetrics)
     assert set(session.metrics.distinct_claim_share.keys()) == {
@@ -350,7 +350,7 @@ def test_progress_callback_fires_full_event_sequence(stub_client):
 
     events: list = []
     config = LatticeConfig()
-    run_lattice_session(
+    run_four(
         "p",
         config=config,
         client=stub_client,
@@ -441,3 +441,19 @@ def test_live_lattice_session_smoke():
     print("\n--- Live session output ---\n")
     print(session.phase_4.output)
     print("\n--- End live output ---\n")
+
+
+from golden_lattice.memory_graph.base import ModelId as _FourSeatModelId  # noqa: E402
+
+FOUR_SEATS = (
+    _FourSeatModelId.FABLE,
+    _FourSeatModelId.OPUS,
+    _FourSeatModelId.SONNET,
+    _FourSeatModelId.HAIKU,
+)
+
+
+def run_four(*args, **kwargs):
+    """Four-seat roster for protocol tests that exercise four seats. The default is three."""
+    kwargs.setdefault("invited_models", FOUR_SEATS)
+    return run_lattice_session(*args, **kwargs)
