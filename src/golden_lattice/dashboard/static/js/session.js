@@ -31,6 +31,7 @@ function revealedDisputers(c) {
 // ---------- 00 · feed ----------
 function sectionFeed() {
   const p0 = S.phase0;
+  if (!p0 && S.live) return '<p class="lead">No investigation events yet.</p>';
   if (!p0) {
     return `<p class="lead">Investigation was skipped. The shared feed held only the temporal grounding; the run went straight to independent generation.</p>`;
   }
@@ -124,8 +125,8 @@ function sectionDisputes() {
   };
   let filter = ui.filter;
   let note = '';
-  if (st.disputed === 0) { filter = 'all'; note = 'no reader disputed anything in this run'; }
-  else if (filter === 'disputed' && !readingsIn) { filter = 'all'; note = 'readers have not cross-read yet'; }
+  if (!readingsIn) { if (filter === 'disputed') filter = 'all'; note = 'readers have not cross-read yet'; }
+  else if (st.disputed === 0) { filter = 'all'; note = 'no reader disputed anything in this run'; }
 
   const finalCount = (c) => (c.disputed_by || []).length;
   const seatOrder = Object.fromEntries((S.seats || []).map((s, i) => [s.id, i]));
@@ -206,6 +207,11 @@ function sectionSynthesis() {
 
 const RENDER = { '00': sectionFeed, '01': sectionSeats, '02': sectionDisputes, '03': sectionDialogue, '04': sectionSynthesis };
 
+function isPending(sec) {
+  if (B.first[sec] == null) return !!(S && S.live);
+  return ui.step < B.first[sec];
+}
+
 // ---------- frame ----------
 function frameHtml() {
   const seats = (S.seats || []).map((s) => `<span class="mast-seat">${seatName(s.id)} <span class="mono dimmer">${esc(s.id)}</span></span>`).join('');
@@ -251,7 +257,7 @@ function renderPanes() {
     const sec = item.getAttribute('data-sec');
     item.classList.toggle('on', sec === ui.active);
     item.classList.toggle('pinned', sec === ui.pinned && sec !== ui.active);
-    item.classList.toggle('pending', B.first[sec] != null && ui.step < B.first[sec]);
+    item.classList.toggle('pending', isPending(sec));
   });
 }
 
@@ -402,7 +408,7 @@ export function renderSession(rootEl, session, opts = {}) {
     const saved = Number(lsGet(`gl-replay-step-${S.id}`, B.N));
     ui.step = Number.isFinite(saved) ? Math.max(0, Math.min(B.N, saved)) : B.N;
   }
-  if ((S.stats || {}).disputed === 0) ui.filter = 'all';
+  ui.filter = (S.stats || {}).disputed === 0 && !S.live ? 'all' : 'disputed';
   root.innerHTML = frameHtml();
   root.querySelector('#gl-transport').innerHTML = transportHtml();
   wire();
@@ -419,7 +425,7 @@ export function refreshLive(session, sections) {
   (sections || SECTIONS).forEach((sec) => { if (visible(sec)) renderSection(sec); });
   root.querySelectorAll('.rail-item').forEach((item) => {
     const sec = item.getAttribute('data-sec');
-    item.classList.toggle('pending', B.first[sec] != null && ui.step < B.first[sec]);
+    item.classList.toggle('pending', isPending(sec));
   });
 }
 

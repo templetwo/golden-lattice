@@ -2,6 +2,7 @@
 // Reads bundle.record only; computes nothing beyond layout.
 import { esc, runDate, READING_WORDS, DIMENSION_WORDS } from './util.js';
 import { FAMILY_ORDER, familyColor } from './seats.js';
+import { connectLive } from './live.js';
 
 // Chart geometry inside the SVG viewBox. Labels and legend stay inside it.
 const VB = { w: 340, h: 120, x0: 30, x1: 286, y0: 10, y1: 100, max: 0.5 };
@@ -199,11 +200,51 @@ export function renderRecord(root, bundle) {
     </div>
   </div>`;
   wireChartTooltip(root, record);
+  watchInFlight(root, bundle);
   const search = root.querySelector('.search');
   search.addEventListener('input', () => {
     const q = search.value.trim().toLowerCase();
     root.querySelectorAll('.rows .r').forEach((row) => {
       row.hidden = q && !row.getAttribute('data-prompt').includes(q);
     });
+  });
+}
+
+// The in-flight row: while a run is live on this host, it sits at the top of
+// the list in the live color and becomes an ordinary row when it completes.
+const PHASE_OF = {
+  phase_0_datetime_grounding: '00 · investigation', phase_0_proposal_submitted: '00 · investigation',
+  phase_1_response_started: '01 · independent', phase_1_claim: '01 · independent', model_stream_delta: null,
+  phase_2_cross_reading: '02 · cross-reading', phase_3_turn: '03 · dialogue', phase_4_artifact: '04 · synthesis',
+};
+let recordConn = null;
+function watchInFlight(root, bundle) {
+  if (recordConn) recordConn.close();
+  const known = new Set((bundle.sessions || []).map((s) => s.id));
+  let current = null;
+  const row = () => root.querySelector('#gl-live-row');
+  const paint = () => {
+    const el = row();
+    if (!el) return;
+    if (!current) { el.hidden = true; el.innerHTML = ''; return; }
+    el.hidden = false;
+    el.innerHTML = `<a class="r live-row" href="/session/live"><span class="d critique">now · ${esc(current.phase.slice(0, 2))}</span><span class="t">${esc(current.prompt)}</span><span class="n"></span><span class="n"></span><span class="n"></span><span class="n"></span><span class="p critique">${esc(current.phase)}</span></a>`;
+  };
+  recordConn = connectLive({
+    onStatus: () => {},
+    onEvent: async (ev) => {
+      if (ev.event_type === 'session_started') { current = { id: ev.session_id, prompt: ev.prompt, phase: '00 · investigation' }; paint(); return; }
+      if (!current) return;
+      const ph = PHASE_OF[ev.event_type];
+      if (ph && ph !== current.phase) { current.phase = ph; paint(); }
+      if (ev.event_type === 'session_error') { current = null; paint(); }
+      if (ev.event_type === 'session_completed') {
+        const id = current.id; current = null; paint();
+        if (!known.has(id)) {
+          const { fetchBundle } = await import('../app.js');
+          setTimeout(async () => { renderRecord(root, await fetchBundle(true)); }, 1200);
+        }
+      }
+    },
   });
 }

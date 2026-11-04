@@ -26,16 +26,21 @@ export function buildBeats(s) {
   for (let i = 0; i < most; i++) {
     bySeat.forEach((claims) => { if (claims[i]) push('01', `c:${claims[i].id}`); });
   }
-  (s.seats || []).forEach((seat) => push('01', `r:${seat.id}`));
+  (s.seats || []).forEach((seat) => {
+    if (!s.live || (s.reflections || {})[seat.id]) push('01', `r:${seat.id}`);
+  });
 
   // Phase 2: one beat per cross-reading. Phase 3: one beat per turn.
   (s.pairs || []).forEach((p) => push('02', `x:${p.reader}>${p.target}`));
   (s.turns || []).forEach((t) => push('03', `t:${t.id}`));
 
-  // Phase 4: artifact, each output line, then metrics and readings.
-  push('04', 'art');
-  (s.synthesis_lines || []).forEach((l) => push('04', `l:${l.index}`));
-  push('04', 'metrics');
+  // Phase 4: artifact, each output line, then metrics and readings. A live
+  // session only has these beats once the events have actually arrived.
+  if (!s.live || s.artArrived) {
+    push('04', 'art');
+    (s.synthesis_lines || []).forEach((l) => push('04', `l:${l.index}`));
+  }
+  if (!s.live || s.metricsArrived) push('04', 'metrics');
 
   const first = {};
   beats.forEach((b, i) => { if (first[b.section] == null) first[b.section] = i; });
