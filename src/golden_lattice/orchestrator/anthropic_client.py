@@ -12,6 +12,7 @@ is instantiated, not when the module is imported.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import inspect
 from datetime import datetime, timezone
@@ -63,6 +64,22 @@ from golden_lattice.orchestrator.errors import (
 
 def _prompt_hash(prompt: str) -> str:
     return hashlib.sha256(prompt.encode("utf-8")).hexdigest()[:16]
+
+
+def _status_of(exc: BaseException) -> Optional[int]:
+    status = getattr(exc, "status_code", None)
+    return int(status) if isinstance(status, int) else None
+
+
+_CONNECTION_ERRORS = frozenset({"APIConnectionError", "APITimeoutError"})
+
+
+def _is_transient(exc: BaseException) -> bool:
+    """Transient: 429, 529, any 5xx, or a connection or timeout failure. Nothing else."""
+    status = _status_of(exc)
+    if status is not None:
+        return status == 429 or status == 529 or status >= 500
+    return type(exc).__name__ in _CONNECTION_ERRORS
 
 
 def _attach_raw(exc: BaseException, tool_input: dict[str, Any]) -> None:
@@ -132,9 +149,11 @@ class AnthropicClient:
                 "AnthropicClient requires the 'anthropic' package. "
                 "Install with: pip install anthropic"
             ) from exc
-        self._client = anthropic.AsyncAnthropic(api_key=api_key)
+        # SDK-level retries are off: the retry policy below is the only one.
+        self._client = anthropic.AsyncAnthropic(api_key=api_key, max_retries=0)
         self._stream_callback = stream_callback
         self._allowance = allowance or TokenAllowance()
+        self.retry_log: list[dict] = []
 
     def set_stream_callback(
         self,
@@ -165,7 +184,39 @@ class AnthropicClient:
                 output_tokens=int(getattr(usage, "output_tokens", 0) or 0),
             )
 
+    # Identical request on every attempt; delays are seconds between attempts.
+    RETRY_DELAYS: tuple[float, ...] = (2.0, 8.0)
+
     async def _stream_message(
+        self,
+        *,
+        model_id: ModelId,
+        phase: str,
+        **kwargs: Any,
+    ) -> Any:
+        """Run one Messages call, retrying only transient provider failures.
+
+        Never retried: 4xx other than 429, parse errors, and truncation (those are
+        refused after this call returns). Every retry is appended to retry_log.
+        """
+        attempt = 0
+        while True:
+            try:
+                return await self._stream_once(model_id=model_id, phase=phase, **kwargs)
+            except Exception as exc:
+                if attempt >= len(self.RETRY_DELAYS) or not _is_transient(exc):
+                    raise
+                self.retry_log.append({
+                    "model": model_id.value,
+                    "phase": phase,
+                    "attempt": attempt + 1,
+                    "status": _status_of(exc),
+                    "error": type(exc).__name__,
+                })
+                await asyncio.sleep(self.RETRY_DELAYS[attempt])
+                attempt += 1
+
+    async def _stream_once(
         self,
         *,
         model_id: ModelId,
