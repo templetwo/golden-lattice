@@ -434,6 +434,13 @@ Dark only, the current surface `#0c0d11` and panel `#0f1117`/`#14161d`.
 Spectral for anything read, JetBrains Mono for labels, ids, numbers. One mark
 per row. Gutters, not borders, between the strip's cells.
 
+Type sizes (Anthony, 2026-11-04: "the text sizes in the prompt area are way
+too large"): the prompt is never display type. In the Session masthead it is
+one line at body size, 15px, with the full text on click; in the Record's
+list it is 13.5px. Body text is 13.5 to 15px, labels 9.5 to 11px mono. The
+only number set larger than body size anywhere is the Record's flag count at
+22px. Nothing on either page is set above 22px.
+
 Seat colors: the four current hues fail the dataviz validator on the dark
 surface (lightness band fail on all four; Sonnet and Opus at ΔE 7.5 deutan and
 2.8 tritan). Re-step them until the validator passes all five checks with
