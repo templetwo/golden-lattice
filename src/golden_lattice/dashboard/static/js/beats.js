@@ -3,6 +3,10 @@
 
 export const PLAY_PERIOD_MS = 360;
 export const SECTIONS = ['00', '01', '02', '03', '04'];
+// Plain names beside the phase numbers (spec §12).
+export const SECTION_NAMES = {
+  '00': 'Research', '01': 'Initial answers', '02': 'Disagreements', '03': 'Discussion', '04': 'Final answer',
+};
 
 export function buildBeats(s) {
   const beats = [];
@@ -63,6 +67,11 @@ export function disputeBeat(B, claim, reader) {
 
 export function phaseLabel(B, step) {
   const b = B.beats[Math.min(step, B.N)];
-  const names = { '00': 'investigation', '01': 'independent', '02': 'cross-reading', '03': 'dialogue', '04': 'synthesis' };
-  return b ? `${b.section} · ${names[b.section]}` : '';
+  return b ? `${b.section} · ${SECTION_NAMES[b.section]}` : '';
+}
+
+// One named stop per phase that has steps, for the replay transport.
+export function phaseStops(B) {
+  return SECTIONS.filter((sec) => B.first[sec] != null)
+    .map((sec) => ({ sec, label: SECTION_NAMES[sec], step: B.first[sec] }));
 }

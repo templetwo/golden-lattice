@@ -1,7 +1,8 @@
 // Pure page decisions: which note a section says, which filter shows, how a
 // parity line reads. No DOM. Tested with `node --test tests/js`.
 import { esc, READING_WORDS, DIMENSION_WORDS } from './util.js';
-import { labelOf, colorOf } from './seats.js';
+import { labelOf, colorOf, FAMILY_ORDER } from './seats.js';
+export { SECTION_NAMES } from './beats.js';
 
 const seatName = (id) => `<span class="seat-name" style="color:${colorOf(id)}">${esc(labelOf(id))}</span>`;
 
@@ -63,4 +64,54 @@ export function parityLineHtml(S) {
   const shares = S.metrics.distinct_claim_share || {};
   const low = Object.entries(shares).sort((a, b) => a[1] - b[1])[0];
   return `<p class="mono small">parity <span class="present">holds</span> · threshold ${thr} · lowest share ${low ? `${esc(labelOf(low[0]))} ${low[1].toFixed(2)}` : '—'}${rec}</p>`;
+}
+
+// ---------- reading pass (spec §12) ----------
+const NUMBER_WORDS = { 1: 'one', 2: 'two', 3: 'three', 4: 'four' };
+
+export function challengeLabel(n) {
+  const word = NUMBER_WORDS[n] || String(n);
+  return `Challenged by ${word} reader${n === 1 ? '' : 's'}`;
+}
+
+export function outcomeWord(disposition) {
+  return { present: 'Retained', modified: 'Changed', omitted: 'Omitted' }[disposition] || 'Not yet in the final answer';
+}
+
+// Previous/Next disagreement: step through `ids` (table order), wrapping.
+export function stepDisagreement(ids, current, dir) {
+  if (!ids.length) return null;
+  const i = ids.indexOf(current);
+  if (i < 0) return dir < 0 ? ids[ids.length - 1] : ids[0];
+  return ids[(i + dir + ids.length) % ids.length];
+}
+
+export function sortRuns(runs, mode) {
+  const newest = (a, b) => (a.id < b.id ? 1 : a.id > b.id ? -1 : 0);
+  const out = runs.slice();
+  if (mode === 'disputed') out.sort((a, b) => (b.disputed - a.disputed) || newest(a, b));
+  else if (mode === 'flagged') out.sort((a, b) => ((b.parity === 'flag') - (a.parity === 'flag')) || newest(a, b));
+  else out.sort(newest);
+  return out;
+}
+
+export function recordSummary(record) {
+  const runs = record.runs || [];
+  const measured = runs.filter((r) => r.parity !== 'undefined');
+  const holds = measured.filter((r) => r.parity === 'holds').length;
+  const nf = (record.flags || []).length;
+  const parts = [`${runs.length} run${runs.length === 1 ? '' : 's'}`];
+  if (measured.length) parts.push(`parity holds in ${holds} of ${measured.length} measured`);
+  parts.push(`${nf} flag${nf === 1 ? '' : 's'}`);
+  let low = null;
+  for (const f of FAMILY_ORDER) {
+    const shares = ((record.series || {})[f] || []).map((p) => p.share).filter((v) => v != null);
+    if (!shares.length) continue;
+    const m = Math.min(...shares);
+    if (!low || m < low[1]) low = [f, m];
+  }
+  if (low) parts.push(`lowest seat ${low[0].toUpperCase()}, never below ${low[1].toFixed(2)}`);
+  const p = record.persistent || {};
+  parts.push(p.present ? `persistent flagging: ${String(p.family).toUpperCase()}` : 'no persistent flagging');
+  return parts.join(' · ');
 }
