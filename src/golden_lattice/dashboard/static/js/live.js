@@ -48,7 +48,7 @@ function freshSession(ev) {
     seats: models.map((m) => ({ id: m, family: familyOf(m), label: labelOf(m), legacy: false, focus: '', conf: 0, claim_count: 0 })),
     phase0: null, phase1: Object.fromEntries(models.map((m) => [m, { response: '' }])), reflections: {},
     streams: {},          // one buffer per streaming request (stream_id)
-    seatPhase: {},        // the newest phase each seat is streaming in
+    seatStage: {},        // the protocol stage each seat is streaming in
     claims: [], synthesis_lines: [], pairs: [], turns: [], interpretations: [], metrics: null,
     elevations: [], synthesis: { output: '', trace: [] }, stats: {}, metrics_recomputed: false,
     unattached_critiques: [],
@@ -66,6 +66,20 @@ export function writingText(w) {
 export function initialAnswerText(w) {
   const segs = readableStream((w && w.raw) || '');
   return segs.filter((s) => s.key === 'response').map((s) => s.text).join('\n\n') || ((w && w.prose) || '');
+}
+
+// Phases that run concurrently share a stage: a seat's cross-readings and
+// its tagging are all Disagreements work (review of 34be2a7, finding 1).
+const STAGE = {
+  phase_0_proposal: '00', phase_1: '01', self_reflection: '01',
+  phase_2_cross_reading: '02', phase_2_tagging: '02', phase_3: '03',
+};
+const stageOf = (phase) => STAGE[phase] || phase;
+
+function retire(state, keys) {
+  const L = state.L;
+  keys.forEach((k) => { if (L.streams[k]) L.streams[k].done = true; });
+  state.retired = (state.retired || []).concat(keys.filter((k) => L.streams[k]));
 }
 
 export function streamKey(ev) {
@@ -159,6 +173,7 @@ export function applyEvent(state, ev) {
   switch (t) {
     case 'phase_0_datetime_grounding': ensureP0(L).grounding = ev.formatted_text; return ['00'];
     case 'phase_0_proposal_submitted': {
+      retire(state, [`phase_0_proposal:${ev.model_id}`]);
       const p0 = ensureP0(L);
       p0.proposals.push({ model: ev.model_id, count: (ev.queries || []).length, queries: ev.queries || [] });
       p0.unique = new Set(p0.proposals.flatMap((p) => p.queries)).size;
@@ -175,11 +190,12 @@ export function applyEvent(state, ev) {
       if (!w) {
         w = L.streams[key] = { key, model: ev.model_id, phase: ev.phase, target: ev.target_model || null, raw: '', prose: '' };
       }
-      if (L.seatPhase[ev.model_id] !== ev.phase) {
+      const stage = stageOf(ev.phase);
+      if (L.seatStage[ev.model_id] !== stage) {
         keepInitialAnswer(L, ev.model_id);
-        state.retired = Object.values(L.streams)
-          .filter((x) => x.model === ev.model_id && x.phase !== ev.phase).map((x) => x.key);
-        L.seatPhase[ev.model_id] = ev.phase;
+        retire(state, Object.values(L.streams)
+          .filter((x) => x.model === ev.model_id && !x.done && stageOf(x.phase) !== stage).map((x) => x.key));
+        L.seatStage[ev.model_id] = stage;
       }
       if (ev.delta_kind === 'text') w.prose += ev.delta; else w.raw += ev.delta;
       state.status = `streaming · ${labelOf(ev.model_id)}`;
@@ -198,17 +214,22 @@ export function applyEvent(state, ev) {
     }
     case 'phase_1_response_completed': {
       keepInitialAnswer(L, ev.model_id);
+      retire(state, [`phase_1:${ev.model_id}`]);
       const seat = L.seats.find((s) => s.id === ev.model_id);
       if (seat) { seat.focus = ev.focus_tag; seat.conf = ev.confidence; }
       return ['01'];
     }
     case 'self_reflection':
+      retire(state, [`self_reflection:${ev.model_id}`]);
       L.reflections[ev.model_id] = { strong: ev.strongest_claim_id, weak: ev.weakest_claim_id, just: ev.tag_justification || '' };
       return ['01'];
     case 'phase_2_cross_reading':
+      retire(state, [`phase_2_cross_reading:${ev.reader_model}>${ev.target_model}`]);
       L.pairs.push({ reader: ev.reader_model, target: ev.target_model, disputed: ev.disagreements_count, endorsed: ev.agreements_count, missing: ev.missing_count });
       restat(L); return ['02'];
+    case 'phase_2_tagging': retire(state, [`phase_2_tagging:${ev.tagger_model}`]); return [];
     case 'phase_3_turn': {
+      retire(state, [`phase_3:${ev.speaker_model}`]);
       L.turns.push({ id: ev.turn_id, speaker: ev.speaker_model, channel: ev.channel, target: ev.target_model, content: ev.content });
       if (ev.channel === 'critique') {
         let attached = 0;
@@ -308,14 +329,15 @@ export function startLive(root) {
 
   // At most one repaint per seat per frame, however fast deltas arrive.
   const pendingWriting = new Set();
+  const flushRetired = () => { if (state.retired && state.retired.length) { removeWriting(state.retired); state.retired = []; } };
   const scheduleWriting = (key) => {
-    if (state.retired && state.retired.length) { removeWriting(state.retired); state.retired = []; }
+    flushRetired();
     if (pendingWriting.has(key)) return;
     pendingWriting.add(key);
     requestAnimationFrame(() => {
       pendingWriting.delete(key);
       const w = state.L && state.L.streams[key];
-      if (w) updateWriting(w, writingText(w));
+      if (w && !w.done) updateWriting(w, writingText(w));
       if (w && w.phase === 'phase_1') {
         w.answer = initialAnswerText(w);
         refreshLive(state.L, ['01']);
@@ -327,6 +349,7 @@ export function startLive(root) {
     onStatus: (s) => { state.status = s; syncInput(); },
     onEvent: async (ev) => {
       const changed = applyEvent(state, ev);
+      flushRetired();
       if (changed == null) return;
       if (changed === 'all') { state.hydrated = false; renderSession(root, state.L, { mode: 'live' }); renderBar(); return; }
       if (changed === 'stream') { scheduleWriting(state.streamKey); syncInput(); return; }

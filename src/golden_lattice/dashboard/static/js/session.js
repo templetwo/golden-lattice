@@ -260,7 +260,10 @@ function frameHtml() {
       <button class="details-btn" data-details="1" aria-expanded="${ui.details}">Details</button>
     </header>
     <div class="mast-seats">${seats}</div>
-    ${mode === 'live' ? '<section class="writing" id="gl-writing" aria-live="polite" aria-label="Writing now" hidden><div class="k">writing now</div><div class="writing-cards"></div></section>' : ''}
+    ${mode === 'live' ? `<section class="writing${ui.writingExpanded ? ' expanded' : ''}" id="gl-writing" aria-label="Writing now" hidden>
+      <div class="writing-bar"><span class="k">writing now · <span class="writing-count">0</span></span>
+        <button class="pane-btn" data-writing-toggle="1" aria-expanded="${!!ui.writingExpanded}">${ui.writingExpanded ? 'Collapse' : 'Expand'}</button></div>
+      <div class="writing-cards"></div></section>` : ''}
     <div class="details" ${ui.details ? '' : 'hidden'}><div class="k">model ids</div>${ids}<div class="k" style="margin-top:6px">session</div><div class="mono">${esc(S.id || '')}</div></div>
     <div class="body">
       <nav class="rail" aria-label="Sections">${rail}</nav>
@@ -431,8 +434,18 @@ export function openClaim(id, { keepReturn = false } = {}) {
   if (!keepReturn) ui.returnTo = null;
   writeHash(); renderPanes();
   const el = root.querySelector(`[data-open="${CSS.escape(id)}"]`);
-  if (el) el.scrollIntoView({ block: 'start' });
+  if (el) scrollBelowToolbar(el);
   focusRow(id);
+}
+
+// Scroll a claim to the top of its pane but below the sticky toolbar, so
+// Next/Previous never hide the start of the claim (review of 34be2a7, finding 3).
+function scrollBelowToolbar(el) {
+  const bd = el.closest('.bd');
+  if (!bd) { el.scrollIntoView({ block: 'start' }); return; }
+  const head = bd.querySelector('.dis-head, .back-bar');
+  const offset = (head ? head.getBoundingClientRect().height : 0) + 8;
+  bd.scrollTop += el.getBoundingClientRect().top - bd.getBoundingClientRect().top - offset;
 }
 
 function stepDispute(dir) {
@@ -479,6 +492,15 @@ function wire() {
     if (t.closest('[data-unpin]')) { ui.pinned = null; writeHash(); renderPanes(); return; }
     const focus = t.closest('[data-focus]');
     if (focus) { focusPane(focus.getAttribute('data-focus')); return; }
+    const wt = t.closest('[data-writing-toggle]');
+    if (wt) {
+      ui.writingExpanded = !ui.writingExpanded;
+      const strip = root.querySelector('#gl-writing');
+      if (strip) strip.classList.toggle('expanded', ui.writingExpanded);
+      wt.textContent = ui.writingExpanded ? 'Collapse' : 'Expand';
+      wt.setAttribute('aria-expanded', String(ui.writingExpanded));
+      return;
+    }
     if (t.closest('[data-details]')) {
       ui.details = !ui.details; lsSet('gl-details', ui.details ? '1' : '0');
       const d = root.querySelector('.details'); if (d) d.hidden = !ui.details;
@@ -584,6 +606,7 @@ export function updateWriting(stream, text) {
   body.textContent = text || '…';
   if (stick) body.scrollTop = body.scrollHeight;
   strip.hidden = false;
+  countWriting(strip);
 }
 
 export function removeWriting(keys) {
@@ -591,6 +614,13 @@ export function removeWriting(keys) {
   if (!strip) return;
   keys.forEach((k) => { const c = strip.querySelector(`[data-writing="${CSS.escape(k)}"]`); if (c) c.remove(); });
   if (!strip.querySelector('.writing-card')) strip.hidden = true;
+  countWriting(strip);
+}
+
+function countWriting(strip) {
+  const n = strip.querySelectorAll('.writing-card').length;
+  const c = strip.querySelector('.writing-count');
+  if (c) c.textContent = `${n} request${n === 1 ? '' : 's'}`;
 }
 
 export function clearWriting() {

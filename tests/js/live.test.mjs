@@ -77,3 +77,32 @@ test('deltas without a stream id fall back to seat and phase', async () => {
   applyEvent(state, { event_type: 'model_stream_delta', model_id: O, phase: 'phase_1', delta: 'lo"', delta_kind: 'tool_input' });
   assert.equal(writingText(state.L.streams[`phase_1:${O}`]), 'Hello');
 });
+
+// Review of 34be2a7, finding 1: cards retire on completion or a stage change only.
+test('concurrent Phase 2 requests from one seat keep their cards', () => {
+  const state = { L: null, retired: [] };
+  applyEvent(state, start('session_a'));
+  const d = (stream_id, target, phase) => applyEvent(state,
+    { event_type: 'model_stream_delta', model_id: O, phase, delta: '{"x": "', delta_kind: 'tool_input', stream_id, target_model: target });
+  const toS = `phase_2_cross_reading:${O}>${S}`, toH = `phase_2_cross_reading:${O}>${H}`, tag = `phase_2_tagging:${O}`;
+  d(toS, S, 'phase_2_cross_reading');
+  d(toH, H, 'phase_2_cross_reading');
+  d(tag, null, 'phase_2_tagging');
+  d(toS, S, 'phase_2_cross_reading');
+  assert.deepEqual(state.retired || [], [], 'alternating concurrent Phase 2 requests retires nothing');
+});
+
+test('a card retires when its own request completes, and on a real stage change', () => {
+  const state = { L: null, retired: [] };
+  applyEvent(state, start('session_a'));
+  const d = (stream_id, target, phase) => applyEvent(state,
+    { event_type: 'model_stream_delta', model_id: O, phase, delta: '{"x": "', delta_kind: 'tool_input', stream_id, target_model: target });
+  const toS = `phase_2_cross_reading:${O}>${S}`, toH = `phase_2_cross_reading:${O}>${H}`;
+  d(toS, S, 'phase_2_cross_reading');
+  d(toH, H, 'phase_2_cross_reading');
+  applyEvent(state, { event_type: 'phase_2_cross_reading', reader_model: O, target_model: S, agreements_count: 0, disagreements_count: 1, missing_count: 0 });
+  assert.deepEqual(state.retired, [toS]);
+  state.retired = [];
+  d(`phase_3:${O}`, null, 'phase_3');
+  assert.deepEqual(state.retired, [toH], 'moving to discussion retires the seat\'s remaining Phase 2 cards');
+});

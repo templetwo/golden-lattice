@@ -46,6 +46,22 @@ function collectList(lines, i) {
       j += 1;
       continue;
     }
+    // A fence inside an item: keep its lines verbatim (blank lines and
+    // indentation included), dedented by the fence's own indent.
+    const fence = /^(\s{2,})```/.exec(line);
+    if (items.length && fence) {
+      const cut = fence[1].length;
+      const code = [];
+      j += 1;
+      while (j < lines.length && !/^\s*```/.test(lines[j])) {
+        const l = lines[j];
+        code.push(l.slice(0, cut).trim() === '' ? l.slice(cut) : l.trimStart());
+        j += 1;
+      }
+      if (j < lines.length) j += 1;   // the closing fence
+      items[items.length - 1].lines.push({ code: code.join('\n') });
+      continue;
+    }
     if (!line.trim()) {
       let k = j + 1;
       while (k < lines.length && !lines[k].trim()) k += 1;
@@ -72,7 +88,12 @@ function renderItems(items, start, indent) {
       continue;
     }
     if (it.ordered !== ordered) break;
-    lis.push(it.lines.map(inline).join('<br>'));
+    let li = '';
+    it.lines.forEach((ln) => {
+      if (typeof ln === 'object') { li += `<pre><code>${esc(ln.code)}</code></pre>`; return; }
+      li += (li && !li.endsWith('</pre>') ? '<br>' : '') + inline(ln);
+    });
+    lis.push(li);
     k += 1;
   }
   const tag = ordered ? 'ol' : 'ul';

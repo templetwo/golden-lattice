@@ -332,9 +332,9 @@ table.mx th { font-size: 11px; color: #8b919d; }
 }
 
 /* Live: writing now */
-.writing { margin: 0 22px 8px; padding: 10px 12px 12px; background: var(--panel); border: 1px solid rgba(227, 93, 76, 0.28); border-radius: 7px; }
+.writing { margin: 0 22px 8px; padding: 10px 12px 12px; background: var(--panel); border: 1px solid rgba(227, 93, 76, 0.28); border-radius: 7px; max-height: min(30vh, 260px); display: flex; flex-direction: column; overflow: hidden; }
 .writing[hidden] { display: none; }
-.writing-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; margin-top: 8px; }
+.writing-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; margin-top: 8px; overflow-y: auto; min-height: 0; flex: 1 1 auto; padding-right: 4px; }
 .writing-card { min-width: 0; background: var(--panel-2); border-radius: 6px; padding: 8px 10px; }
 .writing-hd { display: flex; gap: 8px; align-items: baseline; }
 .writing-text { margin-top: 6px; max-height: 9.5em; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 15px; line-height: 1.6; color: #cfd3db; }
@@ -373,4 +373,17 @@ table.mx th { font-size: 11px; color: #8b919d; }
   .panes.two { grid-template-columns: minmax(0, 1fr) !important; }
   .pane .bd { padding: 12px 14px 24px; }
   .dis-head, .back-bar { margin-left: -14px; margin-right: -14px; padding-left: 14px; padding-right: 14px; }
+}
+
+/* Review of 34be2a7: a bounded writing strip */
+.session-page > .writing { flex: 0 0 auto; }
+.writing.expanded { max-height: 62vh; }
+.writing-bar { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
+.writing-bar .pane-btn { margin-left: auto; }
+.writing-text { max-height: 4.9em; }
+.writing.expanded .writing-text { max-height: 14em; }
+.session-page .body { min-height: 260px; }
+@media (max-width: 760px) {
+  .writing { max-height: min(26vh, 200px); margin: 0 12px 8px; }
+  .writing-cards { grid-template-columns: minmax(0, 1fr); }
 }

@@ -100,3 +100,10 @@ test('placeholder markers in model text are never expanded', () => {
     assert.doesNotMatch(out, /<a [^>]*<a /, `no anchor inside an anchor: ${src}`);
   }
 });
+
+// Review of 34be2a7, finding 4: fenced code inside a list item.
+test('fenced code inside a list item keeps its indentation', () => {
+  const src = '1. Example:\n   ```py\n   def f():\n       call()\n\n       return 1\n   ```\n2. next';
+  assert.equal(renderMarkdown(src),
+    '<ol><li>Example:<pre><code>def f():\n    call()\n\n    return 1</code></pre></li><li>next</li></ol>');
+});
