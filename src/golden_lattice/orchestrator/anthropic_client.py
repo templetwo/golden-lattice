@@ -58,6 +58,7 @@ from golden_lattice.memory_graph.tagging import Phase2Tagging
 from golden_lattice.orchestrator.config import TokenAllowance
 from golden_lattice.orchestrator.errors import (
     OrchestratorProviderError,
+    OrchestratorRefusalError,
     OrchestratorTruncationError,
 )
 
@@ -161,6 +162,21 @@ class AnthropicClient:
     ) -> None:
         """Set the per-session callback receiving provider deltas."""
         self._stream_callback = callback
+
+    def _refuse_if_refused(self, response: Any, *, model: ModelId, phase: str) -> None:
+        """Refuse a response the safety classifier declined, before any parsing."""
+        if getattr(response, "stop_reason", None) != "refusal":
+            return
+        details = getattr(response, "stop_details", None)
+        if isinstance(details, dict):
+            category = details.get("category")
+            explanation = str(details.get("explanation") or "")
+        else:
+            category = getattr(details, "category", None)
+            explanation = str(getattr(details, "explanation", "") or "")
+        raise OrchestratorRefusalError(
+            model=model, phase=phase, category=category, explanation=explanation[:300]
+        )
 
     def _refuse_if_truncated(
         self,
@@ -278,6 +294,7 @@ class AnthropicClient:
                 model=model_id, phase="phase_0_proposal", underlying=exc
             ) from exc
         self._refuse_if_truncated(response, model=model_id, phase="phase_0_proposal", max_tokens=self._allowance.phase_0_proposal)
+        self._refuse_if_refused(response, model=model_id, phase="phase_0_proposal")
         tool_input = _extract_tool_input(response, tool["name"], model=model_id, phase="phase_0_proposal")
         try:
             return parse_investigation_proposal_tool_use(
@@ -324,6 +341,7 @@ class AnthropicClient:
             ) from exc
         completed = datetime.now(timezone.utc)
         self._refuse_if_truncated(response, model=model_id, phase="phase_1", max_tokens=self._allowance.phase_1_response)
+        self._refuse_if_refused(response, model=model_id, phase="phase_1")
         tool_input = _extract_tool_input(response, tool["name"], model=model_id, phase="phase_1")
         try:
             return parse_phase_1_response_tool_use(
@@ -370,6 +388,7 @@ class AnthropicClient:
                 model=model_id, phase="self_reflection", underlying=exc
             ) from exc
         self._refuse_if_truncated(response, model=model_id, phase="self_reflection", max_tokens=self._allowance.self_reflection)
+        self._refuse_if_refused(response, model=model_id, phase="self_reflection")
         tool_input = _extract_tool_input(response, tool["name"], model=model_id, phase="self_reflection")
         own_claim_ids = {c.claim_id for c in phase_1_response.claims}
         try:
@@ -428,6 +447,7 @@ class AnthropicClient:
                 model=reader_model, phase="phase_2_cross_reading", underlying=exc
             ) from exc
         self._refuse_if_truncated(response, model=reader_model, phase="phase_2_cross_reading", max_tokens=self._allowance.phase_2_cross_reading)
+        self._refuse_if_refused(response, model=reader_model, phase="phase_2_cross_reading")
         tool_input = _extract_tool_input(response, tool["name"], model=reader_model, phase="phase_2_cross_reading")
         try:
             return parse_cross_reading_tool_use(
@@ -481,6 +501,7 @@ class AnthropicClient:
                 model=tagger_model, phase="phase_2_tagging", underlying=exc
             ) from exc
         self._refuse_if_truncated(response, model=tagger_model, phase="phase_2_tagging", max_tokens=self._allowance.phase_2_tagging)
+        self._refuse_if_refused(response, model=tagger_model, phase="phase_2_tagging")
         tool_input = _extract_tool_input(response, tool["name"], model=tagger_model, phase="phase_2_tagging")
         try:
             return parse_phase_2_tagging_tool_use(
@@ -540,6 +561,7 @@ class AnthropicClient:
                 model=speaker_model, phase="phase_3", underlying=exc
             ) from exc
         self._refuse_if_truncated(response, model=speaker_model, phase="phase_3", max_tokens=self._allowance.phase_3_dialogue)
+        self._refuse_if_refused(response, model=speaker_model, phase="phase_3")
         tool_input = _extract_tool_input(response, tool["name"], model=speaker_model, phase="phase_3")
         try:
             return parse_phase_3_dialogue_tool_use(

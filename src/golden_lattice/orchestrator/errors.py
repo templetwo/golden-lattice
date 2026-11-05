@@ -74,6 +74,30 @@ class OrchestratorTruncationError(OrchestratorError):
         )
 
 
+class OrchestratorRefusalError(OrchestratorError):
+    """A model's safety classifier declined the request (stop_reason 'refusal').
+
+    Typed so the failure says what happened: the category, and that no output was
+    produced. It is not a missing tool block, and it is never retried.
+    """
+
+    def __init__(
+        self,
+        *,
+        model: ModelId,
+        phase: str,
+        category: str | None,
+        explanation: str = "",
+    ) -> None:
+        self.model = model
+        self.phase = phase
+        self.category = category
+        self.explanation = explanation
+        super().__init__(
+            f"{model.value} refused {phase} (category={category}); no output was produced."
+        )
+
+
 class OrchestratorProviderError(OrchestratorError):
     """A provider (Anthropic) call failed in a way that's not a timeout —
     API error, rate limit, malformed response, etc."""
