@@ -109,6 +109,8 @@ generative complexity.
 
 from __future__ import annotations
 
+import re
+
 from golden_lattice.memory_graph.base import (
     ModelId,
     OutputMode,
@@ -204,6 +206,21 @@ def _join_blocks(*blocks: str) -> str:
     return "\n\n".join(block for block in blocks if block)
 
 
+_LINE_BREAKS = re.compile(r"[\n\r\v\f\x85  ]+")
+
+
+def _one_line(text: str) -> str:
+    """Collapse line breaks in free text to single spaces.
+
+    The accountability sections are line-oriented: one entry per line,
+    headers delimit sections. Notes, omission reasons and ids originate in
+    model output, so a line break inside one could forge an attributed line
+    or a section header. The text's meaning is untouched; only its line
+    structure is defended.
+    """
+    return _LINE_BREAKS.sub(" ", text)
+
+
 def _render_accountability_sections(
     session: Session,
     claim_trace: tuple[ClaimTraceEntry, ...],
@@ -220,20 +237,20 @@ def _render_accountability_sections(
         lines = [f"--- elevated ({len(elevations)}) ---"]
         for elevation in elevations:
             turns = ", ".join(
-                f"{tid} ({speakers_by_turn_id[tid].value})"
+                f"{_one_line(tid)} ({speakers_by_turn_id[tid].value})"
                 if tid in speakers_by_turn_id
-                else tid
+                else _one_line(tid)
                 for tid in elevation.converge_turn_ids
             )
             lines.append(
-                f"claim_ids: {', '.join(elevation.claim_ids)} | converge: {turns}"
+                f"claim_ids: {_one_line(', '.join(elevation.claim_ids))} | converge: {turns}"
             )
         sections.append("\n".join(lines))
     if surfaced_disagreements:
         lines = [f"--- disagreements surfaced ({len(surfaced_disagreements)}) ---"]
         for disagreement in surfaced_disagreements:
             lines.append(
-                f"claim_ids: {', '.join(disagreement.claim_ids)} | {disagreement.note}"
+                f"claim_ids: {_one_line(', '.join(disagreement.claim_ids))} | {_one_line(disagreement.note)}"
             )
         sections.append("\n".join(lines))
     omitted = [entry for entry in claim_trace if entry.disposition == "omitted"]
@@ -247,7 +264,10 @@ def _render_accountability_sections(
                 if claim is not None
                 else ""
             )
-            lines.append(f"{prefix}{entry.claim_id}: {entry.omission_reason}")
+            lines.append(
+                f"{prefix}{_one_line(entry.claim_id)}: "
+                f"{_one_line(entry.omission_reason or '')}"
+            )
         sections.append("\n".join(lines))
     return sections
 
