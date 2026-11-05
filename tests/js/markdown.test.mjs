@@ -80,3 +80,23 @@ test('inline code inside a link label renders, with no placeholder left', () => 
 test('a paragraph after a list is not swallowed into it', () => {
   assert.equal(renderMarkdown('- a\n- b\n\nAfter.'), '<ul><li>a</li><li>b</li></ul><p>After.</p>');
 });
+
+// Security review of 0c28c0d: placeholder markers smuggled in model text.
+test('placeholder markers in model text are never expanded', () => {
+  const H = '\u0001';
+  const attacks = [
+    `\`"x"\` [a](https://e.com/${H}0${H})`,
+    `[first](https://a.com) [second](https://b.com/${H}0${H}onmouseover=alert(1))`,
+    `${H}0${H} plain \`code\``,
+    `[lbl ${H}0${H}](https://c.com) \`z\``,
+  ];
+  for (const src of attacks) {
+    const out = renderMarkdown(src);
+    assert.doesNotMatch(out, /\u0001/, src);
+    for (const m of out.matchAll(/href="([^"]*)"/g)) {
+      assert.doesNotMatch(m[1], /[<>"]/, `href stays a plain URL: ${src}`);
+    }
+    assert.equal((out.match(/<a /g) || []).length, (out.match(/<\/a>/g) || []).length, src);
+    assert.doesNotMatch(out, /<a [^>]*<a /, `no anchor inside an anchor: ${src}`);
+  }
+});

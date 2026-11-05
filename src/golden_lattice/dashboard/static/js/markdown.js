@@ -11,21 +11,24 @@ const HOLD = '\u0001';
 function inline(text) {
   const held = [];
   const hold = (html) => { held.push(html); return `${HOLD}${held.length - 1}${HOLD}`; };
-  let s = esc(text);
+  const restore = (str) => str.replace(new RegExp(`${HOLD}(\\d+)${HOLD}`, 'g'), (_, i) => held[Number(i)] ?? '');
+  // The marker never comes from the input: model text cannot smuggle a
+  // placeholder in (security review of 0c28c0d).
+  let s = esc(String(text).split(HOLD).join(''));
   s = s.replace(/`([^`]+)`/g, (_, code) => hold(`<code>${code}</code>`));
   s = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (m, label, url) => {
-    if (!/^https?:\/\//i.test(url) || /&(quot|lt|gt|#39);/.test(url)) return m;
-    return hold(`<a href="${url}" target="_blank" rel="noopener noreferrer">${label}</a>`);
+    // An address must be a plain web URL: no quotes or brackets, and no
+    // placeholder (a code span inside the parentheses).
+    if (!/^https?:\/\//i.test(url) || /&(quot|lt|gt|#39);/.test(url) || url.includes(HOLD)) return restore(m);
+    // Resolve the label's own pieces now, so the held link is self-contained
+    // and restoration below is a single pass that never re-scans its output.
+    return hold(`<a href="${url}" target="_blank" rel="noopener noreferrer">${restore(label)}</a>`);
   });
   s = s.replace(/\*\*(?=\S)(.+?)(?<=\S)\*\*/g, '<strong>$1</strong>');
   s = s.replace(/(^|[^\w])__(?=\S)(.+?)(?<=\S)__(?!\w)/g, '$1<strong>$2</strong>');
   s = s.replace(/(^|[^\w*])\*(?=\S)([^*]+?)(?<=\S)\*(?![\w*])/g, '$1<em>$2</em>');
   s = s.replace(/(^|[^\w])_(?=\S)([^_]+?)(?<=\S)_(?!\w)/g, '$1<em>$2</em>');
-  // Held pieces can hold others (code inside a link label), so restore
-  // until none remain.
-  const back = new RegExp(`${HOLD}(\\d+)${HOLD}`, 'g');
-  for (let guard = 0; s.includes(HOLD) && guard < 8; guard++) s = s.replace(back, (_, i) => held[Number(i)]);
-  return s;
+  return restore(s);
 }
 
 // ---------- lists: indentation nests, blank lines between items keep one list ----------
