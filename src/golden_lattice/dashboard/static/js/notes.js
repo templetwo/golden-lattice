@@ -115,3 +115,19 @@ export function recordSummary(record) {
   parts.push(p.present ? `persistent flagging: ${String(p.family).toUpperCase()}` : 'no persistent flagging');
   return parts.join(' · ');
 }
+
+// A replay stop shows its section, pinned beside the section that leads
+// into it, so stepping to a phase never leaves mostly empty panes up.
+const STOP_PIN = { '02': '01', '03': '02', '04': '02' };
+export function stopLayout(sec) {
+  return { active: sec, pinned: STOP_PIN[sec] || null };
+}
+
+// The inline grid for a resized two-pane split; '' lets the stylesheet
+// (and its narrow-window rules) decide.
+export function splitColumns({ two, wide, split }) {
+  if (!two || !wide) return '';
+  const a = Math.round(split * 100) / 100;
+  const b = Math.round((1 - split) * 100) / 100;
+  return `minmax(0, ${a}fr) 8px minmax(0, ${b}fr)`;
+}

@@ -21,11 +21,62 @@ function inline(text) {
   s = s.replace(/(^|[^\w])__(?=\S)(.+?)(?<=\S)__(?!\w)/g, '$1<strong>$2</strong>');
   s = s.replace(/(^|[^\w*])\*(?=\S)([^*]+?)(?<=\S)\*(?![\w*])/g, '$1<em>$2</em>');
   s = s.replace(/(^|[^\w])_(?=\S)([^_]+?)(?<=\S)_(?!\w)/g, '$1<em>$2</em>');
-  return s.replace(new RegExp(`${HOLD}(\\d+)${HOLD}`, 'g'), (_, i) => held[Number(i)]);
+  // Held pieces can hold others (code inside a link label), so restore
+  // until none remain.
+  const back = new RegExp(`${HOLD}(\\d+)${HOLD}`, 'g');
+  for (let guard = 0; s.includes(HOLD) && guard < 8; guard++) s = s.replace(back, (_, i) => held[Number(i)]);
+  return s;
 }
 
-const BULLET = /^\s*[-*+]\s+(.*)$/;
-const NUMBERED = /^\s*\d+[.)]\s+(.*)$/;
+// ---------- lists: indentation nests, blank lines between items keep one list ----------
+const ITEM = /^(\s*)([-*+]|\d+[.)])\s+(.*)$/;
+const indentOf = (ws) => ws.replace(/\t/g, '    ').length;
+
+function collectList(lines, i) {
+  const items = [];
+  let j = i;
+  while (j < lines.length) {
+    const line = lines[j];
+    const m = ITEM.exec(line);
+    if (m && !/^\s*(-{3,}|\*{3,}|_{3,})\s*$/.test(line)) {
+      items.push({ indent: indentOf(m[1]), ordered: /\d/.test(m[2]), num: parseInt(m[2], 10), lines: [m[3]] });
+      j += 1;
+      continue;
+    }
+    if (!line.trim()) {
+      let k = j + 1;
+      while (k < lines.length && !lines[k].trim()) k += 1;
+      if (k < lines.length && items.length && (ITEM.test(lines[k]) || /^\s{2,}\S/.test(lines[k]))) { j = k; continue; }
+      break;
+    }
+    if (items.length && /^\s{2,}\S/.test(line)) { items[items.length - 1].lines.push(line.trim()); j += 1; continue; }
+    break;
+  }
+  return { items, next: j };
+}
+
+function renderItems(items, start, indent) {
+  const ordered = items[start].ordered;
+  const first = items[start].num;
+  const lis = [];
+  let k = start;
+  while (k < items.length && items[k].indent >= indent) {
+    const it = items[k];
+    if (it.indent > indent) {
+      const sub = renderItems(items, k, it.indent);
+      if (lis.length) lis[lis.length - 1] += sub.html; else lis.push(sub.html);
+      k = sub.next;
+      continue;
+    }
+    if (it.ordered !== ordered) break;
+    lis.push(it.lines.map(inline).join('<br>'));
+    k += 1;
+  }
+  const tag = ordered ? 'ol' : 'ul';
+  const startAttr = ordered && Number.isFinite(first) && first !== 1 ? ` start="${first}"` : '';
+  return { html: `<${tag}${startAttr}>${lis.map((li) => `<li>${li}</li>`).join('')}</${tag}>`, next: k };
+}
+
 
 export function renderMarkdown(src) {
   if (!src) return '';
@@ -50,14 +101,12 @@ export function renderMarkdown(src) {
     const h = /^\s*#{1,6}\s+(.*)$/.exec(line);
     if (h) { flush(); out.push(`<h4 class="md-h">${inline(h[1])}</h4>`); continue; }
     if (/^\s*(-{3,}|\*{3,}|_{3,})\s*$/.test(line)) { flush(); out.push('<hr>'); continue; }
-    const kind = BULLET.test(line) ? 'ul' : NUMBERED.test(line) ? 'ol' : null;
-    if (kind) {
+    if (ITEM.test(line)) {
       flush();
-      const re = kind === 'ul' ? BULLET : NUMBERED;
-      const items = [];
-      while (i < lines.length && re.test(lines[i])) { items.push(re.exec(lines[i])[1]); i += 1; }
-      i -= 1;
-      out.push(`<${kind}>${items.map((it) => `<li>${inline(it)}</li>`).join('')}</${kind}>`);
+      const { items, next } = collectList(lines, i);
+      let k = 0;
+      while (k < items.length) { const r = renderItems(items, k, items[k].indent); out.push(r.html); k = r.next; }
+      i = next - 1;
       continue;
     }
     if (/^\s*>/.test(line)) {

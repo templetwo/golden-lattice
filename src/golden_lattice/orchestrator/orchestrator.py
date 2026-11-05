@@ -30,6 +30,7 @@ ARCHITECTURAL COMMITMENTS (this module):
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import hashlib
 import uuid
 from datetime import datetime, timezone
@@ -173,6 +174,13 @@ LatticeClient = Phase1WireClient  # alias for the principal type; the others are
 # against each Protocol works as expected.
 
 
+# The request a stream delta belongs to, set per task for Phase 2's concurrent
+# calls (contextvars are copied per asyncio task, so each request sees its own).
+_STREAM_SCOPE: contextvars.ContextVar[Optional[tuple[str, Optional[ModelId]]]] = contextvars.ContextVar(
+    "lattice_stream_scope", default=None
+)
+
+
 async def run_lattice_session_async(
     prompt: str,
     *,
@@ -231,17 +239,27 @@ async def run_lattice_session_async(
     # deterministic test clients simply do not expose this optional hook.
     set_stream_callback = getattr(client, "set_stream_callback", None)
     if callable(set_stream_callback):
-        set_stream_callback(
-            lambda model, phase, delta, kind: emitter.emit(
+        def _on_delta(model, phase, delta, kind):
+            # Each concurrent Phase 2 request runs in its own task with its
+            # own stream scope; anything else is one request per seat/phase.
+            scope = _STREAM_SCOPE.get()
+            if scope is not None and scope[0].startswith(f"{phase}:"):
+                stream_id, target = scope
+            else:
+                stream_id, target = f"{phase}:{model.value}", None
+            emitter.emit(
                 ModelStreamDeltaEvent(
                     timestamp_offset_ms=emitter.now_ms(),
                     model_id=model,
                     phase=phase,
                     delta=delta,
                     delta_kind=kind,
+                    stream_id=stream_id,
+                    target_model=target,
                 )
             )
-        )
+
+        set_stream_callback(_on_delta)
 
     emitter.emit(SessionStartedEvent(
         timestamp_offset_ms=emitter.now_ms(),
@@ -631,6 +649,7 @@ async def _run_phase_2(
     }
 
     async def _one_cross_reading(reader: ModelId, target: ModelId) -> CrossReading:
+        _STREAM_SCOPE.set((f"phase_2_cross_reading:{reader.value}>{target.value}", target))
         target_response = phase_1_results[target]
         target_reflection = (
             target_response.self_reflection_artifacts[0].tag_justification
@@ -667,6 +686,7 @@ async def _run_phase_2(
         return result
 
     async def _one_tagging(tagger: ModelId) -> Phase2Tagging:
+        _STREAM_SCOPE.set((f"phase_2_tagging:{tagger.value}", None))
         own_claims = phase_1_results[tagger].claims
         peer_claims: list[Claim] = []
         for other_model, other_response in phase_1_results.items():

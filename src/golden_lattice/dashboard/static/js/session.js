@@ -5,7 +5,7 @@ import { labelOf, colorOf, familyColor } from './seats.js';
 import { buildBeats, disputeBeat, phaseLabel, phaseStops, PLAY_PERIOD_MS, SECTIONS, SECTION_NAMES } from './beats.js';
 import {
   disputesView, feedSkippedText, parityLineHtml, openingStep, critiquesCaption, filterForClaim,
-  challengeLabel, outcomeWord, stepDisagreement,
+  challengeLabel, outcomeWord, stepDisagreement, stopLayout, splitColumns,
 } from './notes.js';
 import { phaseActivity } from './stream.js';
 import { renderMarkdown } from './markdown.js';
@@ -67,7 +67,7 @@ function sectionSeats() {
     const weak = refl.weak && claimById(refl.weak);
     const shown = on(`r:${seat.id}`);
     const p1 = (S.phase1 || {})[seat.id] || {};
-    const w = (S.writing || {})[seat.id];
+    const w = (S.streams || {})[`phase_1:${seat.id}`];
     let answer = p1.response || '';
     if (S.live && w && w.phase === 'phase_1' && w.answer) answer = w.answer;
     const answerShown = S.live ? !!answer : (answer && on(`r:${seat.id}`) || (answer && (S.claims || []).some((c) => c.author === seat.id && on(`c:${c.id}`))));
@@ -183,8 +183,10 @@ function sectionDisputes() {
       <button class="step-btn" data-step-dis="-1">‹ Previous disagreement</button>
       <button class="step-btn" data-step-dis="1">Next disagreement ›</button></div>` : '';
   return `
-    <div class="filters">${tab('disputed', 'Disputed')}${tab('all', 'All')}${tab('elevated', 'Elevated')}${tab('omitted', 'Omitted')}</div>
-    ${stepper}
+    <div class="dis-head">
+      <div class="filters">${tab('disputed', 'Disputed')}${tab('all', 'All')}${tab('elevated', 'Elevated')}${tab('omitted', 'Omitted')}</div>
+      ${stepper}
+    </div>
     ${note ? `<p class="caption">${esc(note)}</p>` : ''}
     ${st.missing ? `<p class="caption dimmer">${st.missing} ${st.missing === 1 ? 'claim readers said was missing is' : 'claims readers said were missing are'} not shown</p>` : ''}
     ${S.hydrationNote ? `<p class="caption critique">${esc(S.hydrationNote)}</p>` : ''}
@@ -277,12 +279,20 @@ function paneHtml(sec, pinned) {
     <div class="bd" data-scroll="${sec}">${RENDER[sec]()}</div></section>`;
 }
 
+const WIDE = typeof window !== 'undefined' && window.matchMedia ? window.matchMedia('(min-width: 761px)') : null;
+
 function applySplit(panes) {
-  if (panes.classList.contains('two') && window.matchMedia('(min-width: 761px)').matches) {
-    panes.style.gridTemplateColumns = `minmax(0, ${ui.split}fr) 8px minmax(0, ${1 - ui.split}fr)`;
-  } else {
-    panes.style.gridTemplateColumns = '';
-  }
+  panes.style.gridTemplateColumns = splitColumns({
+    two: panes.classList.contains('two'), wide: !!(WIDE && WIDE.matches), split: ui.split,
+  });
+}
+
+// Crossing the breakpoint recalculates the split, so a narrowed window never
+// keeps the desktop grid (review of PR #2 at a297b4a, finding 2).
+if (WIDE) {
+  const recompute = () => { const panes = root && root.querySelector('#gl-panes'); if (panes) applySplit(panes); };
+  WIDE.addEventListener('change', recompute);
+  window.addEventListener('resize', recompute, { passive: true });
 }
 
 function renderPanes() {
@@ -347,7 +357,7 @@ function transportHtml() {
     return `<span class="k">Reading the completed run</span><span class="spacer"></span>
       <button class="t-btn" data-act="replay">Replay how it developed</button>`;
   }
-  const stops = phaseStops(B).map((s) => `<button class="stop-btn ${B.beats[ui.step] && B.beats[ui.step].section === s.sec ? 'on' : ''}" data-stop="${s.step}">${s.sec} · ${s.label}</button>`).join('');
+  const stops = phaseStops(B).map((s) => `<button class="stop-btn ${B.beats[ui.step] && B.beats[ui.step].section === s.sec ? 'on' : ''}" data-stop="${s.step}" data-stop-sec="${s.sec}">${s.sec} · ${s.label}</button>`).join('');
   return `
     <button class="t-btn" data-act="read">← Back to reading</button>
     <div class="stops">${stops}</div>
@@ -422,6 +432,7 @@ export function openClaim(id, { keepReturn = false } = {}) {
   writeHash(); renderPanes();
   const el = root.querySelector(`[data-open="${CSS.escape(id)}"]`);
   if (el) el.scrollIntoView({ block: 'start' });
+  focusRow(id);
 }
 
 function stepDispute(dir) {
@@ -445,11 +456,17 @@ function play() {
 }
 
 // ---------- events (attached once per render) ----------
+function focusRow(id) {
+  const row = root.querySelector(`.row[data-claim="${CSS.escape(id)}"]`);
+  if (row) row.focus({ preventScroll: true });
+}
+
 function toggleRow(id) {
   if (ui.open.has(id)) ui.open.delete(id); else ui.open.add(id);
   ui.selected = id;
   renderSection('02');
   if (visible('04')) renderSection('04');
+  focusRow(id);   // the re-render replaced the row; keep keyboard focus on it
 }
 
 function wire() {
@@ -481,7 +498,12 @@ function wire() {
     if (row) { toggleRow(row.getAttribute('data-claim')); return; }
     if (t.closest('.prompt')) { t.closest('.prompt').classList.toggle('expanded'); return; }
     const stopBtn = t.closest('[data-stop]');
-    if (stopBtn) { stop(); setStep(Number(stopBtn.getAttribute('data-stop'))); return; }
+    if (stopBtn) {
+      const layout = stopLayout(stopBtn.getAttribute('data-stop-sec'));
+      ui.active = layout.active; ui.pinned = layout.pinned;
+      stop(); writeHash(); setStep(Number(stopBtn.getAttribute('data-stop')));
+      return;
+    }
     const act = t.closest('[data-act]');
     if (!act) return;
     const a = act.getAttribute('data-act');
@@ -543,24 +565,32 @@ export function refreshLive(session, sections) {
 }
 
 // Live: the "Writing now" strip, one card per seat, readable text only.
-export function updateWriting(modelId, phase, text) {
+// One card per streaming request; a request with no readable prose yet
+// (tagging, for one) gets no card.
+export function updateWriting(stream, text) {
   const strip = root && root.querySelector('#gl-writing');
-  if (!strip) return;
-  if (S.writing && S.writing[modelId]) S.writing[modelId].text = text;
-  let card = strip.querySelector(`[data-writing="${CSS.escape(modelId)}"]`);
+  if (!strip || !text) return;
+  let card = strip.querySelector(`[data-writing="${CSS.escape(stream.key)}"]`);
   if (!card) {
     card = document.createElement('div');
     card.className = 'writing-card';
-    card.setAttribute('data-writing', modelId);
-    card.innerHTML = `<div class="writing-hd">${seatName(modelId)} <span class="k activity"></span></div><div class="writing-text"></div>`;
+    card.setAttribute('data-writing', stream.key);
+    card.innerHTML = `<div class="writing-hd">${seatName(stream.model)} <span class="k activity"></span>${stream.target ? ` <span class="k">→</span> ${seatName(stream.target)}` : ''}</div><div class="writing-text"></div>`;
     strip.querySelector('.writing-cards').appendChild(card);
   }
-  card.querySelector('.activity').textContent = phaseActivity(phase);
+  card.querySelector('.activity').textContent = phaseActivity(stream.phase);
   const body = card.querySelector('.writing-text');
   const stick = body.scrollHeight - body.scrollTop - body.clientHeight < 24;
   body.textContent = text || '…';
   if (stick) body.scrollTop = body.scrollHeight;
   strip.hidden = false;
+}
+
+export function removeWriting(keys) {
+  const strip = root && root.querySelector('#gl-writing');
+  if (!strip) return;
+  keys.forEach((k) => { const c = strip.querySelector(`[data-writing="${CSS.escape(k)}"]`); if (c) c.remove(); });
+  if (!strip.querySelector('.writing-card')) strip.hidden = true;
 }
 
 export function clearWriting() {

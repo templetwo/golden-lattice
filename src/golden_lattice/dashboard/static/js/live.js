@@ -4,7 +4,7 @@
 // append to a text node. On completion the page hydrates from disk.
 import { esc } from './util.js';
 import { familyOf, labelOf } from './seats.js';
-import { renderSession, refreshLive, updateWriting, clearWriting } from './session.js';
+import { renderSession, refreshLive, updateWriting, clearWriting, removeWriting } from './session.js';
 import { readableStream, streamText } from './stream.js';
 
 const HYDRATE_TRIES = 5;
@@ -47,7 +47,8 @@ function freshSession(ev) {
     id: ev.session_id, title: 'LIVE', prompt: ev.prompt, models,
     seats: models.map((m) => ({ id: m, family: familyOf(m), label: labelOf(m), legacy: false, focus: '', conf: 0, claim_count: 0 })),
     phase0: null, phase1: Object.fromEntries(models.map((m) => [m, { response: '' }])), reflections: {},
-    writing: {},
+    streams: {},          // one buffer per streaming request (stream_id)
+    seatPhase: {},        // the newest phase each seat is streaming in
     claims: [], synthesis_lines: [], pairs: [], turns: [], interpretations: [], metrics: null,
     elevations: [], synthesis: { output: '', trace: [] }, stats: {}, metrics_recomputed: false,
     unattached_critiques: [],
@@ -67,8 +68,12 @@ export function initialAnswerText(w) {
   return segs.filter((s) => s.key === 'response').map((s) => s.text).join('\n\n') || ((w && w.prose) || '');
 }
 
+export function streamKey(ev) {
+  return ev.stream_id || `${ev.phase}:${ev.model_id}`;
+}
+
 function keepInitialAnswer(L, model) {
-  const w = L.writing[model];
+  const w = L.streams[`phase_1:${model}`];
   if (!w || w.phase !== 'phase_1') return;
   const answer = initialAnswerText(w);
   if (answer) L.phase1[model] = { ...(L.phase1[model] || {}), response: answer };
@@ -163,13 +168,22 @@ export function applyEvent(state, ev) {
     case 'phase_0_failed_search': ensureP0(L).failed.push({ query: ev.query, reason: ev.reason }); return ['00'];
     case 'phase_0_feed_frozen': ensureP0(L).frozen = ev.entry_count; return ['00'];
     case 'model_stream_delta': {
-      let w = L.writing[ev.model_id];
-      if (!w || w.phase !== ev.phase) {
+      // Requests stream concurrently (Phase 2 runs a cross-reading per peer
+      // plus tagging), so each request keeps its own buffer.
+      const key = streamKey(ev);
+      let w = L.streams[key];
+      if (!w) {
+        w = L.streams[key] = { key, model: ev.model_id, phase: ev.phase, target: ev.target_model || null, raw: '', prose: '' };
+      }
+      if (L.seatPhase[ev.model_id] !== ev.phase) {
         keepInitialAnswer(L, ev.model_id);
-        w = L.writing[ev.model_id] = { phase: ev.phase, raw: '', prose: '' };
+        state.retired = Object.values(L.streams)
+          .filter((x) => x.model === ev.model_id && x.phase !== ev.phase).map((x) => x.key);
+        L.seatPhase[ev.model_id] = ev.phase;
       }
       if (ev.delta_kind === 'text') w.prose += ev.delta; else w.raw += ev.delta;
       state.status = `streaming · ${labelOf(ev.model_id)}`;
+      state.streamKey = key;
       return 'stream';
     }
     case 'phase_1_claim': {
@@ -294,13 +308,14 @@ export function startLive(root) {
 
   // At most one repaint per seat per frame, however fast deltas arrive.
   const pendingWriting = new Set();
-  const scheduleWriting = (model) => {
-    if (pendingWriting.has(model)) return;
-    pendingWriting.add(model);
+  const scheduleWriting = (key) => {
+    if (state.retired && state.retired.length) { removeWriting(state.retired); state.retired = []; }
+    if (pendingWriting.has(key)) return;
+    pendingWriting.add(key);
     requestAnimationFrame(() => {
-      pendingWriting.delete(model);
-      const w = state.L && state.L.writing[model];
-      if (w) updateWriting(model, w.phase, writingText(w));
+      pendingWriting.delete(key);
+      const w = state.L && state.L.streams[key];
+      if (w) updateWriting(w, writingText(w));
       if (w && w.phase === 'phase_1') {
         w.answer = initialAnswerText(w);
         refreshLive(state.L, ['01']);
@@ -314,7 +329,7 @@ export function startLive(root) {
       const changed = applyEvent(state, ev);
       if (changed == null) return;
       if (changed === 'all') { state.hydrated = false; renderSession(root, state.L, { mode: 'live' }); renderBar(); return; }
-      if (changed === 'stream') { scheduleWriting(ev.model_id); syncInput(); return; }
+      if (changed === 'stream') { scheduleWriting(state.streamKey); syncInput(); return; }
       if (changed === 'completed') {
         clearWriting();
         state.status = 'completed · loading the persisted record';

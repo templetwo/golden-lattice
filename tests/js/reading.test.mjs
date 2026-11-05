@@ -73,3 +73,19 @@ test('replay offers a named stop for each phase that has steps', () => {
   ]);
   assert.deepEqual(phaseStops({ first: { '00': 0, '04': 9 } }).map((s) => s.sec), ['00', '04']);
 });
+
+test('a replay stop shows its section, pinned beside the one that leads into it', async () => {
+  const { stopLayout } = await import('../../src/golden_lattice/dashboard/static/js/notes.js');
+  assert.deepEqual(stopLayout('00'), { active: '00', pinned: null });
+  assert.deepEqual(stopLayout('01'), { active: '01', pinned: null });
+  assert.deepEqual(stopLayout('02'), { active: '02', pinned: '01' });
+  assert.deepEqual(stopLayout('03'), { active: '03', pinned: '02' });
+  assert.deepEqual(stopLayout('04'), { active: '04', pinned: '02' });
+});
+
+test('the inline pane split applies only to two panes on a wide window', async () => {
+  const { splitColumns } = await import('../../src/golden_lattice/dashboard/static/js/notes.js');
+  assert.equal(splitColumns({ two: true, wide: true, split: 0.6 }), 'minmax(0, 0.6fr) 8px minmax(0, 0.4fr)');
+  assert.equal(splitColumns({ two: true, wide: false, split: 0.6 }), '');
+  assert.equal(splitColumns({ two: false, wide: true, split: 0.6 }), '');
+});

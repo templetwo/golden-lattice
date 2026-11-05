@@ -359,3 +359,18 @@ table.mx th { font-size: 11px; color: #8b919d; }
 .md blockquote { margin: 8px 0 0; padding-left: 12px; border-left: 2px solid var(--border); color: var(--text-mid); }
 .md hr { border: 0; border-top: 1px solid var(--border-soft); margin: 12px 0; }
 .md a { color: var(--augment); }
+
+/* Review of PR #2 at a297b4a: navigation in reach, narrow windows */
+.dis-head { position: sticky; top: -14px; z-index: 3; margin: -14px -20px 6px; padding: 12px 20px 6px; background: var(--panel); border-bottom: 1px solid var(--border-soft); }
+.dis-head .stepper { margin-bottom: 2px; }
+.back-bar { position: sticky; top: -14px; z-index: 3; margin: -14px -20px 12px; padding: 10px 20px; background: var(--panel); border-bottom: 1px solid var(--border-soft); }
+@media (max-width: 760px) {
+  .body { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+  .rail { flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--border-soft); padding: 6px 8px; }
+  .rail-item { flex-shrink: 0; }
+  .mast { flex-wrap: wrap; gap: 8px 14px; }
+  .mast .prompt { flex-basis: 100%; order: 5; }
+  .panes.two { grid-template-columns: minmax(0, 1fr) !important; }
+  .pane .bd { padding: 12px 14px 24px; }
+  .dis-head, .back-bar { margin-left: -14px; margin-right: -14px; padding-left: 14px; padding-right: 14px; }
+}

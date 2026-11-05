@@ -54,3 +54,29 @@ test('empty and missing input render nothing', () => {
   assert.equal(renderMarkdown(''), '');
   assert.equal(renderMarkdown(null), '');
 });
+
+// Review of PR #2 at a297b4a, finding 3: faithful structure.
+test('numbered items separated by blank lines stay one list', () => {
+  assert.equal(renderMarkdown('1. a\n\n2. b\n\n3. c'), '<ol><li>a</li><li>b</li><li>c</li></ol>');
+});
+
+test('a list that starts at 3 keeps its numbers', () => {
+  assert.equal(renderMarkdown('3. c\n4. d'), '<ol start="3"><li>c</li><li>d</li></ol>');
+});
+
+test('nested bullets nest under their parent', () => {
+  assert.equal(renderMarkdown('- parent\n  - child\n  - child two\n- next'),
+    '<ul><li>parent<ul><li>child</li><li>child two</li></ul></li><li>next</li></ul>');
+  assert.equal(renderMarkdown('1. step\n   - detail\n2. step two'),
+    '<ol><li>step<ul><li>detail</li></ul></li><li>step two</li></ol>');
+});
+
+test('inline code inside a link label renders, with no placeholder left', () => {
+  const out = renderMarkdown('[see `x_y`](https://e.com)');
+  assert.equal(out, '<p><a href="https://e.com" target="_blank" rel="noopener noreferrer">see <code>x_y</code></a></p>');
+  assert.doesNotMatch(out, /\u0001/);
+});
+
+test('a paragraph after a list is not swallowed into it', () => {
+  assert.equal(renderMarkdown('- a\n- b\n\nAfter.'), '<ul><li>a</li><li>b</li></ul><p>After.</p>');
+});

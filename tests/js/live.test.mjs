@@ -51,3 +51,29 @@ test('opening a claim from synthesis clears any filter that would hide it', () =
   assert.equal(filterForClaim('omitted', { elevated: false, disposition: 'omitted' }, 0), 'omitted');
   assert.equal(filterForClaim('all', disputed, 0), 'all');
 });
+
+test('interleaved requests from one seat keep separate buffers', async () => {
+  const { writingText } = await import('../../src/golden_lattice/dashboard/static/js/live.js');
+  const state = { L: null };
+  applyEvent(state, start('session_a'));
+  const d = (stream_id, target, delta, phase = 'phase_2_cross_reading') => applyEvent(state,
+    { event_type: 'model_stream_delta', model_id: O, phase, delta, delta_kind: 'tool_input', stream_id, target_model: target });
+  const toS = `phase_2_cross_reading:${O}>${S}`, toH = `phase_2_cross_reading:${O}>${H}`, tag = `phase_2_tagging:${O}`;
+  d(toS, S, '{"disagreements": [{"target_claim_id": "a", "reason": "Sonnet is');
+  d(toH, H, '{"disagreements": [{"target_claim_id": "b", "reason": "Haiku is');
+  d(tag, null, '{"peer_tags": [', 'phase_2_tagging');
+  d(toS, S, ' too strong"}]');
+  d(toH, H, ' too vague"}]');
+  assert.equal(writingText(state.L.streams[toS]), 'Sonnet is too strong');
+  assert.equal(writingText(state.L.streams[toH]), 'Haiku is too vague');
+  assert.equal(state.L.streams[toS].target, S);
+});
+
+test('deltas without a stream id fall back to seat and phase', async () => {
+  const { writingText } = await import('../../src/golden_lattice/dashboard/static/js/live.js');
+  const state = { L: null };
+  applyEvent(state, start('session_a'));
+  applyEvent(state, { event_type: 'model_stream_delta', model_id: O, phase: 'phase_1', delta: '{"response": "Hel', delta_kind: 'tool_input' });
+  applyEvent(state, { event_type: 'model_stream_delta', model_id: O, phase: 'phase_1', delta: 'lo"', delta_kind: 'tool_input' });
+  assert.equal(writingText(state.L.streams[`phase_1:${O}`]), 'Hello');
+});
