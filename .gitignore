@@ -77,3 +77,6 @@ TODO.local.md
 *.pem
 *.key
 secrets/
+
+# Held-out benchmark: content stays out of the public repo until freeze; only the manifest hash is committed
+benchmarks/heldout.json
