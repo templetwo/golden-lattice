@@ -15,7 +15,7 @@ from golden_lattice.evaluation.daily import DailyRefused, run_daily
 from golden_lattice.evaluation.fixtures import FixtureClient
 from golden_lattice.evaluation.recording import RecordingClient
 from golden_lattice.memory_graph.base import ModelId
-from golden_lattice.orchestrator.errors import OrchestratorProviderError
+from golden_lattice.orchestrator.errors import OrchestratorProviderError, OrchestratorRefusalError
 
 PROMPT = "design a rate limiter for a public API"
 NOW = datetime(2026, 11, 4, 12, 0, tzinfo=timezone.utc)
@@ -39,6 +39,13 @@ class _FailsInPhase3(FixtureClient):
     async def submit_phase_3_dialogue(self, **kwargs):
         raise OrchestratorProviderError(
             model=ModelId.HAIKU, phase="phase_3", underlying=RuntimeError("upstream 529"),
+        )
+
+
+class _RefusedInPhase3(FixtureClient):
+    async def submit_phase_3_dialogue(self, **kwargs):
+        raise OrchestratorRefusalError(
+            model=ModelId.HAIKU, phase="phase_3", category="cyber", explanation="exploit development",
         )
 
 
@@ -107,6 +114,36 @@ def test_sidecar_carries_the_retry_log_of_the_client(tmp_path, no_network):
     result = run_daily(PROMPT, budget_usd=15, out_dir=tmp_path, client_factory=lambda **kw: inner, now=NOW)
     sidecar = json.loads((tmp_path / result["session_id"] / "sidecar.json").read_text(encoding="utf-8"))
     assert sidecar["retry_log"] == inner.retry_log
+
+
+def test_refusal_failure_record_carries_category_and_explanation(tmp_path, no_network):
+    result = run_daily(
+        PROMPT, budget_usd=15, out_dir=tmp_path,
+        client_factory=lambda **kw: _RefusedInPhase3(seed=0), now=NOW,
+    )
+    assert result["status"] == "failed"
+    error = result["error"]
+    assert error["class"] == "OrchestratorRefusalError"
+    assert error["model"] == ModelId.HAIKU.value
+    assert error["phase"] == "phase_3"
+    assert error["category"] == "cyber"
+    assert error["explanation"] == "exploit development"
+    assert "exploit development" in error["message"]
+    run_dir = tmp_path / result["session_id"]
+    salvage = json.loads((run_dir / "failed.json").read_text(encoding="utf-8"))
+    assert salvage["error"]["category"] == "cyber"
+    assert salvage["error"]["explanation"] == "exploit development"
+    sidecar = json.loads((run_dir / "sidecar.json").read_text(encoding="utf-8"))
+    assert sidecar["error"]["category"] == "cyber"
+
+
+def test_non_refusal_failure_record_has_null_refusal_fields(tmp_path, no_network):
+    result = run_daily(
+        PROMPT, budget_usd=15, out_dir=tmp_path,
+        client_factory=lambda **kw: _FailsInPhase3(seed=0), now=NOW,
+    )
+    assert result["error"]["category"] is None
+    assert result["error"]["explanation"] is None
 
 
 def test_recording_client_captures_every_call_of_a_three_peer_session(tmp_path, no_network):
