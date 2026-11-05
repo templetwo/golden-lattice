@@ -122,6 +122,9 @@ def run_daily(
             "message": str(exc)[:500],
             "model": getattr(getattr(exc, "model", None), "value", None),
             "phase": getattr(exc, "phase", None),
+            # Refusal detail (OrchestratorRefusalError); None for any other failure.
+            "category": getattr(exc, "category", None),
+            "explanation": getattr(exc, "explanation", None),
         }
         spend_so_far = sum(float(u["cost_usd"]) for u in usage)
         (run_dir / "failed.json").write_text(json.dumps({

@@ -93,9 +93,13 @@ class OrchestratorRefusalError(OrchestratorError):
         self.phase = phase
         self.category = category
         self.explanation = explanation
-        super().__init__(
-            f"{model.value} refused {phase} (category={category}); no output was produced."
-        )
+        # The explanation goes into the message because every recorder keeps
+        # str(exc); left out, it would never reach a durable record. The raise
+        # site caps it at 300 characters, which keeps the message bounded.
+        msg = f"{model.value} refused {phase} (category={category}); no output was produced."
+        if explanation:
+            msg += f" Explanation: {explanation}"
+        super().__init__(msg)
 
 
 class OrchestratorProviderError(OrchestratorError):

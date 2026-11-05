@@ -138,6 +138,9 @@ def run_pilot(
         except Exception as exc:  # recorded, never silently dropped
             record["status"] = "failed"
             record["error"] = f"{type(exc).__name__}: {exc}"
+            # Refusal detail (OrchestratorRefusalError); None for any other failure.
+            record["category"] = getattr(exc, "category", None)
+            record["explanation"] = getattr(exc, "explanation", None)
             record["raw_tool_input"] = _raw_of(exc)
 
         record["calls"] = calls
