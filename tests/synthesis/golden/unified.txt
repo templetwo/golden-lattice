@@ -1,0 +1,7 @@
+Negative lookups should be cached with a short TTL.
+Every cache key must include the tenant id.
+LRU is the right default eviction policy for a read-heavy cache.
+Write-through keeps the cache and the store consistent at the cost of write latency.
+A TTL of five minutes is safe for every key. [DISPUTED — claude-haiku-5-5: "A revoked session token must not live five more minutes."; claude-sonnet-5: "Hot keys and cold keys need different TTLs."]
+Measure the hit rate before choosing an eviction policy.
+Cache stampedes need request coalescing on a miss.

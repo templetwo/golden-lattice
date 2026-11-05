@@ -30,15 +30,34 @@ Segment unit: claim-level. Each ClaimTraceEntry becomes one rendered
 segment. No sentence-level or paragraph-level decomposition; the unit of
 templating matches the unit of substrate identity.
 
-Trailers in output: str. None in v0. Elevations and surfaced disagreements
-live on SynthesisArtifact.elevations and .surfaced_disagreements fields,
-queryable separately. The output: str field is the rendered prose only.
-One field, one job. v1 may add a "render with trailers" helper.
+Accountability sections (M3, "output you can trust"). Annotated and layered
+append up to three templated sections after the prose body, in this fixed
+order, each present only when it has entries:
+
+  --- elevated (N) ---
+  claim_ids: <id>, <id> | converge: <turn_id> (<speaker>), <turn_id> (<speaker>)
+
+  --- disagreements surfaced (N) ---
+  claim_ids: <id>, <id> | <note, verbatim>
+
+  --- omitted: what was dropped and why (N) ---
+  <marker> <claim_id>: <omission_reason>
+
+Blocks (body and sections) are joined by one blank line; an empty body
+contributes no block, so output never starts with a blank line. Omitted
+lines follow claim_trace order in both modes, and every omitted entry is
+listed. A converge turn absent from session.phase_3 renders as its turn_id
+alone; an omitted claim_id absent from the Phase 1 lookup renders without a
+marker. Neither raises. Unified and transcript append nothing: unified is
+the attribution-stripped voice, transcript is Phase 1-3 raw. All four
+remain queryable on SynthesisArtifact.claim_trace, .elevations and
+.surfaced_disagreements.
 
 Disposition rendering rules (annotated, unified):
   - present  → claim.text with marker
   - modified → claim_trace_entry.modified_text with marker
-  - omitted  → not rendered in output: str (still in claim_trace for query)
+  - omitted  → not rendered in the prose body; annotated lists it, with its
+               omission_reason, in the omitted section (unified does not)
 
 Disposition rendering rules (layered) — diverges from annotated:
   - present  → claim.text (original) under the source-model section header
@@ -48,7 +67,8 @@ Disposition rendering rules (layered) — diverges from annotated:
                belong in annotated mode where synthesis flow is the
                organizing principle. Layered mode preserves peer-voice
                integrity.
-  - omitted  → not rendered. Same as other modes.
+  - omitted  → not rendered in the sections; listed in the omitted
+               section, same as annotated.
 
 Layered section ordering: alphabetical by model.value (deterministic).
 Within-section: claims in their Phase 1 EMISSION order, not claim_trace
@@ -88,6 +108,8 @@ generative complexity.
 """
 
 from __future__ import annotations
+
+import re
 
 from golden_lattice.memory_graph.base import (
     ModelId,
@@ -129,9 +151,19 @@ def render_output(
     inputs in, same string out, byte-equal across runs.
     """
     if mode is OutputMode.ANNOTATED:
-        return _render_annotated(session, claim_trace)
+        return _join_blocks(
+            _render_annotated(session, claim_trace),
+            *_render_accountability_sections(
+                session, claim_trace, elevations, surfaced_disagreements
+            ),
+        )
     if mode is OutputMode.LAYERED:
-        return _render_layered(session, claim_trace)
+        return _join_blocks(
+            _render_layered(session, claim_trace),
+            *_render_accountability_sections(
+                session, claim_trace, elevations, surfaced_disagreements
+            ),
+        )
     if mode is OutputMode.UNIFIED:
         return _render_unified(session, claim_trace)
     if mode is OutputMode.TRANSCRIPT:
@@ -165,6 +197,82 @@ def _phase_1_claims_by_id(session: Session) -> dict[str, Claim]:
 
 
 # ---------------------------------------------------------------------------
+# Accountability sections — annotated and layered only (M3).
+# ---------------------------------------------------------------------------
+
+
+def _join_blocks(*blocks: str) -> str:
+    """Join non-empty blocks with one blank line. An empty body adds no block."""
+    return "\n\n".join(block for block in blocks if block)
+
+
+_LINE_BREAKS = re.compile(r"[\n\r\v\f\x85  ]+")
+
+
+def _one_line(text: str) -> str:
+    """Collapse line breaks in free text to single spaces.
+
+    The accountability sections are line-oriented: one entry per line,
+    headers delimit sections. Notes, omission reasons and ids originate in
+    model output, so a line break inside one could forge an attributed line
+    or a section header. The text's meaning is untouched; only its line
+    structure is defended.
+    """
+    return _LINE_BREAKS.sub(" ", text)
+
+
+def _render_accountability_sections(
+    session: Session,
+    claim_trace: tuple[ClaimTraceEntry, ...],
+    elevations: tuple[Elevation, ...],
+    surfaced_disagreements: tuple[SurfacedDisagreement, ...],
+) -> list[str]:
+    """Return the elevated, disagreements and omitted sections, in that fixed
+    order, each only when it has entries. Templated lines, no prose."""
+    sections: list[str] = []
+    if elevations:
+        speakers_by_turn_id: dict[str, ModelId] = {
+            turn.turn_id: turn.speaker_model for turn in session.phase_3
+        }
+        lines = [f"--- elevated ({len(elevations)}) ---"]
+        for elevation in elevations:
+            turns = ", ".join(
+                f"{_one_line(tid)} ({speakers_by_turn_id[tid].value})"
+                if tid in speakers_by_turn_id
+                else _one_line(tid)
+                for tid in elevation.converge_turn_ids
+            )
+            lines.append(
+                f"claim_ids: {_one_line(', '.join(elevation.claim_ids))} | converge: {turns}"
+            )
+        sections.append("\n".join(lines))
+    if surfaced_disagreements:
+        lines = [f"--- disagreements surfaced ({len(surfaced_disagreements)}) ---"]
+        for disagreement in surfaced_disagreements:
+            lines.append(
+                f"claim_ids: {_one_line(', '.join(disagreement.claim_ids))} | {_one_line(disagreement.note)}"
+            )
+        sections.append("\n".join(lines))
+    omitted = [entry for entry in claim_trace if entry.disposition == "omitted"]
+    if omitted:
+        claims_by_id = _phase_1_claims_by_id(session)
+        lines = [f"--- omitted: what was dropped and why ({len(omitted)}) ---"]
+        for entry in omitted:  # claim_trace order.
+            claim = claims_by_id.get(entry.claim_id)
+            prefix = (
+                f"{_attribution_marker(claim.source_model)} "
+                if claim is not None
+                else ""
+            )
+            lines.append(
+                f"{prefix}{_one_line(entry.claim_id)}: "
+                f"{_one_line(entry.omission_reason or '')}"
+            )
+        sections.append("\n".join(lines))
+    return sections
+
+
+# ---------------------------------------------------------------------------
 # Annotated mode — canonical proof-form.
 # ---------------------------------------------------------------------------
 
@@ -177,8 +285,9 @@ def _render_annotated(
 
     Iterates claim_trace in order. Each segment is "{marker} {text}\n".
     For modified claims: text is modified_text. For omitted claims: skipped
-    in output (still preserved in claim_trace for query). Order matches
-    claim_trace order — that order is the synthesis's flow per Rule 1.
+    in the prose body; render_output lists them, with their omission_reason,
+    in the omitted section it appends. Order matches claim_trace order —
+    that order is the synthesis's flow per Rule 1.
     """
     claims_by_id = _phase_1_claims_by_id(session)
     segments: list[str] = []
@@ -217,7 +326,9 @@ def _render_layered(
 
     Omitted claims are skipped (they're not part of what the model
     contributed to the surviving synthesis). That preserves consistency
-    with annotated/unified modes' omission handling.
+    with annotated/unified modes' omission handling. As in annotated,
+    render_output appends the omitted section (claim_trace order) after
+    the per-model sections.
     """
     traced_claim_ids: dict[str, ClaimTraceEntry] = {
         entry.claim_id: entry for entry in claim_trace

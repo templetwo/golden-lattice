@@ -1,0 +1,364 @@
+{
+  "session_id": "golden-m3-output-modes",
+  "prompt": "Design a cache for a read-heavy multi-tenant API.",
+  "prompt_hash": "golden-m3-prompt-hash",
+  "created_at": "2026-11-05T12:00:00Z",
+  "models_invited": [
+    "claude-opus-5",
+    "claude-sonnet-5",
+    "claude-haiku-5-5"
+  ],
+  "phase_0": null,
+  "phase_1": {
+    "claude-opus-5": {
+      "model_id": "claude-opus-5",
+      "prompt_hash": "golden-m3-prompt-hash",
+      "response": "claude-opus-5 answers the cache design prompt.",
+      "focus_tag": "correctness",
+      "confidence": 0.9,
+      "claims": [
+        {
+          "claim_id": "4b18e70c10496079",
+          "source_model": "claude-opus-5",
+          "source_phase": 1,
+          "text": "LRU is the right default eviction policy for a read-heavy cache.",
+          "parent_claim_ids": [],
+          "tool_provenance": []
+        },
+        {
+          "claim_id": "06a2c87fbcb3cb9d",
+          "source_model": "claude-opus-5",
+          "source_phase": 1,
+          "text": "Write-through keeps the cache and the store consistent at the cost of write latency.",
+          "parent_claim_ids": [],
+          "tool_provenance": []
+        },
+        {
+          "claim_id": "1dff2c514f400a70",
+          "source_model": "claude-opus-5",
+          "source_phase": 1,
+          "text": "A TTL of five minutes is safe for every key.",
+          "parent_claim_ids": [],
+          "tool_provenance": []
+        }
+      ],
+      "self_reflection_artifacts": [
+        {
+          "model_id": "claude-opus-5",
+          "generated_at": "2026-11-05T12:00:00Z",
+          "strongest_claim_id": "4b18e70c10496079",
+          "weakest_claim_id": "1dff2c514f400a70",
+          "tag_justification": "The answer turns on correctness of eviction and expiry."
+        }
+      ],
+      "generation_started_at": "2026-11-05T12:00:00Z",
+      "generation_completed_at": "2026-11-05T12:00:00Z",
+      "latency_used_for_reflection_ms": 0
+    },
+    "claude-sonnet-5": {
+      "model_id": "claude-sonnet-5",
+      "prompt_hash": "golden-m3-prompt-hash",
+      "response": "claude-sonnet-5 answers the cache design prompt.",
+      "focus_tag": "correctness",
+      "confidence": 0.85,
+      "claims": [
+        {
+          "claim_id": "051a798719724d65",
+          "source_model": "claude-sonnet-5",
+          "source_phase": 1,
+          "text": "Measure the hit rate before choosing an eviction policy.",
+          "parent_claim_ids": [],
+          "tool_provenance": []
+        },
+        {
+          "claim_id": "1d9bff7c1119bc8a",
+          "source_model": "claude-sonnet-5",
+          "source_phase": 1,
+          "text": "Cache stampedes need request coalescing on a miss.",
+          "parent_claim_ids": [],
+          "tool_provenance": []
+        },
+        {
+          "claim_id": "f2ad232ef6cd84ae",
+          "source_model": "claude-sonnet-5",
+          "source_phase": 1,
+          "text": "Size the cache from the working set, not from available memory.",
+          "parent_claim_ids": [],
+          "tool_provenance": []
+        }
+      ],
+      "self_reflection_artifacts": [
+        {
+          "model_id": "claude-sonnet-5",
+          "generated_at": "2026-11-05T12:00:00Z",
+          "strongest_claim_id": "1d9bff7c1119bc8a",
+          "weakest_claim_id": "f2ad232ef6cd84ae",
+          "tag_justification": "Failure under load is a correctness question."
+        }
+      ],
+      "generation_started_at": "2026-11-05T12:00:00Z",
+      "generation_completed_at": "2026-11-05T12:00:00Z",
+      "latency_used_for_reflection_ms": 0
+    },
+    "claude-haiku-5-5": {
+      "model_id": "claude-haiku-5-5",
+      "prompt_hash": "golden-m3-prompt-hash",
+      "response": "claude-haiku-5-5 answers the cache design prompt.",
+      "focus_tag": "correctness",
+      "confidence": 0.6,
+      "claims": [
+        {
+          "claim_id": "4d8969d5d75cc6bf",
+          "source_model": "claude-haiku-5-5",
+          "source_phase": 1,
+          "text": "Negative lookups should be cached with a short TTL.",
+          "parent_claim_ids": [],
+          "tool_provenance": []
+        },
+        {
+          "claim_id": "11b9257bab33dfd0",
+          "source_model": "claude-haiku-5-5",
+          "source_phase": 1,
+          "text": "Every cache key must include the tenant id.",
+          "parent_claim_ids": [],
+          "tool_provenance": []
+        },
+        {
+          "claim_id": "cbcf6c71564071ef",
+          "source_model": "claude-haiku-5-5",
+          "source_phase": 1,
+          "text": "Compression might help with large values.",
+          "parent_claim_ids": [],
+          "tool_provenance": []
+        }
+      ],
+      "self_reflection_artifacts": [
+        {
+          "model_id": "claude-haiku-5-5",
+          "generated_at": "2026-11-05T12:00:00Z",
+          "strongest_claim_id": "11b9257bab33dfd0",
+          "weakest_claim_id": "cbcf6c71564071ef",
+          "tag_justification": "Tenant isolation is the correctness floor."
+        }
+      ],
+      "generation_started_at": "2026-11-05T12:00:00Z",
+      "generation_completed_at": "2026-11-05T12:00:00Z",
+      "latency_used_for_reflection_ms": 0
+    }
+  },
+  "phase_2": [
+    {
+      "reader_model": "claude-sonnet-5",
+      "target_model": "claude-opus-5",
+      "agreements": [
+        {
+          "claim_id": "4b18e70c10496079"
+        }
+      ],
+      "disagreements": [
+        {
+          "target_claim_id": "1dff2c514f400a70",
+          "reason": "Hot keys and cold keys need different TTLs. One value hides stale reads."
+        }
+      ],
+      "missing": []
+    },
+    {
+      "reader_model": "claude-haiku-5-5",
+      "target_model": "claude-opus-5",
+      "agreements": [],
+      "disagreements": [
+        {
+          "target_claim_id": "1dff2c514f400a70",
+          "reason": "A revoked session token must not live five more minutes. Expiry is not revocation."
+        }
+      ],
+      "missing": [
+        {
+          "claim_id": "f3abe35e2715f978",
+          "source_model": "claude-haiku-5-5",
+          "source_phase": 2,
+          "text": "Revoking a token must evict it from the cache immediately.",
+          "parent_claim_ids": [],
+          "tool_provenance": []
+        }
+      ]
+    },
+    {
+      "reader_model": "claude-opus-5",
+      "target_model": "claude-sonnet-5",
+      "agreements": [
+        {
+          "claim_id": "051a798719724d65"
+        },
+        {
+          "claim_id": "1d9bff7c1119bc8a"
+        }
+      ],
+      "disagreements": [],
+      "missing": []
+    },
+    {
+      "reader_model": "claude-haiku-5-5",
+      "target_model": "claude-sonnet-5",
+      "agreements": [
+        {
+          "claim_id": "1d9bff7c1119bc8a"
+        }
+      ],
+      "disagreements": [],
+      "missing": []
+    },
+    {
+      "reader_model": "claude-opus-5",
+      "target_model": "claude-haiku-5-5",
+      "agreements": [
+        {
+          "claim_id": "11b9257bab33dfd0"
+        }
+      ],
+      "disagreements": [],
+      "missing": []
+    },
+    {
+      "reader_model": "claude-sonnet-5",
+      "target_model": "claude-haiku-5-5",
+      "agreements": [
+        {
+          "claim_id": "4d8969d5d75cc6bf"
+        }
+      ],
+      "disagreements": [],
+      "missing": []
+    }
+  ],
+  "phase_2_taggings": [],
+  "phase_3": [
+    {
+      "turn_id": "t1",
+      "speaker_model": "claude-sonnet-5",
+      "channel": "converge",
+      "target_model": "claude-opus-5",
+      "target_claim_ids": [
+        "4b18e70c10496079"
+      ],
+      "content": "Agreed: LRU fits a read-heavy profile."
+    },
+    {
+      "turn_id": "t2",
+      "speaker_model": "claude-haiku-5-5",
+      "channel": "converge",
+      "target_model": "claude-opus-5",
+      "target_claim_ids": [
+        "4b18e70c10496079"
+      ],
+      "content": "LRU is the right starting point here."
+    },
+    {
+      "turn_id": "t3",
+      "speaker_model": "claude-opus-5",
+      "channel": "critique",
+      "target_model": "claude-sonnet-5",
+      "target_claim_ids": [
+        "051a798719724d65",
+        "1d9bff7c1119bc8a"
+      ],
+      "content": "Both assume a single region; multi-region changes the hit rate and the coalescing scope."
+    },
+    {
+      "turn_id": "t4",
+      "speaker_model": "claude-haiku-5-5",
+      "channel": "augment",
+      "target_model": null,
+      "target_claim_ids": [],
+      "content": "Watch allocator fragmentation when many values are small."
+    }
+  ],
+  "phase_4": {
+    "output": "=== Phase 1 ===\n--- claude-haiku-5-5 ---\nfocus_tag: correctness\nconfidence: 0.6\nresponse: claude-haiku-5-5 answers the cache design prompt.\nclaims:\n  - 4d8969d5d75cc6bf: Negative lookups should be cached with a short TTL.\n  - 11b9257bab33dfd0: Every cache key must include the tenant id.\n  - cbcf6c71564071ef: Compression might help with large values.\nself_reflection:\n  strongest: 11b9257bab33dfd0; weakest: cbcf6c71564071ef; justification: Tenant isolation is the correctness floor.\n--- claude-opus-5 ---\nfocus_tag: correctness\nconfidence: 0.9\nresponse: claude-opus-5 answers the cache design prompt.\nclaims:\n  - 4b18e70c10496079: LRU is the right default eviction policy for a read-heavy cache.\n  - 06a2c87fbcb3cb9d: Write-through keeps the cache and the store consistent at the cost of write latency.\n  - 1dff2c514f400a70: A TTL of five minutes is safe for every key.\nself_reflection:\n  strongest: 4b18e70c10496079; weakest: 1dff2c514f400a70; justification: The answer turns on correctness of eviction and expiry.\n--- claude-sonnet-5 ---\nfocus_tag: correctness\nconfidence: 0.85\nresponse: claude-sonnet-5 answers the cache design prompt.\nclaims:\n  - 051a798719724d65: Measure the hit rate before choosing an eviction policy.\n  - 1d9bff7c1119bc8a: Cache stampedes need request coalescing on a miss.\n  - f2ad232ef6cd84ae: Size the cache from the working set, not from available memory.\nself_reflection:\n  strongest: 1d9bff7c1119bc8a; weakest: f2ad232ef6cd84ae; justification: Failure under load is a correctness question.\n\n=== Phase 2 ===\nclaude-sonnet-5 → claude-opus-5\n  agreements:\n    - 4b18e70c10496079\n  disagreements:\n    - 1dff2c514f400a70: Hot keys and cold keys need different TTLs. One value hides stale reads.\nclaude-haiku-5-5 → claude-opus-5\n  disagreements:\n    - 1dff2c514f400a70: A revoked session token must not live five more minutes. Expiry is not revocation.\n  missing (surfaced by reader):\n    - f3abe35e2715f978: Revoking a token must evict it from the cache immediately.\nclaude-opus-5 → claude-sonnet-5\n  agreements:\n    - 051a798719724d65\n    - 1d9bff7c1119bc8a\nclaude-haiku-5-5 → claude-sonnet-5\n  agreements:\n    - 1d9bff7c1119bc8a\nclaude-opus-5 → claude-haiku-5-5\n  agreements:\n    - 11b9257bab33dfd0\nclaude-sonnet-5 → claude-haiku-5-5\n  agreements:\n    - 4d8969d5d75cc6bf\n\n=== Phase 3 ===\n[t1] claude-sonnet-5 (converge) → claude-opus-5 | claim_ids: 4b18e70c10496079\n  Agreed: LRU fits a read-heavy profile.\n[t2] claude-haiku-5-5 (converge) → claude-opus-5 | claim_ids: 4b18e70c10496079\n  LRU is the right starting point here.\n[t3] claude-opus-5 (critique) → claude-sonnet-5 | claim_ids: 051a798719724d65, 1d9bff7c1119bc8a\n  Both assume a single region; multi-region changes the hit rate and the coalescing scope.\n[t4] claude-haiku-5-5 (augment) → (general) | claim_ids: (none)\n  Watch allocator fragmentation when many values are small.",
+    "output_mode": "transcript",
+    "claim_trace": [
+      {
+        "claim_id": "4d8969d5d75cc6bf",
+        "disposition": "present",
+        "modified_text": null,
+        "omission_reason": null
+      },
+      {
+        "claim_id": "11b9257bab33dfd0",
+        "disposition": "present",
+        "modified_text": null,
+        "omission_reason": null
+      },
+      {
+        "claim_id": "cbcf6c71564071ef",
+        "disposition": "omitted",
+        "modified_text": null,
+        "omission_reason": "low_confidence_isolated:0.6"
+      },
+      {
+        "claim_id": "4b18e70c10496079",
+        "disposition": "present",
+        "modified_text": null,
+        "omission_reason": null
+      },
+      {
+        "claim_id": "06a2c87fbcb3cb9d",
+        "disposition": "present",
+        "modified_text": null,
+        "omission_reason": null
+      },
+      {
+        "claim_id": "1dff2c514f400a70",
+        "disposition": "modified",
+        "modified_text": "A TTL of five minutes is safe for every key. [DISPUTED — claude-haiku-5-5: \"A revoked session token must not live five more minutes.\"; claude-sonnet-5: \"Hot keys and cold keys need different TTLs.\"]",
+        "omission_reason": null
+      },
+      {
+        "claim_id": "051a798719724d65",
+        "disposition": "present",
+        "modified_text": null,
+        "omission_reason": null
+      },
+      {
+        "claim_id": "1d9bff7c1119bc8a",
+        "disposition": "present",
+        "modified_text": null,
+        "omission_reason": null
+      },
+      {
+        "claim_id": "f2ad232ef6cd84ae",
+        "disposition": "omitted",
+        "modified_text": null,
+        "omission_reason": "low_confidence_isolated:0.85"
+      }
+    ],
+    "synthesis_rules_applied": [
+      "irreducibility_preservation",
+      "agreement_elevation",
+      "disagreement_surfacing",
+      "attribution_preservation"
+    ],
+    "elevations": [
+      {
+        "claim_ids": [
+          "4b18e70c10496079"
+        ],
+        "converge_turn_ids": [
+          "t1",
+          "t2"
+        ]
+      }
+    ],
+    "surfaced_disagreements": [
+      {
+        "claim_ids": [
+          "051a798719724d65",
+          "1d9bff7c1119bc8a"
+        ],
+        "note": "claude-opus-5 disagrees with claude-sonnet-5: Both assume a single region; multi-region changes the hit rate and the coalescing scope."
+      }
+    ]
+  },
+  "metrics": null
+}

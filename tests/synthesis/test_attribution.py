@@ -160,7 +160,8 @@ def test_annotated_renders_modified_text_for_modified_disposition():
 
 
 def test_annotated_skips_omitted_claims_in_prose():
-    """Omitted claims do not appear in output: str even though they remain in claim_trace."""
+    """Omitted claims do not appear in the prose body. Since M3 the reason is
+    rendered in the omitted footer, by claim_id, never as claim text."""
     session, claims = _triad_session_three_claims_per_model()
     o_alpha = claims[ModelId.OPUS][0]
     s_alpha = claims[ModelId.SONNET][0]
@@ -189,14 +190,17 @@ def test_annotated_skips_omitted_claims_in_prose():
         elevations=(),
         surfaced_disagreements=(),
     )
-    assert "[O] opus alpha" in out
-    assert "sonnet alpha" not in out
-    assert "low_confidence_isolated" not in out  # reason not in prose
+    body, footer = out.split("\n\n--- omitted: what was dropped and why (1) ---\n")
+    assert body == "[O] opus alpha"
+    assert "sonnet alpha" not in out  # claim text never rendered
+    assert "low_confidence_isolated" not in body  # reason not in prose
+    assert footer == f"[S] {s_alpha.claim_id}: low_confidence_isolated:0.3"
 
 
-def test_annotated_no_trailers_in_output_str():
-    """Elevations and surfaced_disagreements DO NOT appear in output: str.
-    They live on SynthesisArtifact fields for queryable access."""
+def test_annotated_renders_elevations_in_footer_not_in_prose():
+    """Since M3, elevations appear in an appended '--- elevated (N) ---'
+    section after the prose body. The prose lines themselves are unchanged.
+    (Before M3 this test asserted the opposite: no trailers in output: str.)"""
     session, claims = _triad_session_three_claims_per_model()
     trace = build_claim_trace(session)
 
@@ -235,12 +239,22 @@ def test_annotated_no_trailers_in_output_str():
         surfaced_disagreements=(),
     )
     assert len(elevations) == 1
-    # Elevation content is not in output: str.
-    assert "elevation" not in out.lower()
-    assert "agreement" not in out.lower()
-    # The claim is still there with its marker (it was elevated via Phase 3 but
-    # in annotated rendering elevations are just artifact metadata, not prose).
-    assert "[O] opus alpha" in out
+    body, footer = out.split("\n\n--- elevated (1) ---\n")
+    # The prose body is exactly what it was without elevations.
+    assert body == render_output(
+        session_with_p3,
+        mode=OutputMode.ANNOTATED,
+        claim_trace=trace,
+        elevations=(),
+        surfaced_disagreements=(),
+    )
+    assert "[O] opus alpha" in body
+    # Turns render in the Elevation's own order (compute_elevations sorts ids).
+    assert elevations[0].converge_turn_ids == ("c_h", "c_s")
+    assert footer == (
+        f"claim_ids: {o_alpha.claim_id} | converge: c_h (claude-haiku-5-5), "
+        "c_s (claude-sonnet-5)"
+    )
 
 
 # --- Layered mode --------------------------------------------------------
