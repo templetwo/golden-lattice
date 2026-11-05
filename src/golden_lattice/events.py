@@ -157,6 +157,11 @@ class ModelStreamDeltaEvent(_BaseEvent):
     phase: str
     delta: str
     delta_kind: Literal["text", "tool_input"]
+    # Which request this delta belongs to. One seat streams several requests
+    # at once in Phase 2 (a cross-reading per peer plus tagging), so seat and
+    # phase alone cannot keep their partial JSON apart.
+    stream_id: Optional[str] = None
+    target_model: Optional[ModelId] = None
 
 
 class SessionErrorEvent(_BaseEvent):

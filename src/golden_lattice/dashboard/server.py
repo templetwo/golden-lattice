@@ -22,13 +22,19 @@ from typing import Set
 
 from aiohttp import WSMsgType, web
 
-from golden_lattice.dashboard.normalize import normalized_sessions
+from golden_lattice.dashboard.normalize import NormalizedBundle, load_normalized
+from golden_lattice.dashboard.record import build_record
 from golden_lattice.events import LatticeEvent
 
 
 _STATIC_DIR = Path(__file__).parent / "static"
 _INDEX_PATH = _STATIC_DIR / "index.html"
 _EXPLAINER_PATH = _STATIC_DIR / "explainer.html"
+
+
+async def _no_cache_static(request: web.Request, response: web.StreamResponse) -> None:
+    if request.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "no-cache"
 
 
 def _default_sessions_dir() -> Path:
@@ -42,14 +48,22 @@ class DashboardServer:
     def __init__(self, sessions_dir: Path | None = None) -> None:
         self.app = web.Application()
         self.app.router.add_get("/", self._handle_index)
+        self.app.router.add_get("/session/{session_id}", self._handle_index)
         self.app.router.add_get("/explainer", self._handle_explainer)
         self.app.router.add_get("/sessions", self._handle_sessions)
+        self.app.router.add_get("/sessions/{session_id}", self._handle_session)
         self.app.router.add_get("/ws", self._handle_ws)
+        self.app.router.add_static("/static/", _STATIC_DIR, show_index=False)
+        # Revalidate static modules on every load so an updated dashboard is
+        # never shadowed by a heuristically cached app.js.
+        self.app.on_response_prepare.append(_no_cache_static)
         # Directory the replay bundle is built from. The /sessions endpoint
         # normalizes every complete session here into the dashboard's render
         # shape, keeping replay and live identical (both feed one render layer).
         self.sessions_dir = sessions_dir or _default_sessions_dir()
-        self._sessions_cache: list | None = None
+        # (key, bundle). The key is every session file's name and mtime, so a
+        # newly persisted run (or a changed file) rebuilds the bundle.
+        self._bundle_cache: tuple[tuple, NormalizedBundle] | None = None
         self.clients: Set[web.WebSocketResponse] = set()
         self.event_log: list[str] = []
         # Inbound prompt queue: persistent-mode dashboard input. WebSocket
@@ -109,21 +123,42 @@ class DashboardServer:
             )
         return web.Response(text=body, content_type="text/html")
 
-    async def _handle_sessions(self, request: web.Request) -> web.Response:
-        """Return every complete session, normalized into the render shape.
+    def _bundle_key(self) -> tuple:
+        if not self.sessions_dir.exists():
+            return ()
+        return tuple(sorted(
+            (p.name, p.stat().st_mtime_ns)
+            for p in self.sessions_dir.glob("*.session.json")
+        ))
 
-        Cached on first build (the viewer is a single process). Reads run in a
-        thread so session-file IO and metric recomputation don't block the
-        event loop / live broadcast.
+    def bundle(self) -> NormalizedBundle:
+        """Every complete session normalized, plus every file that failed."""
+        key = self._bundle_key()
+        if self._bundle_cache is None or self._bundle_cache[0] != key:
+            self._bundle_cache = (key, load_normalized(self.sessions_dir))
+        return self._bundle_cache[1]
+
+    async def _handle_sessions(self, request: web.Request) -> web.Response:
+        """The Record's data: sessions, unloadable files, and cross-session sums.
+
+        Built in a thread so session-file IO doesn't block the live broadcast.
         """
-        if self._sessions_cache is None:
-            try:
-                self._sessions_cache = await asyncio.to_thread(
-                    normalized_sessions, self.sessions_dir
-                )
-            except Exception:
-                self._sessions_cache = []
-        return web.json_response(self._sessions_cache)
+        b = await asyncio.to_thread(self.bundle)
+        return web.json_response({
+            "sessions": b.sessions,
+            "unloadable": b.unloadable,
+            "record": build_record(b.sessions),
+        })
+
+    async def _handle_session(self, request: web.Request) -> web.Response:
+        session_id = request.match_info["session_id"]
+        if "/" in session_id or ".." in session_id or session_id.startswith("."):
+            return web.json_response({"error": "invalid session id"}, status=400)
+        b = await asyncio.to_thread(self.bundle)
+        for s in b.sessions:
+            if s["id"] == session_id:
+                return web.json_response(s)
+        return web.json_response({"error": "not found"}, status=404)
 
     async def _handle_ws(self, request: web.Request) -> web.WebSocketResponse:
         ws = web.WebSocketResponse()

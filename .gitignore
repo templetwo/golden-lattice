@@ -65,6 +65,8 @@ Thumbs.db
 sessions/
 *.session.json
 *.session.json.lock
+# ...except hand-built test fixtures, which a fresh clone needs.
+!tests/fixtures/*.session.json
 
 # Local development scratch
 scratch/

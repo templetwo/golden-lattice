@@ -194,7 +194,8 @@ def _run_dashboard(
     from golden_lattice.dashboard.server import DashboardServer
 
     async def _async_main() -> int:
-        server = DashboardServer()
+        # Same directory the run persists to, so the Record and hydration see it.
+        server = DashboardServer(sessions_dir=sessions_dir)
         runner = aioweb.AppRunner(server.app)
         await runner.setup()
         site = aioweb.TCPSite(runner, "127.0.0.1", dashboard_port)
@@ -240,6 +241,10 @@ def _run_dashboard(
                 await asyncio.gather(*pending, return_exceptions=True)
                 console.print(f"[red]Live session failed:[/] {message}")
                 return None
+            # Persist before the queued broadcasts (session_completed among
+            # them) are flushed, so a browser hydrating on completion finds
+            # the file on disk.
+            _persist_and_print(session, sessions_dir, console)
             await asyncio.gather(*pending, return_exceptions=True)
             return session
 
@@ -247,8 +252,6 @@ def _run_dashboard(
             if not interactive_mode:
                 assert initial_prompt is not None
                 session = await run_once(initial_prompt)
-                if session is not None:
-                    _persist_and_print(session, sessions_dir, console)
                 console.print(
                     "[dim]session_completed — dashboard stays live for 60s; "
                     "Ctrl-C to exit sooner.[/]"
@@ -266,9 +269,7 @@ def _run_dashboard(
                 prompt = await server.wait_for_prompt()
                 if prompt is None:
                     return 0
-                session = await run_once(prompt)
-                if session is not None:
-                    _persist_and_print(session, sessions_dir, console)
+                await run_once(prompt)
         finally:
             await runner.cleanup()
 

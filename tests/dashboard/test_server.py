@@ -26,6 +26,7 @@ from golden_lattice.events import (
     SessionStartedEvent,
 )
 from golden_lattice.memory_graph.base import ModelId
+from golden_lattice.memory_graph.store import JsonFileSessionStore
 
 
 async def _start_server(server: DashboardServer):
@@ -304,3 +305,88 @@ def test_server_reset_clears_event_log():
             await runner.cleanup()
 
     asyncio.run(_run())
+
+
+# --- Sessions bundle, one-session endpoint, pages, static -----------------
+
+
+async def _get(port: int, path: str):
+    async with ClientSession() as http:
+        async with http.get(f"http://127.0.0.1:{port}{path}") as resp:
+            ctype = resp.headers.get("Content-Type", "")
+            body = await (resp.json() if "json" in ctype else resp.text())
+            return resp.status, body
+
+
+def _serve(tmp_path, coro_fn):
+    async def _run():
+        server = DashboardServer(sessions_dir=tmp_path)
+        runner, port = await _start_server(server)
+        try:
+            await coro_fn(port)
+        finally:
+            await runner.cleanup()
+
+    asyncio.run(_run())
+
+
+def test_sessions_endpoint_returns_bundle_with_unloadable(tmp_path, make_full_session):
+    JsonFileSessionStore(tmp_path).save(make_full_session())
+    (tmp_path / "session_bad.session.json").write_text("{}")
+
+    async def check(port):
+        status, data = await _get(port, "/sessions")
+        assert status == 200
+        assert set(data) == {"sessions", "unloadable", "record"}
+        assert data["unloadable"][0]["id"] == "session_bad"
+        assert data["record"]["runs"][0]["id"] == "session_20260504_120000_abcd1234"
+
+    _serve(tmp_path, check)
+
+
+def test_sessions_cache_invalidates_when_a_file_appears(tmp_path, make_full_session):
+    async def check(port):
+        _, first = await _get(port, "/sessions")
+        assert first["sessions"] == []
+        JsonFileSessionStore(tmp_path).save(make_full_session())
+        _, second = await _get(port, "/sessions")
+        assert [s["id"] for s in second["sessions"]] == ["session_20260504_120000_abcd1234"]
+
+    _serve(tmp_path, check)
+
+
+def test_session_endpoint_404_and_400(tmp_path, make_full_session):
+    JsonFileSessionStore(tmp_path).save(make_full_session())
+
+    async def check(port):
+        status, one = await _get(port, "/sessions/session_20260504_120000_abcd1234")
+        assert status == 200 and "claims" in one
+        status, body = await _get(port, "/sessions/nope")
+        assert status == 404 and body == {"error": "not found"}
+        status, body = await _get(port, "/sessions/..%2Fx")
+        assert status == 400 and body == {"error": "invalid session id"}
+
+    _serve(tmp_path, check)
+
+
+def test_session_page_and_static_served(tmp_path):
+    async def check(port):
+        status, html = await _get(port, "/session/anything")
+        assert status == 200 and "app.js" in html
+        status, css = await _get(port, "/static/app.css")
+        assert status == 200 and "--seat-opus" in css
+
+    _serve(tmp_path, check)
+
+
+def test_static_files_are_served_no_cache(tmp_path):
+    """Modules are revalidated on every load, so an updated dashboard is
+    never shadowed by a heuristically cached app.js."""
+
+    async def check(port):
+        async with ClientSession() as http:
+            async with http.get(f"http://127.0.0.1:{port}/static/app.js") as resp:
+                assert resp.status == 200
+                assert resp.headers.get("Cache-Control") == "no-cache"
+
+    _serve(tmp_path, check)
