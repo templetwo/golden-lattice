@@ -37,17 +37,24 @@ class ModelId(str, Enum):
     FABLE = "claude-fable-5"
     OPUS = "claude-opus-5"
     SONNET = "claude-sonnet-5"
-    HAIKU = "claude-haiku-4-5-20251001"
-    # Legacy seat ids. They exist so sessions persisted in May 2026 still
-    # validate: claim ids hash the seat id string, so the stored ids cannot
-    # be rewritten. Never invited to a live run (see DEFAULT_INVITED_MODELS).
+    HAIKU = "claude-haiku-5-5"
+    # Legacy seat ids: every id a seat has moved off (the May 2026 ids, and
+    # Haiku's dated 4.5 id). Sessions persisted under them still validate,
+    # because claim ids hash the seat id string, so stored ids cannot be
+    # rewritten. Never invited to a live run (see DEFAULT_INVITED_MODELS).
     LEGACY_OPUS_4_7 = "claude-opus-4-7"
     LEGACY_SONNET_4_6 = "claude-sonnet-4-6"
     LEGACY_HAIKU_4_5 = "claude-haiku-4-5"
+    LEGACY_HAIKU_4_5_DATED = "claude-haiku-4-5-20251001"
 
 
 LEGACY_MODEL_IDS: frozenset[ModelId] = frozenset(
-    {ModelId.LEGACY_OPUS_4_7, ModelId.LEGACY_SONNET_4_6, ModelId.LEGACY_HAIKU_4_5}
+    {
+        ModelId.LEGACY_OPUS_4_7,
+        ModelId.LEGACY_SONNET_4_6,
+        ModelId.LEGACY_HAIKU_4_5,
+        ModelId.LEGACY_HAIKU_4_5_DATED,
+    }
 )
 
 # A seat's family is the protocol identity that survives model id moves.

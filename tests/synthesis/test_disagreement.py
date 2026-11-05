@@ -290,7 +290,7 @@ def test_note_follows_template_format():
     out = compute_surfaced_disagreements(session, confidence_threshold=0.7)
     assert len(out) == 1
     expected = (
-        "claude-haiku-4-5-20251001 disagrees with claude-sonnet-5: "
+        "claude-haiku-5-5 disagrees with claude-sonnet-5: "
         "sonnet's framing skips edge cases"
     )
     assert out[0].note == expected

@@ -16,10 +16,18 @@ def test_legacy_ids_are_members():
     assert ModelId("claude-opus-4-7") is ModelId.LEGACY_OPUS_4_7
     assert ModelId("claude-sonnet-4-6") is ModelId.LEGACY_SONNET_4_6
     assert ModelId("claude-haiku-4-5") is ModelId.LEGACY_HAIKU_4_5
-    # The May 2026 ids are always legacy. Later id moves add members here
-    # (e.g. claude-haiku-4-5-20251001 once Haiku moves on), so this is a subset.
+    # The May 2026 ids are always legacy, and so is every id a seat has moved
+    # off since (Haiku moved from claude-haiku-4-5-20251001 to claude-haiku-5-5).
     assert {ModelId.LEGACY_OPUS_4_7, ModelId.LEGACY_SONNET_4_6, ModelId.LEGACY_HAIKU_4_5} <= LEGACY_MODEL_IDS
     assert all(m.name.startswith("LEGACY_") for m in LEGACY_MODEL_IDS)
+
+
+def test_the_dated_haiku_id_stays_loadable_after_haiku_moved():
+    # Sessions saved under it hash that exact string into their claim ids.
+    assert ModelId("claude-haiku-4-5-20251001") is ModelId.LEGACY_HAIKU_4_5_DATED
+    assert ModelId.LEGACY_HAIKU_4_5_DATED in LEGACY_MODEL_IDS
+    assert ModelId.HAIKU.value == "claude-haiku-5-5"
+    assert seat_family(ModelId.LEGACY_HAIKU_4_5_DATED) == "haiku"
 
 
 def test_every_member_has_a_family():
