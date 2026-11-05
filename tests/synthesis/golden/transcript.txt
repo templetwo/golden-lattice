@@ -1,0 +1,66 @@
+=== Phase 1 ===
+--- claude-haiku-5-5 ---
+focus_tag: correctness
+confidence: 0.6
+response: claude-haiku-5-5 answers the cache design prompt.
+claims:
+  - 4d8969d5d75cc6bf: Negative lookups should be cached with a short TTL.
+  - 11b9257bab33dfd0: Every cache key must include the tenant id.
+  - cbcf6c71564071ef: Compression might help with large values.
+self_reflection:
+  strongest: 11b9257bab33dfd0; weakest: cbcf6c71564071ef; justification: Tenant isolation is the correctness floor.
+--- claude-opus-5 ---
+focus_tag: correctness
+confidence: 0.9
+response: claude-opus-5 answers the cache design prompt.
+claims:
+  - 4b18e70c10496079: LRU is the right default eviction policy for a read-heavy cache.
+  - 06a2c87fbcb3cb9d: Write-through keeps the cache and the store consistent at the cost of write latency.
+  - 1dff2c514f400a70: A TTL of five minutes is safe for every key.
+self_reflection:
+  strongest: 4b18e70c10496079; weakest: 1dff2c514f400a70; justification: The answer turns on correctness of eviction and expiry.
+--- claude-sonnet-5 ---
+focus_tag: correctness
+confidence: 0.85
+response: claude-sonnet-5 answers the cache design prompt.
+claims:
+  - 051a798719724d65: Measure the hit rate before choosing an eviction policy.
+  - 1d9bff7c1119bc8a: Cache stampedes need request coalescing on a miss.
+  - f2ad232ef6cd84ae: Size the cache from the working set, not from available memory.
+self_reflection:
+  strongest: 1d9bff7c1119bc8a; weakest: f2ad232ef6cd84ae; justification: Failure under load is a correctness question.
+
+=== Phase 2 ===
+claude-sonnet-5 → claude-opus-5
+  agreements:
+    - 4b18e70c10496079
+  disagreements:
+    - 1dff2c514f400a70: Hot keys and cold keys need different TTLs. One value hides stale reads.
+claude-haiku-5-5 → claude-opus-5
+  disagreements:
+    - 1dff2c514f400a70: A revoked session token must not live five more minutes. Expiry is not revocation.
+  missing (surfaced by reader):
+    - f3abe35e2715f978: Revoking a token must evict it from the cache immediately.
+claude-opus-5 → claude-sonnet-5
+  agreements:
+    - 051a798719724d65
+    - 1d9bff7c1119bc8a
+claude-haiku-5-5 → claude-sonnet-5
+  agreements:
+    - 1d9bff7c1119bc8a
+claude-opus-5 → claude-haiku-5-5
+  agreements:
+    - 11b9257bab33dfd0
+claude-sonnet-5 → claude-haiku-5-5
+  agreements:
+    - 4d8969d5d75cc6bf
+
+=== Phase 3 ===
+[t1] claude-sonnet-5 (converge) → claude-opus-5 | claim_ids: 4b18e70c10496079
+  Agreed: LRU fits a read-heavy profile.
+[t2] claude-haiku-5-5 (converge) → claude-opus-5 | claim_ids: 4b18e70c10496079
+  LRU is the right starting point here.
+[t3] claude-opus-5 (critique) → claude-sonnet-5 | claim_ids: 051a798719724d65, 1d9bff7c1119bc8a
+  Both assume a single region; multi-region changes the hit rate and the coalescing scope.
+[t4] claude-haiku-5-5 (augment) → (general) | claim_ids: (none)
+  Watch allocator fragmentation when many values are small.

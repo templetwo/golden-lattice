@@ -1,0 +1,22 @@
+=== claude-haiku-5-5 ===
+Negative lookups should be cached with a short TTL.
+Every cache key must include the tenant id.
+
+=== claude-opus-5 ===
+LRU is the right default eviction policy for a read-heavy cache.
+Write-through keeps the cache and the store consistent at the cost of write latency.
+A TTL of five minutes is safe for every key.
+
+=== claude-sonnet-5 ===
+Measure the hit rate before choosing an eviction policy.
+Cache stampedes need request coalescing on a miss.
+
+--- elevated (1) ---
+claim_ids: 4b18e70c10496079 | converge: t1 (claude-sonnet-5), t2 (claude-haiku-5-5)
+
+--- disagreements surfaced (1) ---
+claim_ids: 051a798719724d65, 1d9bff7c1119bc8a | claude-opus-5 disagrees with claude-sonnet-5: Both assume a single region; multi-region changes the hit rate and the coalescing scope.
+
+--- omitted: what was dropped and why (2) ---
+[H] cbcf6c71564071ef: low_confidence_isolated:0.6
+[S] f2ad232ef6cd84ae: low_confidence_isolated:0.85
