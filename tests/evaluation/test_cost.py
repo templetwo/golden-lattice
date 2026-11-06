@@ -5,6 +5,8 @@ from __future__ import annotations
 import pytest
 
 from golden_lattice.evaluation.cost import (
+    PRICE_DATE,
+    PRICES,
     UNKNOWN_PRICE,
     BudgetExceeded,
     SpendGateError,
@@ -46,7 +48,19 @@ def test_opus_call_cost_matches_price_table():
 
 
 def test_unknown_model_priced_at_highest_known_rate():
-    assert call_cost_usd("claude-haiku-5-5", 1_000_000, 0) == pytest.approx(UNKNOWN_PRICE[0])
+    assert call_cost_usd("claude-not-a-model-9", 1_000_000, 0) == pytest.approx(UNKNOWN_PRICE[0])
+
+
+def test_haiku_5_5_has_its_own_price_not_the_fallback():
+    # A real Haiku phase-1 call: 1447 in, 3603 out, at $0.10 / $0.50 per MTok.
+    cost = call_cost_usd("claude-haiku-5-5", 1447, 3603)
+    assert cost == pytest.approx(0.0019462, rel=1e-6)
+    assert round(cost, 4) == 0.0019
+    assert PRICES["claude-haiku-5-5"] == (0.10, 0.50)
+
+
+def test_price_date_was_bumped_for_haiku_5_5():
+    assert PRICE_DATE >= "2026-11-05"
 
 
 def test_ledger_hard_stops_when_budget_exceeded():

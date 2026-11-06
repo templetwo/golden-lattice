@@ -2,8 +2,10 @@
 
 Two numbers, labelled so they cannot be confused:
 - worst case: the cap formula at the highest known rate (a ceiling, not a forecast);
-- expected: metered cost of completed sessions from earlier runs with the same peers,
-  allowance and timeouts. Haiku is metered at the fallback rate, so expected is high.
+- expected: metered cost of completed sessions with the same peers, allowance and
+  timeouts, from eval runs (runs_root/*/run.json) and from daily runs
+  (daily_dir/*/sidecar.json, the history a daily user accumulates). Costs recorded
+  before cost.PRICE_DATE metered Haiku 5.5 at the fallback rate, so they run high.
 """
 
 from __future__ import annotations
@@ -12,7 +14,7 @@ import json
 import math
 import statistics
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Optional, Sequence
 
 from golden_lattice.evaluation.cost import worst_case_session_usd
 from golden_lattice.memory_graph.base import ModelId
@@ -36,6 +38,7 @@ def expected_from_history(
     peers: Sequence[ModelId],
     allowance: TokenAllowance,
     config: LatticeConfig,
+    daily_dir: Optional[Path] = None,
 ) -> dict[str, Any]:
     want_peers = [m.value for m in peers]
     want_allowance = allowance.model_dump()
@@ -54,6 +57,20 @@ def expected_from_history(
             for s in run.get("sessions", [])
             if s.get("status") == "completed" and s.get("session_cost_usd") is not None
         ]
+    if daily_dir is not None:
+        for sidecar_json in sorted(Path(daily_dir).glob("*/sidecar.json")):
+            try:
+                sidecar = json.loads(sidecar_json.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue  # a half-written sidecar is not history
+            if (sidecar.get("status") != "completed"
+                    or sidecar.get("cost_usd") is None
+                    or sidecar.get("peers") != want_peers
+                    or sidecar.get("allowance") != want_allowance
+                    or sidecar.get("timeouts_seconds") != want_timeouts):
+                continue
+            matched_runs += 1
+            costs.append(float(sidecar["cost_usd"]))
     if len(costs) < MIN_HISTORY:
         return {"n": len(costs), "matched_runs": matched_runs, "p50": None, "p95": None,
                 "note": f"insufficient matching history (need {MIN_HISTORY} completed sessions)"}
@@ -69,13 +86,16 @@ def estimate(
     peers: Sequence[ModelId],
     allowance: TokenAllowance,
     config: LatticeConfig,
+    daily_dir: Optional[Path] = None,
 ) -> dict[str, Any]:
     return {
         "peers": [m.value for m in peers],
         "worst_case_usd": round(worst_case_session_usd(len(peers), allowance), 4),
-        "expected": expected_from_history(runs_root, peers=peers, allowance=allowance, config=config),
+        "expected": expected_from_history(runs_root, peers=peers, allowance=allowance, config=config,
+                                          daily_dir=daily_dir),
         "labels": {
             "worst_case_usd": "cap formula at the highest known rate; a ceiling, not a forecast",
-            "expected": "metered cost of matching completed sessions; Haiku at the fallback rate",
+            "expected": ("metered cost of matching completed sessions (eval runs and daily runs); "
+                         "costs recorded before the Haiku 5.5 price was added ran high"),
         },
     }
