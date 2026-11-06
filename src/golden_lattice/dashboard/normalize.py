@@ -26,6 +26,14 @@ The shape (mirrors the State Management block of the design handoff):
       elevations: [{claim_ids:[...], converge_turn_ids:[...]}]
     }
 
+`synthesis_lines` parse only the answer body: parsing stops at the first M3
+accountability header (`--- elevated (N) ---`, `--- disagreements surfaced
+(N) ---`, `--- omitted: what was dropped and why (N) ---`), and the rest of
+the output is carried verbatim as `accountability` ("" when absent).
+
+Sessions are found under the sessions home both as flat `*.session.json`
+files and as the daily CLI's `daily/<run>/session.json` (see session_files).
+
 Cross-reading agreement claim-ids are read straight from `session.phase_2`
 (the persisted detail). The live `phase_2_cross_reading` event only carries
 counts, so live-mode weave arcs are necessarily sparse — that is a protocol
@@ -39,6 +47,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
 
+from golden_lattice.dashboard.record import created_key
 from golden_lattice.memory_graph.base import LEGACY_MODEL_IDS, seat_family, seat_label
 from golden_lattice.memory_graph.metrics import (
     READING_GLOSS,
@@ -132,9 +141,28 @@ def _split_hedge(text: str) -> tuple[str, Optional[str]]:
     return text[:idx].strip(), text[idx:].strip()
 
 
+# M3 accountability sections (synthesis/attribution.py) follow the answer
+# body. Their lines are not answer lines: an omitted "[H] <id>: reason" would
+# otherwise render as a seat-coloured claim.
+_ACCOUNTABILITY_HEADER = re.compile(
+    r"^--- (elevated|disagreements surfaced|omitted: what was dropped and why) \(\d+\) ---$",
+    re.MULTILINE,
+)
+
+
+def _split_accountability(output: str) -> tuple[str, str]:
+    """(answer body, accountability footer). The footer starts at the first
+    header line and is the rest of the output verbatim; "" when absent."""
+    text = output or ""
+    m = _ACCOUNTABILITY_HEADER.search(text)
+    if m is None:
+        return text, ""
+    return text[: m.start()], text[m.start():]
+
+
 def _synthesis_lines(output: str) -> list[dict[str, Any]]:
     lines: list[dict[str, Any]] = []
-    for raw in (output or "").split("\n"):
+    for raw in _split_accountability(output)[0].split("\n"):
         if not raw.strip():
             continue
         m = _TAG_RE.match(raw)
@@ -418,6 +446,7 @@ def normalize_session(session: Session) -> dict[str, Any]:
         "seats": _seats(session),
         "claims": claims,
         "synthesis_lines": lines,
+        "accountability": _split_accountability(artifact.output if artifact is not None else "")[1],
         "stats": _stats(claims, session),
         "pairs": _pairs(session),
         "unattached_critiques": _unattached_critiques(session),
@@ -454,15 +483,37 @@ class NormalizedBundle:
     unloadable: list[dict[str, str]] = field(default_factory=list)
 
 
+DAILY_DIR = "daily"
+DAILY_SESSION_FILE = "session.json"
+
+
+def session_files(sessions_dir: Path) -> list[tuple[str, Path]]:
+    """Every persisted session under the sessions home, as (id, path).
+
+    Flat `<id>.session.json` files, plus the daily CLI's
+    `daily/<run>/session.json`. A daily run dir without a session.json (a
+    failed run keeps only failed.json) is not a session and is skipped.
+    """
+    root = Path(sessions_dir)
+    if not root.exists():
+        return []
+    suffix = JsonFileSessionStore.SUFFIX
+    found = [(p.name.removesuffix(suffix), p) for p in root.glob(f"*{suffix}") if p.is_file()]
+    found += [
+        (p.parent.name, p)
+        for p in (root / DAILY_DIR).glob(f"*/{DAILY_SESSION_FILE}")
+        if p.is_file()
+    ]
+    return sorted(found)
+
+
 def load_normalized(sessions_dir: Path, *, limit: Optional[int] = None) -> NormalizedBundle:
-    """Newest first. A file that fails to load or normalize is reported, never hidden."""
+    """Newest first by created_at. A file that fails to load or normalize is
+    reported, never hidden."""
     bundle = NormalizedBundle()
-    if not Path(sessions_dir).exists():
-        return bundle
-    store = JsonFileSessionStore(sessions_dir)
-    for session_id in sorted(store.list_sessions(), reverse=True):
+    for session_id, path in session_files(sessions_dir):
         try:
-            session = store.load(session_id)
+            session = Session.model_validate_json(path.read_text(encoding="utf-8"))
             if not _is_complete(session):
                 bundle.unloadable.append(
                     {"id": session_id, "error": "incomplete: no Phase 4 synthesis in this file"}
@@ -471,9 +522,10 @@ def load_normalized(sessions_dir: Path, *, limit: Optional[int] = None) -> Norma
             bundle.sessions.append(normalize_session(session))
         except Exception as exc:  # report, do not sink the bundle
             bundle.unloadable.append({"id": session_id, "error": _why(exc)})
-            continue
-        if limit is not None and len(bundle.sessions) >= limit:
-            break
+    bundle.sessions.sort(key=created_key, reverse=True)
+    bundle.unloadable.sort(key=lambda u: u["id"], reverse=True)
+    if limit is not None:
+        bundle.sessions = bundle.sessions[:limit]
     return bundle
 
 

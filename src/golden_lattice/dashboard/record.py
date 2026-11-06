@@ -9,6 +9,7 @@ underlying model moved.
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 from golden_lattice.memory_graph.base import PARITY_THRESHOLD, SEAT_FAMILY_ORDER, seat_family
@@ -19,6 +20,28 @@ PERSISTENT_MIN = 3
 PERSISTENT_RULE = (
     f"same family flagged in {PERSISTENT_MIN} or more of the last {PERSISTENT_WINDOW} runs"
 )
+
+
+_NO_DATE = datetime.min.replace(tzinfo=timezone.utc)
+
+
+def created_key(session: dict[str, Any]) -> tuple[datetime, str]:
+    """Chronological sort key: the session's real created_at, then its id.
+
+    Ids are not chronological across layouts ("daily-2026..." sorts before
+    every "session_2026..." id), so ordering never keys on the id alone. A
+    naive timestamp is read as UTC; a missing or unreadable one sorts oldest.
+    """
+    raw = session.get("created_at")
+    when = _NO_DATE
+    if isinstance(raw, str) and raw:
+        try:
+            when = datetime.fromisoformat(raw)
+        except ValueError:
+            when = _NO_DATE
+        if when.tzinfo is None:
+            when = when.replace(tzinfo=timezone.utc)
+    return when, str(session.get("id", ""))
 
 
 def _parity(session: dict[str, Any]) -> tuple[str, Optional[str]]:
@@ -32,7 +55,7 @@ def _parity(session: dict[str, Any]) -> tuple[str, Optional[str]]:
 
 def _runs(sessions: list[dict[str, Any]]) -> list[dict[str, Any]]:
     out = []
-    for s in sorted(sessions, key=lambda x: x["id"], reverse=True):
+    for s in sorted(sessions, key=created_key, reverse=True):
         parity, reading = _parity(s)
         st = s["stats"]
         out.append({
@@ -53,7 +76,7 @@ def _runs(sessions: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def _series(sessions: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
-    chronological = sorted(sessions, key=lambda x: x["id"])
+    chronological = sorted(sessions, key=created_key)
     families = [f for f in SEAT_FAMILY_ORDER
                 if any(seat["family"] == f for s in sessions for seat in s.get("seats", []))]
     series: dict[str, list[dict[str, Any]]] = {}
@@ -97,7 +120,7 @@ def _pairs(sessions: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 def _flags(sessions: list[dict[str, Any]]) -> list[dict[str, Any]]:
     out = []
-    for s in sorted(sessions, key=lambda x: x["id"], reverse=True):
+    for s in sorted(sessions, key=created_key, reverse=True):
         for i in s.get("interpretations") or []:
             out.append({
                 "run_id": s["id"],
@@ -113,7 +136,7 @@ def _flags(sessions: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def _persistent(sessions: list[dict[str, Any]]) -> dict[str, Any]:
-    window = sorted(sessions, key=lambda x: x["id"], reverse=True)[:PERSISTENT_WINDOW]
+    window = sorted(sessions, key=created_key, reverse=True)[:PERSISTENT_WINDOW]
     for family in SEAT_FAMILY_ORDER:
         flagged = sum(
             1 for s in window
