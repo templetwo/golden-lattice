@@ -233,7 +233,10 @@ function sectionSynthesis() {
   }).join('');
   const omitted = (S.claims || []).filter((c) => c.disposition === 'omitted').map((c) => `
     <p class="note">${seatName(c.author)} ${esc(c.text)}<br><span class="k">omitted because</span> ${esc(c.omission_reason || '')}</p>`).join('');
-  return `${back}${ledger}${parityLine()}<div class="output">${lines}</div>${omitted ? `<div class="omitted"><div class="k">omitted</div>${omitted}</div>` : ''}`;
+  // The M3 accountability footer, verbatim and unparsed: what was elevated,
+  // surfaced and dropped, as the synthesis printed it. Absent on older runs.
+  const footer = S.accountability ? `<pre class="accountability mono">${esc(S.accountability)}</pre>` : '';
+  return `${back}${ledger}${parityLine()}<div class="output">${lines}</div>${footer}${omitted ? `<div class="omitted"><div class="k">omitted</div>${omitted}</div>` : ''}`;
 }
 
 const RENDER = { '00': sectionFeed, '01': sectionSeats, '02': sectionDisputes, '03': sectionDialogue, '04': sectionSynthesis };

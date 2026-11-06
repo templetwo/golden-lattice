@@ -87,7 +87,15 @@ export function stepDisagreement(ids, current, dir) {
 }
 
 export function sortRuns(runs, mode) {
-  const newest = (a, b) => (a.id < b.id ? 1 : a.id > b.id ? -1 : 0);
+  // Newest by the run's real created_at (ids are not chronological across
+  // layouts: "daily-*" sorts before "session_*"), then by id.
+  // A naive timestamp is read as UTC, as record.py created_key does.
+  const when = (r) => {
+    const raw = r.created_at || '';
+    const t = Date.parse(/T.*(Z|[+-]\d{2}:?\d{2})$/.test(raw) || !raw.includes('T') ? raw : `${raw}Z`);
+    return Number.isNaN(t) ? -Infinity : t;
+  };
+  const newest = (a, b) => (when(b) - when(a)) || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0);
   const out = runs.slice();
   if (mode === 'disputed') out.sort((a, b) => (b.disputed - a.disputed) || newest(a, b));
   else if (mode === 'flagged') out.sort((a, b) => ((b.parity === 'flag') - (a.parity === 'flag')) || newest(a, b));

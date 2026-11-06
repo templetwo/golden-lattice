@@ -22,7 +22,7 @@ from typing import Set
 
 from aiohttp import WSMsgType, web
 
-from golden_lattice.dashboard.normalize import NormalizedBundle, load_normalized
+from golden_lattice.dashboard.normalize import NormalizedBundle, load_normalized, session_files
 from golden_lattice.dashboard.record import build_record
 from golden_lattice.events import LatticeEvent
 
@@ -61,8 +61,9 @@ class DashboardServer:
         # normalizes every complete session here into the dashboard's render
         # shape, keeping replay and live identical (both feed one render layer).
         self.sessions_dir = sessions_dir or _default_sessions_dir()
-        # (key, bundle). The key is every session file's name and mtime, so a
-        # newly persisted run (or a changed file) rebuilds the bundle.
+        # (key, bundle). The key is every session file's path and mtime (flat
+        # files and daily/<run>/session.json), so a newly persisted run (or a
+        # changed file) rebuilds the bundle.
         self._bundle_cache: tuple[tuple, NormalizedBundle] | None = None
         self.clients: Set[web.WebSocketResponse] = set()
         self.event_log: list[str] = []
@@ -124,12 +125,13 @@ class DashboardServer:
         return web.Response(text=body, content_type="text/html")
 
     def _bundle_key(self) -> tuple:
-        if not self.sessions_dir.exists():
-            return ()
-        return tuple(sorted(
-            (p.name, p.stat().st_mtime_ns)
-            for p in self.sessions_dir.glob("*.session.json")
-        ))
+        key = []
+        for session_id, path in session_files(self.sessions_dir):
+            try:
+                key.append((session_id, str(path), path.stat().st_mtime_ns))
+            except OSError:  # removed between the listing and the stat
+                continue
+        return tuple(key)
 
     def bundle(self) -> NormalizedBundle:
         """Every complete session normalized, plus every file that failed."""

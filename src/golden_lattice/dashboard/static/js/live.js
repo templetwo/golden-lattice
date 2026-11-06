@@ -2,7 +2,7 @@
 // Each event updates a session object shaped like the normalized one and
 // names the sections it changed, so only those re-render. Stream deltas
 // append to a text node. On completion the page hydrates from disk.
-import { esc } from './util.js';
+import { esc, splitAccountability } from './util.js';
 import { familyOf, labelOf } from './seats.js';
 import { renderSession, refreshLive, updateWriting, clearWriting, removeWriting } from './session.js';
 import { readableStream, streamText } from './stream.js';
@@ -11,6 +11,9 @@ const HYDRATE_TRIES = 5;
 const HYDRATE_GAP_MS = 1000;
 const RETRY_MS = 2800;
 const TAG_RE = /^\[([A-Z])\]\s*/;
+// The dashboard runs no questions: the prompt box stays disabled and points
+// at the CLI. The live view itself (the /ws stream) keeps working.
+export const PROMPT_OFF = 'questions are not run from the dashboard; use "golden-lattice run" in a terminal';
 
 // ---------- the WebSocket ----------
 export function connectLive({ onEvent, onStatus }) {
@@ -51,7 +54,7 @@ function freshSession(ev) {
     seatStage: {},        // the protocol stage each seat is streaming in
     claims: [], synthesis_lines: [], pairs: [], turns: [], interpretations: [], metrics: null,
     elevations: [], synthesis: { output: '', trace: [] }, stats: {}, metrics_recomputed: false,
-    unattached_critiques: [],
+    unattached_critiques: [], accountability: '',
   };
 }
 
@@ -135,8 +138,11 @@ function applyArtifact(L, ev) {
     if (byId[id] && !byId[id].surfaced_note) byId[id].surfaced_note = sd.note;
   }));
   // Lines: same parse as normalize.py; exact text first, then modified text.
+  // The M3 accountability footer is not answer lines; it is kept verbatim.
+  const [body, footer] = splitAccountability(ev.output);
+  L.accountability = footer;
   L.synthesis_lines = [];
-  (ev.output || '').split('\n').filter((l) => l.trim()).forEach((raw) => {
+  body.split('\n').filter((l) => l.trim()).forEach((raw) => {
     const m = TAG_RE.exec(raw);
     const body = m ? raw.slice(m[0].length) : raw;
     const i = body.indexOf('[DISPUTED');
@@ -284,20 +290,20 @@ async function hydrate(id) {
 }
 
 // ---------- the live page ----------
-function shellHtml(status) {
+export function shellHtml(status) {
   return `<div class="empty live-shell">
     <div class="k critique"><span class="live-dot"></span> Live</div>
     <div class="empty-msg">Listening for a lattice run on this host.</div>
     <div class="mono small dim" id="gl-livestatus">${esc(status)}</div>
-    <div class="live-input"><input id="gl-prompt" type="text" placeholder="question for the lattice — Enter to submit" autocomplete="off"><button class="send" data-live="send">send</button></div>
+    <div class="live-input"><input id="gl-prompt" type="text" placeholder="${esc(PROMPT_OFF)}" title="${esc(PROMPT_OFF)}" autocomplete="off" disabled><button class="send" data-live="send" title="${esc(PROMPT_OFF)}" disabled>send</button></div>
     <a class="k link" href="/">← record</a></div>`;
 }
 
-function liveBarHtml(status) {
+export function liveBarHtml(status) {
   return `<span class="live-dot"></span><span class="k critique">Live</span>
     <span class="mono small dim" id="gl-livestatus">${esc(status)}</span>
-    <input id="gl-prompt" type="text" placeholder="question for the lattice — Enter to submit" autocomplete="off">
-    <button class="send" data-live="send">send</button>
+    <input id="gl-prompt" type="text" placeholder="${esc(PROMPT_OFF)}" title="${esc(PROMPT_OFF)}" autocomplete="off" disabled>
+    <button class="send" data-live="send" title="${esc(PROMPT_OFF)}" disabled>send</button>
     <a class="k link" href="/">exit live</a>`;
 }
 
@@ -309,9 +315,8 @@ export function startLive(root) {
     const input = root.querySelector('#gl-prompt');
     const btn = root.querySelector('[data-live="send"]');
     if (!input) return;
-    const disabled = (state.L && state.L.inFlight) || !conn.isOpen();
-    input.disabled = disabled; if (btn) btn.disabled = disabled;
-    input.placeholder = state.L && state.L.inFlight ? 'session in flight…' : (conn.isOpen() ? 'question for the lattice — Enter to submit' : 'connecting…');
+    input.disabled = true; if (btn) btn.disabled = true;
+    input.placeholder = PROMPT_OFF; input.title = PROMPT_OFF;
     const s = root.querySelector('#gl-livestatus');
     if (s) s.textContent = state.status;
   };
