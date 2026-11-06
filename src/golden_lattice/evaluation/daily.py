@@ -64,7 +64,16 @@ def month_to_date(lines: Sequence[str], month: str) -> tuple[float, float]:
     for index, line in enumerate(lines):
         if not line.strip():
             continue
-        entry = json.loads(line)
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError as exc:
+            # Refuse, never skip: a skipped line could hide completed spend.
+            # The usual cause is a tail truncated by power loss or a kill
+            # mid-write; the fix is a human edit of that one line.
+            raise DailyRefused(
+                f"ledger line {index + 1} is corrupt ({exc.msg}); "
+                "repair the ledger before running"
+            ) from exc
         if entry.get("month") != month:
             continue
         key = entry.get("run_id") or entry.get("session_id") or ("anonymous", index)
