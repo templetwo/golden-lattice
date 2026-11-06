@@ -1,6 +1,6 @@
 # Golden Lattice
 
-A CLI that runs four Claude models — Fable, Opus, Sonnet, and Haiku — as peers on the same prompt and produces a co-authored response that none of them would have produced alone. Not routing. Not voting. Not summarization. Co-authorship.
+A CLI that runs Claude models as peers on the same prompt and produces a co-authored response that none of them would have produced alone. Not routing. Not voting. Not summarization. Co-authorship. The default roster invites three seats — Opus, Sonnet, and Haiku (ARCHITECTURE §1); Fable is a fourth seat, invited explicitly.
 
 ## The load-bearing claim
 
@@ -41,14 +41,14 @@ src/golden_lattice/
 ├── replay.py      — walk a persisted Session, re-emit its events in order
 ├── tui/           — Rich terminal renderer over that event stream
 ├── dashboard/     — aiohttp + vanilla-JS web renderer over the same stream
-└── cli/           — interactive prompt helpers for the run scripts
+└── cli/           — the golden-lattice console entry point (estimate, run, show, dashboard)
 ```
 
-452 tests, 441 passing on a fresh clone. The 11 skips are not failures: 10 want persisted session fixtures that live in the gitignored `sessions/` directory, and one is a live-API integration test gated behind `LATTICE_LIVE_TESTS=1`. Each test exercises one structural refusal — every collapse mode the spec names is either impossible to construct (schema layer) or detectable across sessions (metrics + store layers).
+735 tests, 12 skipped on a fresh clone (the skips want gitignored session fixtures or the live-API gate `LATTICE_LIVE_TESTS=1`). Each test exercises one structural refusal — every collapse mode the spec names is either impossible to construct (schema layer) or detectable across sessions (metrics + store layers).
 
 ## What is not in this repo yet
 
-The evaluation harness. The falsification criteria below name in advance what would prove this project is routing with extra steps; the benchmark that tests them is not here yet. Read those criteria as pre-registered, not as results.
+The held-out benchmark's content. The evaluation harness is here now — the gated pilot runner, the dev benchmark with its manifest, per-run audits, and the daily runner's metering — but held-out prompts stay out of the public repo until frozen; only their manifest hash will be committed. The falsification criteria below were named in advance; the first blinded comparison (2026-11-06, five dev tasks, model-rated) came out against the lattice, 10 votes to 0 for a single strong model. Read that as the criteria doing their job, not as the final word: the merge-rule work it motivates is named in the session record.
 
 The substrate still constrains everything above it. Anything built downstream must satisfy these constructors and pass these metrics before it can run. The orchestrator was constrained from below before it existed.
 
@@ -118,30 +118,34 @@ Every layer in this diagram is implemented. The Memory Graph is the substrate th
 
 ## Running it
 
-Python 3.11 or newer. Runtime dependencies are `pydantic`, `rich`, `httpx`, and `aiohttp` — the Anthropic API is called over plain HTTP, so no provider SDK is required.
+Python 3.11 or newer (on a box whose `python3` is older, name one explicitly, e.g. `python3.13 -m venv .venv`). The `live` extra brings the Anthropic SDK the metered client uses.
 
 ```bash
-pip install -e ".[dev]"
-pytest
+python3.13 -m venv .venv && .venv/bin/pip install -e ".[dev,live]"
+.venv/bin/pytest
 ```
 
-There is no installed console script yet. The surfaces run as modules and scripts:
+The daily surface is the `golden-lattice` console script:
 
 ```bash
-# live session with the streaming TUI; prompts for a key if ANTHROPIC_API_KEY is unset
-python scripts/run_lattice_live.py "your prompt here"
+# what a run would cost; makes no calls
+golden-lattice estimate "your question"
 
-# same session, streamed to the web dashboard instead of the terminal
-python scripts/run_lattice_live.py --dashboard
+# a metered run: per-run budget, monthly cap, progress on stderr, answer on stdout
+golden-lattice run "your question" --budget 15 --yes
 
-# replay a persisted session in the terminal (--speed 1.0 is lived time)
-python -m golden_lattice.tui <session_id> --speed 10
+# a saved answer, by session id, run dir, or path; failed runs print their summary
+golden-lattice show daily-20261106T072028Z-ef001cdc
 
-# replay a persisted session in the browser
-python -m golden_lattice.dashboard replay <session_id>
+# the Record: every persisted run, newest first, replayable
+golden-lattice dashboard
 ```
 
-`ANTHROPIC_API_KEY` is required for a live run. `TAVILY_API_KEY` is optional; without it the session runs with Phase 0 investigation skipped. Sessions are written to `sessions/`, which is gitignored — lattice output stays private until it is published deliberately.
+The API key comes from `ANTHROPIC_API_KEY`, `$GOLDEN_LATTICE_KEY_FILE`, or `~/.lattice_key` (keep that file `chmod 600`). All runs and the monthly spend ledger live under one home — `$GOLDEN_LATTICE_HOME/sessions`, else `~/golden-lattice/sessions` — wherever you run from. The spend rails refuse before any call: a worst case above the per-run budget, a monthly cap that counts reserved budgets of unfinished runs, and a ledger that survives a kill mid-run.
+
+The developer surfaces are still here: `python scripts/run_lattice_live.py` streams a live session to the TUI or dashboard but is **unmetered** — it enforces no budget and writes no ledger line, so it is for development only. Replay works everywhere: `python -m golden_lattice.tui <session_id> --speed 10` in the terminal, `python -m golden_lattice.dashboard replay <session_id>` in the browser.
+
+`TAVILY_API_KEY` is optional; without it Phase 0 investigation is skipped (the daily runner skips Phase 0 either way in v0). Sessions are gitignored — lattice output stays private until it is published deliberately.
 
 The web dashboard has two pages. `/` is the Record: every persisted run, newest first, with how contested each was, and a strip across runs showing each seat's share of distinct claims against the 15% line, who pushes back on whom, and every parity flag with its reading. `/session/<id>` replays one run around where the seats disagreed and why: a rail selects one section, a second can be pinned beside it (keys `0`–`4`, `p`, `Esc`), and each disputed claim opens to every reader's reasons in full and what synthesis did with it. `/session/live` is the same page fed by a live run. Files in `sessions/` that fail to load are listed on the Record, not hidden.
 
