@@ -3,7 +3,7 @@
 A metered run is refused unless it names a budget, a budget within the
 ceiling, and an approver. The ledger records measured spend and refuses to
 start a session that would exceed the budget. Prices are USD per million
-tokens, dated 2026-10-06 from the claude-api skill table. A model with no
+tokens, dated PRICE_DATE (see the comment there). A model with no
 confirmed price is priced at the highest known rate, so unknown models
 overstate spend. That is deliberate: a cap must not understate.
 """
@@ -12,7 +12,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-PRICE_DATE = "2026-10-06"
+# 2026-10-06: table from the claude-api skill. 2026-11-05: claude-haiku-5-5 added at
+# $0.10 / $0.50 (the daily-CLI contract); before this date Haiku 5.5 was metered at the
+# fallback (highest known) rate, so earlier recorded costs overstate Haiku spend.
+PRICE_DATE = "2026-11-05"
 CEILING_USD = 100.0
 
 # model id -> (input $/MTok, output $/MTok)
@@ -21,6 +24,7 @@ PRICES: dict[str, tuple[float, float]] = {
     "claude-opus-5": (5.0, 25.0),
     "claude-sonnet-5": (2.0, 10.0),
     "claude-haiku-4-5-20251001": (1.0, 5.0),
+    "claude-haiku-5-5": (0.10, 0.50),
 }
 UNKNOWN_PRICE = max(PRICES.values())  # highest known rate, conservative
 
